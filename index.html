@@ -242,6 +242,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 .g-male{background:rgba(74,124,180,.16); color:#4A7CB4}
 .g-female{background:rgba(196,96,132,.16); color:#C46084}
+.gtag .gender-svg{display:block;width:12px;height:12px}
 [data-theme="dark"] .g-male{background:rgba(122,166,214,.18); color:#7AA6D6}
 [data-theme="dark"] .g-female{background:rgba(224,138,170,.18); color:#E08AAA}
 .badge-demo{
@@ -456,6 +457,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .prof h2{margin:0; font-size:23px; font-weight:800; letter-spacing:-.02em;
   display:flex; align-items:center; justify-content:center; gap:8px}
 .prof h2 .gtag{width:22px;height:22px;font-size:14px}
+.prof h2 .gtag .gender-svg{width:14px;height:14px}
 .prof .handle{margin:2px 0 0; font-size:14px; color:var(--ink-3); font-weight:600}
 .pill-official{
   display:inline-flex; align-items:center; gap:5px; margin-top:11px;
@@ -612,8 +614,8 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   transition:background-color var(--dur-3) var(--ease-out)}
 .pd-head{display:flex; align-items:center; gap:12px}
 .pd-head .who{flex:1 1 auto; min-width:0; line-height:1.3}
-.pd-head .who b{display:block; font-size:16px; font-weight:800; letter-spacing:-.005em}
-.pd-head .who span{display:block; font-size:13px; color:var(--ink-3); font-weight:600; margin-top:1px}
+.pd-head .who b{display:flex; align-items:center; gap:5px; font-size:16px; font-weight:800; letter-spacing:-.005em}
+.pd-head .who > span{display:block; font-size:13px; color:var(--ink-3); font-weight:600; margin-top:1px}
 .pd-body{margin:16px 0 0; font-size:18px; font-weight:700; line-height:1.62; letter-spacing:.002em; white-space:pre-wrap; word-break:break-word}
 .pd-card .tag{margin-top:12px}
 .pd-stats{display:flex; align-items:center; gap:22px; margin-top:14px;
@@ -632,7 +634,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .rep-main{flex:1 1 auto; min-width:0}
 .rep-line{display:flex; align-items:center; gap:6px; flex-wrap:wrap; line-height:1.3}
 .rep-line b{font-size:15px; font-weight:800}
-.rep-line span{font-size:13px; color:var(--ink-3); font-weight:600}
+.rep-line > span:not(.gtag){font-size:13px; color:var(--ink-3); font-weight:600}
 .rep-body{margin:6px 0 0; font-size:16px; font-weight:600; line-height:1.6; white-space:pre-wrap; word-break:break-word}
 .rep-foot{margin-top:8px; display:flex; align-items:center; gap:16px}
 .mention{color:var(--accent-deep); font-weight:800}
@@ -995,7 +997,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.23';
+const APP_VER='2.23.1';
 
 const $  = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -1085,8 +1087,8 @@ function bannerCSS(u){
 }
 
 const GENDERS={
-  male  :{label:'男',   sym:'♂', cls:'g-male'},
-  female:{label:'女',   sym:'♀', cls:'g-female'},
+  male  :{label:'男',   sym:'<svg class="gender-svg" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6" cy="10" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 7.5 13 3m-3.4 0H13v3.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>', cls:'g-male'},
+  female:{label:'女',   sym:'<svg class="gender-svg" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="6" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 9.5V14m-2.2-2H10.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>', cls:'g-female'},
   secret:{label:'秘密', sym:'',  cls:'g-secret'}
 };
 /* 秘密 deliberately renders nothing — that is what keeping it private means */
