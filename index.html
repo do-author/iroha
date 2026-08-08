@@ -65,7 +65,7 @@
   --field:#1B1A18;
   --nav:rgba(28,27,25,.55);
   --nav-pill:#F3EFE6;
-  --nav-pill-ink:#1A1917;
+  --nav-pill-ink:#705816;
   --shadow-card:0 1px 2px rgba(0,0,0,.4);
   --shadow-nav:0 10px 34px rgba(0,0,0,.62);
   --shadow-pop:0 22px 60px rgba(0,0,0,.7);
@@ -286,7 +286,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .navwrap.hide{transform:translate3d(0,120%,0); opacity:0}
 .nav{
   position:relative; pointer-events:auto;
-  height:62px; border-radius:999px;
+  height:70px; border-radius:999px;
   background:var(--nav);
   -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
   box-shadow:var(--shadow-nav), inset 0 1px 0 var(--glass-edge);
@@ -297,20 +297,21 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
 }
 .nav-ind{
-  position:absolute; top:9px; height:44px; width:46px; border-radius:15px;
+  position:absolute; top:11px; height:48px; width:48px; border-radius:17px;
   background:var(--nav-pill); left:0;
   transition:transform 520ms var(--spring), background-color var(--dur-3) var(--ease-out), width 380ms var(--ease-out);
   will-change:transform;
 }
-[data-theme="dark"] .nav-ind{border-radius:999px}
+
 .navbtn{
   position:relative; will-change:transform,opacity; height:100%; display:grid; place-items:center; color:var(--ink-2);
   transition:color 300ms var(--ease-out), transform var(--dur-2) var(--spring);
 }
+.navbtn svg{width:27px;height:27px}
 .navbtn:active{transform:scale(.86)}
 .navbtn.on{color:var(--nav-pill-ink)}
 .navbtn .bdg{
-  position:absolute; top:9px; right:calc(50% - 20px);
+  position:absolute; top:11px; right:calc(50% - 24px);
   min-width:18px;height:18px;padding:0 5px; border-radius:9px;
   background:#E0245E; color:#fff; font-size:10.5px; font-weight:800;
   display:grid;place-items:center; line-height:1;
@@ -320,7 +321,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 @keyframes bdgIn{from{transform:scale(0)}to{transform:none}}
 .fabslot{display:grid;place-items:center; position:relative; z-index:2}
 .fab{
-  position:absolute; top:3px; left:0; width:56px;height:56px;
+  position:absolute; top:-5px; left:0; width:56px;height:56px;
   display:grid;place-items:center; pointer-events:auto; z-index:5;
   will-change:transform;
 }
@@ -866,7 +867,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.7';
+const APP_VER='2.8';
 
 const $  = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -880,7 +881,7 @@ const I = {
   search:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>',
   gear:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 00.33 1.76l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.6 1.6 0 00-1.76-.33 1.6 1.6 0 00-1 1.47V21a2 2 0 11-4 0v-.1A1.6 1.6 0 008.1 19.4a1.6 1.6 0 00-1.76.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.6 1.6 0 004.6 15a1.6 1.6 0 00-1.47-1H3a2 2 0 110-4h.1A1.6 1.6 0 004.6 9a1.6 1.6 0 00-.33-1.76l-.06-.06a2 2 0 112.83-2.83l.06.06A1.6 1.6 0 009 4.6a1.6 1.6 0 001-1.47V3a2 2 0 114 0v.1a1.6 1.6 0 001 1.47 1.6 1.6 0 001.76-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.6 1.6 0 0019.4 9v0a1.6 1.6 0 001.47 1H21a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1z"/></svg>',
   pencil:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16.6 3.6a2.1 2.1 0 013 3L7.5 18.7l-4 1 1-4z"/></svg>',
-  home:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M3.5 10.6L12 4l8.5 6.6V20a1 1 0 01-1 1h-15a1 1 0 01-1-1z"/></svg>',
+  home:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M3.5 10.6L12 4l8.5 6.6V20a1 1 0 01-1 1h-15a1 1 0 01-1-1z"/><path d="M9.7 21v-6.2a1 1 0 011-1h2.6a1 1 0 011 1V21"/></svg>',
   bell:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M18 8.5a6 6 0 10-12 0c0 5-2 6.5-2 6.5h16s-2-1.5-2-6.5z"/><path d="M13.7 20a2 2 0 01-3.4 0"/></svg>',
   chat:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M20.5 11.6c0 4.2-3.8 7.6-8.5 7.6a9.6 9.6 0 01-2.6-.35L4.2 20.5l1.35-4.1A7.3 7.3 0 013.5 11.6C3.5 7.4 7.3 4 12 4s8.5 3.4 8.5 7.6z"/></svg>',
   person:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><circle cx="12" cy="8" r="3.7"/><path d="M4.8 20.2c.5-3.8 3.5-6.1 7.2-6.1s6.7 2.3 7.2 6.1"/></svg>',
@@ -1244,7 +1245,7 @@ function moveNavInd(animate=true){
   if(!btn||!ind) return;
   const nav=$('#nav').getBoundingClientRect(), b=btn.getBoundingClientRect();
   if(!animate) ind.style.transition='none';
-  const w=46;
+  const w=48;
   ind.style.width=w+'px';
   ind.style.transform=`translate3d(${b.left-nav.left+(b.width-w)/2}px,0,0)`;
   if(!animate) requestAnimationFrame(()=>ind.style.transition='');
@@ -1253,11 +1254,13 @@ function moveNavInd(animate=true){
 function syncNavBadges(){
   $$('#nav .navbtn').forEach(b=>{
     b.classList.toggle('on', b.dataset.tab===S.tab);
-    const old=b.querySelector('.bdg'); if(old) old.remove();
     let n=0;
     if(b.dataset.tab==='chat') n=S.chats.reduce((a,c)=>a+c.unread,0);
-    if(b.dataset.tab==='bell') n=0;
-    if(n>0) b.appendChild(el(`<span class="bdg">${n}</span>`));
+    let bdg=b.querySelector('.bdg');
+    if(n>0){
+      if(!bdg) b.appendChild(el(`<span class="bdg">${n}</span>`));      /* animates in once */
+      else if(bdg.textContent!==String(n)) bdg.textContent=n;           /* silent update */
+    }else if(bdg) bdg.remove();
   });
 }
 
