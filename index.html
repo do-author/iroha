@@ -95,6 +95,13 @@ body{
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 :focus-visible{outline:2px solid var(--accent-deep);outline-offset:2px;border-radius:8px}
+.msgfield:focus-visible,.replyfield:focus-visible{outline:none}
+.msgfield,.replyfield{
+  -webkit-appearance:none; appearance:none;
+  resize:none; overflow-y:auto; scrollbar-width:none;
+}
+.msgfield::-webkit-scrollbar,.replyfield::-webkit-scrollbar{display:none;width:0;height:0}
+.msgfield::-webkit-resizer,.replyfield::-webkit-resizer{display:none}
 
 /* ---------- app frame ---------- */
 #app{
@@ -183,57 +190,93 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .scroll{
   flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch;
   overscroll-behavior-y:contain;
-  padding:calc(var(--barH,124px) + 12px) 16px calc(var(--safe-b) + 116px);
+  padding:calc(var(--barH,124px) + 12px) 12px calc(var(--safe-b) + 116px);
   scrollbar-width:none;
 }
 .scroll.withbar{padding-bottom:calc(var(--barB,66px) + 16px)}
 .scroll::-webkit-scrollbar{display:none}
 .scroll.flush{padding-left:0;padding-right:0}
 
+/* ---------- pull to refresh ---------- */
+.ptr{
+  position:absolute; left:0; right:0; top:calc(var(--barH,124px) + 10px);
+  display:grid; place-items:center; pointer-events:none; z-index:3;
+}
+.ptr-ring{
+  width:32px;height:32px;border-radius:50%;
+  background:var(--bg-elev); box-shadow:0 3px 12px rgba(0,0,0,.14);
+  display:grid; place-items:center; color:var(--ink-3);
+  opacity:0; transform:scale(.5);
+  transition:opacity 160ms linear, box-shadow 220ms var(--ease-out), color 220ms linear;
+}
+.ptr-ring.ready{color:var(--accent-deep)}
+[data-theme="dark"] .ptr-ring.ready{color:var(--accent)}
+.ptr-ring .arc{transform-origin:50% 50%}
+.ptr-ring.busy{color:var(--accent-deep)}
+[data-theme="dark"] .ptr-ring.busy{color:var(--accent)}
+.ptr-ring.busy .arc{animation:sp .68s linear infinite}
+.pull-host{transition:transform 460ms var(--spring-soft)}
+
 /* ---------- post card ---------- */
 .card{
   background:var(--card); border:1px solid var(--line);
-  border-radius:18px; padding:15px 16px 12px; margin-bottom:12px;
+  border-radius:20px; padding:16px 17px 13px; margin-bottom:12px;
   box-shadow:var(--shadow-card);
   transition:transform var(--dur-2) var(--ease-out), background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
 }
 .card.tap:active{transform:scale(.988)}
-.p-head{display:flex; align-items:flex-start; gap:11px}
+.p-head{display:flex; align-items:flex-start; gap:15px}
 .av{flex:0 0 auto; border-radius:50%; overflow:hidden; display:block; background:var(--card-2);
   transition:transform var(--dur-2) var(--spring)}
 .av:active{transform:scale(.92)}
 .av svg{display:block;width:100%;height:100%}
 .p-meta{flex:1 1 auto; min-width:0}
-.p-line{display:flex; align-items:center; gap:6px; flex-wrap:wrap; line-height:1.3}
-.p-name{font-size:14.5px; font-weight:800; letter-spacing:-.005em}
+.p-line{display:flex; align-items:center; gap:5px; flex-wrap:nowrap; line-height:1.35; min-width:0}
+.p-name{font-size:15px; font-weight:800; letter-spacing:-.01em; white-space:nowrap; flex:0 0 auto}
+.badge-demo{
+  flex:0 0 auto;
+  display:inline-flex; align-items:center; gap:4px;
+  background:var(--field); color:var(--ink-2); border:1px solid var(--line);
+  font-size:10px; font-weight:800; letter-spacing:.08em;
+  padding:1.5px 6px; border-radius:6px;
+}
 .badge-bot{
+  flex:0 0 auto;
   display:inline-flex; align-items:center; gap:4px;
   background:var(--accent); color:var(--accent-ink);
-  font-size:10.5px; font-weight:800; letter-spacing:.06em;
-  padding:2.5px 7px; border-radius:6px;
+  font-size:11.5px; font-weight:800; letter-spacing:.06em;
+  padding:3.5px 9px; border-radius:7px;
 }
-[data-theme="dark"] .badge-bot{background:#4A3D14;color:var(--accent)}
-.p-time{font-size:12.5px; color:var(--ink-3); font-weight:600}
-.dot-sep{color:var(--ink-3); font-size:12px}
-.p-more{margin-left:auto; width:30px;height:26px; display:grid;place-items:center; color:var(--ink-3);
+[data-theme="dark"] .badge-demo{
+  flex:0 0 auto;
+  display:inline-flex; align-items:center; gap:4px;
+  background:var(--field); color:var(--ink-2); border:1px solid var(--line);
+  font-size:10px; font-weight:800; letter-spacing:.08em;
+  padding:1.5px 6px; border-radius:6px;
+}
+.badge-bot{background:#4A3D14;color:var(--accent)}
+.p-time{font-size:13px; white-space:nowrap; color:var(--ink-3); font-weight:600}
+.dot-sep{width:3.5px; height:3.5px; border-radius:50%; background:var(--ink-3);
+  display:inline-block; margin:0 4px; flex:0 0 auto; align-self:center}
+.p-more{margin-left:auto; width:34px;height:30px; display:grid;place-items:center; color:var(--ink-3);
   transition:transform var(--dur-2) var(--spring), color var(--dur-2) linear}
 .p-more:active{transform:scale(.8); color:var(--ink)}
-.p-body{margin:9px 0 0; font-size:15px; font-weight:600; line-height:1.72; letter-spacing:.005em; word-break:break-word; white-space:pre-wrap}
+.p-body{margin:11px 0 0; font-size:16px; font-weight:600; line-height:1.64; letter-spacing:.005em; word-break:break-word; white-space:pre-wrap}
 .p-full .p-body{padding-left:0}
-.p-indent{padding-left:51px}
+.p-indent{padding-left:63px}
 .tag{
-  display:inline-block; margin-top:10px;
-  font-size:12px; font-weight:800; padding:4px 10px; border-radius:8px;
+  display:inline-block; margin-top:11px;
+  font-size:12.5px; font-weight:800; padding:4.5px 11px; border-radius:8px;
 }
 .tag-hitorigoto{background:#FBF0CE;color:#7A6318}
 .tag-soudan{background:#EFE9FB;color:#6A4CA6}
 .tag-zatsudan{background:#E2EFE6;color:#376B48}
 .tag-shitsumon{background:#E3EDF9;color:#2E5C89}
 .tag-arch{background:var(--field);color:var(--ink-3)}
-.p-foot{display:flex; align-items:center; gap:16px; margin-top:11px}
+.p-foot{display:flex; align-items:center; gap:22px; margin-top:13px}
 .act{
-  display:inline-flex; align-items:center; gap:7px;
-  font-size:13px; font-weight:700; color:var(--ink-3);
+  display:inline-flex; align-items:center; gap:8px;
+  font-size:14px; font-weight:700; color:var(--ink-3);
   padding:6px 2px; border-radius:10px;
   transition:color var(--dur-2) var(--ease-out), transform var(--dur-2) var(--spring);
 }
@@ -257,9 +300,9 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   100%{opacity:0; transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(.5)}
 }
 .talkbtn{
-  margin-left:auto; display:inline-flex; align-items:center; gap:7px;
+  margin-left:auto; display:inline-flex; align-items:center; gap:8px;
   border:1px solid var(--line); border-radius:999px;
-  padding:8px 16px; font-size:13px; font-weight:800; color:var(--ink);
+  padding:9px 17px; font-size:14px; font-weight:800; color:var(--ink);
   transition:transform var(--dur-2) var(--spring), background-color var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out);
 }
 .talkbtn:active{transform:scale(.92); background:var(--field)}
@@ -444,20 +487,25 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 /* ---------- list rows ---------- */
 .row{
   position:relative; overflow:hidden;
-  display:flex; align-items:flex-start; gap:12px;
-  padding:15px 18px; border-bottom:1px solid var(--line-soft);
+  display:flex; align-items:flex-start; gap:13px;
+  padding:16px 18px; border-bottom:1px solid var(--line-soft);
   transition:background-color var(--dur-2) var(--ease-out);
 }
 .row:active{background:var(--field)}
+.row.tapable{cursor:pointer}
 .row-main{flex:1 1 auto; min-width:0}
-.row-t{font-size:14.5px; font-weight:800; line-height:1.55}
-.row-s{margin-top:2px; font-size:13.5px; color:var(--ink-3); font-weight:600; line-height:1.6;
+.row-t{font-size:15.5px; font-weight:800; line-height:1.5; display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+.pinmark{color:var(--ink-3); display:inline-flex}
+.avhit{flex:0 0 auto; display:block; border-radius:50%;
+  transition:transform var(--dur-2) var(--spring)}
+.avhit:active{transform:scale(.9)}
+.row-s{margin-top:3px; font-size:14.5px; color:var(--ink-3); font-weight:600; line-height:1.6;
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
 .row-r{flex:0 0 auto; display:flex; flex-direction:column; align-items:flex-end; gap:7px; padding-top:2px}
-.time-s{font-size:12px; color:var(--ink-3); font-weight:600}
+.time-s{font-size:13px; color:var(--ink-3); font-weight:600}
 .unread{
-  min-width:21px;height:21px;padding:0 6px;border-radius:11px;background:#E0245E;color:#fff;
-  font-size:11px;font-weight:800; display:grid;place-items:center; line-height:1;
+  min-width:22px;height:22px;padding:0 7px;border-radius:11px;background:#E0245E;color:#fff;
+  font-size:12px;font-weight:800; display:grid;place-items:center; line-height:1;
 }
 .ripple{position:absolute; border-radius:50%; background:currentColor; opacity:.10; transform:scale(0);
   animation:rip 620ms var(--ease-out) forwards; pointer-events:none}
@@ -496,6 +544,16 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 @keyframes bubIn{from{opacity:0; transform:translate3d(0,12px,0) scale(.94)}to{opacity:1;transform:none}}
 .mtime{font-size:10.5px; color:var(--ink-3); font-weight:600; align-self:flex-end; padding-bottom:3px; flex:0 0 auto}
+.syschip{
+  align-self:center; margin:10px 0 2px;
+  display:inline-flex; align-items:center; gap:9px;
+  background:var(--card-2); border:1px solid var(--line-soft);
+  color:var(--ink-2); font-size:13px; font-weight:700;
+  padding:10px 18px; border-radius:999px;
+  animation:bubIn 420ms var(--spring-soft) both;
+  transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
+}
+.syschip .t{color:var(--ink-3); font-size:12px; font-weight:600}
 .daychip{align-self:center; margin:14px 0 4px; font-size:11.5px; font-weight:800; color:var(--ink-3);
   background:var(--field); padding:5px 13px; border-radius:999px}
 .typing{display:inline-flex; gap:4px; align-items:center; padding:14px 16px}
@@ -515,7 +573,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   font-size:15px; font-weight:600; resize:none; max-height:120px; line-height:1.5;
   transition:background-color var(--dur-3) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
 }
-.msgfield:focus{box-shadow:0 0 0 2px var(--accent)}
+.msgfield:focus{box-shadow:inset 0 0 0 1.5px var(--accent)}
 .sendbtn{
   width:38px;height:38px;border-radius:50%; display:grid;place-items:center; flex:0 0 auto;
   color:var(--ink-3);
@@ -529,13 +587,13 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   transition:background-color var(--dur-3) var(--ease-out)}
 .pd-head{display:flex; align-items:center; gap:12px}
 .pd-head .who{flex:1 1 auto; min-width:0; line-height:1.3}
-.pd-head .who b{display:block; font-size:15px; font-weight:800; letter-spacing:-.005em}
-.pd-head .who span{display:block; font-size:12.5px; color:var(--ink-3); font-weight:600; margin-top:1px}
-.pd-body{margin:16px 0 0; font-size:17px; font-weight:700; line-height:1.7; letter-spacing:.002em; white-space:pre-wrap; word-break:break-word}
+.pd-head .who b{display:block; font-size:16px; font-weight:800; letter-spacing:-.005em}
+.pd-head .who span{display:block; font-size:13px; color:var(--ink-3); font-weight:600; margin-top:1px}
+.pd-body{margin:16px 0 0; font-size:18px; font-weight:700; line-height:1.62; letter-spacing:.002em; white-space:pre-wrap; word-break:break-word}
 .pd-card .tag{margin-top:12px}
 .pd-stats{display:flex; align-items:center; gap:22px; margin-top:14px;
   padding:13px 0; border-top:1px solid var(--line)}
-.pd-stat{display:inline-flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; color:var(--ink-3);
+.pd-stat{display:inline-flex; align-items:center; gap:9px; font-size:14.5px; font-weight:700; color:var(--ink-3);
   transition:color var(--dur-2) var(--ease-out), transform var(--dur-2) var(--spring)}
 .pd-stat:active{transform:scale(.92)}
 .pd-stat.liked{color:#E24A6B}
@@ -545,17 +603,40 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .pd-stat.pop .burst i{animation:sparkle 640ms var(--ease-out) forwards}
 .pd-sep{height:1px; background:var(--line)}
 .rep-empty{padding:52px 24px; text-align:center; font-size:14.5px; font-weight:700; color:var(--ink-3); line-height:2}
-.rep{display:flex; gap:11px; padding:15px 18px; border-bottom:1px solid var(--line-soft)}
+.rep{display:flex; gap:14px; padding:16px 17px; border-bottom:1px solid var(--line-soft)}
 .rep-main{flex:1 1 auto; min-width:0}
 .rep-line{display:flex; align-items:center; gap:6px; flex-wrap:wrap; line-height:1.3}
-.rep-line b{font-size:14px; font-weight:800}
-.rep-line span{font-size:12.5px; color:var(--ink-3); font-weight:600}
-.rep-body{margin:5px 0 0; font-size:14.5px; font-weight:600; line-height:1.7; white-space:pre-wrap; word-break:break-word}
-.rep-foot{margin-top:8px}
+.rep-line b{font-size:15px; font-weight:800}
+.rep-line span{font-size:13px; color:var(--ink-3); font-weight:600}
+.rep-body{margin:6px 0 0; font-size:16px; font-weight:600; line-height:1.6; white-space:pre-wrap; word-break:break-word}
+.rep-foot{margin-top:8px; display:flex; align-items:center; gap:16px}
+.mention{color:var(--accent-deep); font-weight:800}
+[data-theme="dark"] .mention{color:var(--accent)}
+.replying{
+  display:flex; align-items:center; gap:8px;
+  padding:9px 14px; margin:0 14px -2px;
+  background:var(--field); border-radius:14px 14px 0 0;
+  font-size:12.5px; font-weight:700; color:var(--ink-2);
+  animation:riseIn 240ms var(--spring-soft) both;
+}
+.replying b{color:var(--ink)}
+.replying .x{margin-left:auto; width:24px;height:24px;border-radius:50%;
+  display:grid;place-items:center; color:var(--ink-3);
+  transition:transform var(--dur-2) var(--spring), background-color var(--dur-1) linear}
+.replying .x:active{transform:scale(.85); background:var(--line)}
 .rep.fresh{animation:repIn 620ms var(--spring-soft) both}
 @keyframes repIn{from{opacity:0; transform:translate3d(0,-10px,0) scale(.97)}to{opacity:1;transform:none}}
 
 /* ---------- reply composer (mirrors DM bar) ---------- */
+.reply-dock{
+  position:absolute; left:0; right:0; bottom:0; z-index:6;
+  background:var(--bar);
+  -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
+  border-top:1px solid var(--glass-line);
+  transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
+}
+.reply-dock .reply-bar{position:static; background:none; border-top:0; -webkit-backdrop-filter:none; backdrop-filter:none}
+.reply-dock .replying{margin:10px 14px 0; border-radius:14px}
 .reply-bar{
   position:absolute; left:0; right:0; bottom:0; z-index:6;
   display:flex; align-items:flex-end; gap:10px;
@@ -571,7 +652,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
 }
 .replyfield::placeholder{color:var(--ink-3)}
-.replyfield:focus{border-color:var(--accent); box-shadow:0 0 0 2px rgba(247,206,69,.28)}
+.replyfield:focus{border-color:var(--accent); box-shadow:none}
 .replysend{
   width:40px;height:40px;border-radius:50%; flex:0 0 auto; align-self:center;
   display:grid;place-items:center;
@@ -646,7 +727,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   background:linear-gradient(180deg,rgba(0,0,0,0) 55%,rgba(0,0,0,.10) 100%);
 }
 .banner img{width:100%;height:100%;object-fit:cover;display:block}
-.prof.under{padding-top:0; margin-top:-44px}
+.prof.under{padding-top:0; margin-top:-44px; position:relative; z-index:1}
 .prof.under .av{border:4px solid var(--bg); box-shadow:0 8px 26px rgba(0,0,0,.16);
   transition:border-color var(--dur-3) var(--ease-out)}
 .banner-edit{
@@ -878,7 +959,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.15';
+const APP_VER='2.19';
 
 const $  = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -899,9 +980,9 @@ const I = {
   plus:'<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   back:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
   chev:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
-  dots:'<svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>',
-  reply:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M20.5 11.6c0 4.2-3.8 7.6-8.5 7.6a9.6 9.6 0 01-2.6-.35L4.2 20.5l1.35-4.1A7.3 7.3 0 013.5 11.6C3.5 7.4 7.3 4 12 4s8.5 3.4 8.5 7.6z"/></svg>',
-  heart:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 20.2S3.6 15 3.6 9.3A4.6 4.6 0 0112 6.9a4.6 4.6 0 018.4 2.4C20.4 15 12 20.2 12 20.2z"/></svg>',
+  dots:'<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>',
+  reply:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M20.5 11.6c0 4.2-3.8 7.6-8.5 7.6a9.6 9.6 0 01-2.6-.35L4.2 20.5l1.35-4.1A7.3 7.3 0 013.5 11.6C3.5 7.4 7.3 4 12 4s8.5 3.4 8.5 7.6z"/></svg>',
+  heart:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 20.2S3.6 15 3.6 9.3A4.6 4.6 0 0112 6.9a4.6 4.6 0 018.4 2.4C20.4 15 12 20.2 12 20.2z"/></svg>',
   star:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"><path d="M12 3.6l2.6 5.3 5.8.85-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.75l5.8-.85z"/></svg>',
   bot:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg>',
   send:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M21 3L10.5 14M21 3l-6.8 18-3.7-7.9L3 9.6z"/></svg>',
@@ -917,6 +998,8 @@ const I = {
   belloff:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8.5a6 6 0 00-9.2-5.1M5.5 6.6A6 6 0 006 8.5c0 5-2 6.5-2 6.5h12.6"/><path d="M13.7 20a2 2 0 01-3.4 0"/><path d="M3.5 3.5l17 17"/></svg>',
   doc:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"><path d="M6 3.4h7.6L18.6 8v12.6H6z"/><path d="M13.4 3.6V8.2h4.8M8.8 12.6h6.4M8.8 16h4.4"/></svg>',
   info:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11.2v5M12 7.9h.01"/></svg>',
+  close:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  pin:'<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M14.5 2.5l7 7-2.1 2.1-1.4-.5-3.2 3.2.6 3.6-1.8 1.8-4-4L4 21l-.8-.8 5.3-5.6-4-4L6.3 8.8l3.6.6L13.1 6l-.5-1.4z"/></svg>',
   plusS:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
 };
 
@@ -964,6 +1047,14 @@ function bannerCSS(u){
       linear-gradient(148deg, ${c.bg} 0%, ${c.body}55 100%)`;
 }
 
+/* the small chip shown after a display name */
+function accountTag(u){
+  if(!u) return '';
+  if(u.bot)  return `<span class="badge-bot">${I.bot}BOT</span>`;
+  if(u.demo) return `<span class="badge-demo">DEMO</span>`;
+  return '';
+}
+
 /* ---------- time ---------- */
 function ago(ts){
   const s=Math.max(0,(Date.now()-ts)/1000);
@@ -996,27 +1087,36 @@ const S = {
   blocked:[],          /* user ids — their posts vanish entirely */
   muted:[],            /* user ids — quieter, but still reachable */
   users:{
-    me:{id:'me', name:'HIKAKIN', handle:'hikakinjp', bio:'ぶんぶん', av:'plum', bot:false, posts:0, replies:0, talks:1},
-    bot:{id:'bot', name:'iroha Bot', handle:'iroha_official', bio:'irohaの公式Botです。\n会話のきっかけになる話題を届けます。', av:'stone', bot:true, official:true, posts:31, replies:0, talks:1, fav:false}
+    me  :{id:'me', name:'HIKAKIN', handle:'hikakinjp', bio:'ぶんぶん', av:'plum', posts:0, replies:0, talks:1},
+    bot :{id:'bot', name:'iroha Bot', handle:'iroha_official', bio:'irohaの公式Botです。\n会話のきっかけになる話題を届けます。', av:'stone', bot:true, official:true, posts:31, replies:0, talks:1, fav:false},
+    nagi:{id:'nagi', name:'なぎ', handle:'nagi_0000', bio:'夜のほうが言葉が出てくる。', av:'slate', demo:true, posts:12, replies:8, talks:0, fav:false},
+    koto:{id:'koto', name:'ことは', handle:'kotoha_pon', bio:'たのしいことを集めています。', av:'amber', demo:true, posts:24, replies:19, talks:0, fav:false},
+    rui :{id:'rui', name:'るい', handle:'rui_room', bio:'気になったことはだいたい聞きます。', av:'moss', demo:true, posts:17, replies:22, talks:0, fav:false},
+    mio :{id:'mio', name:'みお', handle:'mio_note', bio:'music / coffee / 散歩', av:'clay', demo:true, posts:9, replies:6, talks:0, fav:false}
   },
+  DEMOS:['nagi','koto','rui','mio'],
   posts:[
-    {id:'p1', u:'bot', av:'stone', t:'寝る前に考えがちなことってある？ まとまってなくても大丈夫です。', tag:'hitorigoto', ts:now-30*1000,  likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
-    {id:'p2', u:'bot', av:'plum',  t:'いま少しだけ誰かに聞いてほしいこと、ここに置いていきませんか？', tag:'soudan', ts:now-60*MIN, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
-    {id:'p3', u:'bot', av:'mist',  t:'最近、時間を忘れて夢中になったものを教えてください。', tag:'zatsudan', ts:now-2*HOUR, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
-    {id:'p4', u:'bot', av:'moss',  t:'今週が終わったら、自分にどんなご褒美をあげたい？', tag:'zatsudan', ts:now-3*HOUR, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
-    {id:'p5', u:'bot', av:'amber', t:'今日いちばん小さくても、うれしかったことは何？', tag:'shitsumon', ts:now-6*HOUR, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
-    {id:'p6', u:'bot', av:'clay',  t:'うまく言葉にならない気持ちも、そのままで置いていって大丈夫です。', tag:'hitorigoto', ts:now-7*HOUR, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
-    {id:'p7', u:'bot', av:'slate', t:'誰かに「ありがとう」と伝えたいこと、ありますか？', tag:'soudan', ts:now-9*HOUR, likes:0, replies:0, liked:false, req:false, rep:[], arch:false}
+    {id:'p1', u:'bot', t:'寝る前に考えがちなことってある？ まとまってなくても大丈夫です。', tag:'hitorigoto', ts:now-30*1000,  likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
+    {id:'p2', u:'bot', t:'いま少しだけ誰かに聞いてほしいこと、ここに置いていきませんか？', tag:'soudan', ts:now-60*MIN, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
+    {id:'p3', u:'bot', t:'最近、時間を忘れて夢中になったものを教えてください。', tag:'zatsudan', ts:now-2*HOUR, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
+    {id:'p4', u:'bot', t:'今週が終わったら、自分にどんなご褒美をあげたい？', tag:'zatsudan', ts:now-3*HOUR, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
+    {id:'p5', u:'bot', t:'今日いちばん小さくても、うれしかったことは何？', tag:'shitsumon', ts:now-6*HOUR, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
+    {id:'p6', u:'bot', t:'うまく言葉にならない気持ちも、そのままで置いていって大丈夫です。', tag:'hitorigoto', ts:now-7*HOUR, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
+    {id:'p7', u:'bot', t:'誰かに「ありがとう」と伝えたいこと、ありますか？', tag:'soudan', ts:now-9*HOUR, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
+    {id:'d1', u:'koto', t:'コンビニの新作プリンがあたりだった。こういう小さい当たりで一日もつ。', tag:'zatsudan', ts:now-22*MIN, likes:4, replies:1, liked:false, req:false, rep:[], arch:false},
+    {id:'d2', u:'nagi', t:'眠れない日の夜って、どうしてこんなに考えごとが増えるんだろう。', tag:'hitorigoto', ts:now-95*MIN, likes:7, replies:2, liked:false, req:false, rep:[], arch:false},
+    {id:'d3', u:'rui', t:'みんなが最近やめてよかったことって何ですか？ 参考にしたい。', tag:'shitsumon', ts:now-4*HOUR, likes:3, replies:0, liked:false, req:false, rep:[], arch:false},
+    {id:'d4', u:'mio', t:'散歩中に流す曲を探しています。テンポ遅めがすき。', tag:'zatsudan', ts:now-5*HOUR, likes:5, replies:1, liked:false, req:false, rep:[], arch:false}
   ],
   notes:{
-    like:[{id:'n1', u:'bot', av:'amber', t:'iroha Botがあなたの投稿にいいねしました', s:'「猫にゃう」', ts:now-8*HOUR}],
+    like:[{id:'n1', u:'bot', p:'p1', t:'iroha Botがあなたの投稿にいいねしました', s:'「猫にゃう」', ts:now-8*HOUR}],
     reply:[
-      {id:'n2', u:'bot', av:'amber', t:'iroha Botがあなたの投稿に返信しました', s:'いいですね。似た気持ちの人もいそうです。', ts:now-8*HOUR},
-      {id:'n3', u:'bot', av:'amber', t:'iroha Botが返信しました', s:'いいですね。似た気持ちの人もいそうです。', ts:now-8*HOUR}
+      {id:'n2', u:'bot', p:'p1', t:'iroha Botがあなたの投稿に返信しました', s:'いいですね。似た気持ちの人もいそうです。', ts:now-8*HOUR},
+      {id:'n3', u:'bot', p:'p2', t:'iroha Botが返信しました', s:'いいですね。似た気持ちの人もいそうです。', ts:now-8*HOUR}
     ]
   },
   chats:[
-    {id:'c1', u:'bot', av:'amber', unread:3, ts:now-4*MIN,
+    {id:'c1', u:'bot', unread:3, ts:now-4*MIN,
      msgs:[
        {me:false, t:'さっきの投稿、気になっていました。今日はどんな一日でしたか？', ts:now-9*HOUR},
        {me:false, t:'返信はいつでも大丈夫です。ゆっくり話そう。',              ts:now-8*HOUR-25*MIN},
@@ -1055,6 +1155,22 @@ function toast(msg){
   toastTimer=setTimeout(()=>{ t.classList.add('bye'); setTimeout(()=>t.remove(),320); },1900);
 }
 
+/* press and hold — used for the chat row actions */
+function holdMenu(node, fn, ms=460){
+  let t=null, sx=0, sy=0;
+  const cancel=()=>{ if(t){ clearTimeout(t); t=null; } };
+  node.addEventListener('pointerdown',e=>{
+    if(e.button) return;
+    sx=e.clientX; sy=e.clientY;
+    cancel();
+    t=setTimeout(()=>{ t=null; node.dataset.longpressed='1'; haptic(16); fn(); }, ms);
+  });
+  node.addEventListener('pointermove',e=>{
+    if(t && (Math.abs(e.clientX-sx)>8 || Math.abs(e.clientY-sy)>8)) cancel();
+  });
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>node.addEventListener(ev,cancel));
+}
+
 /* ---------- ripple ---------- */
 function rippleAt(host, ev){
   const r=host.getBoundingClientRect();
@@ -1088,7 +1204,7 @@ function revealAll(root, base=0, q=false){
 /* the bars float above the scroller, so the scroller needs their heights */
 function fitBars(root){
   const top=root.querySelector('.appbar,.navbar');
-  const bot=root.querySelector('.composer-bar,.reply-bar');
+  const bot=root.querySelector('.reply-dock,.composer-bar,.reply-bar');
   const set=()=>{
     if(top && top.offsetHeight) root.style.setProperty('--barH', top.offsetHeight+'px');
     if(bot && bot.offsetHeight) root.style.setProperty('--barB', bot.offsetHeight+'px');
@@ -1387,6 +1503,7 @@ function paneHome(p){
     renderFeed(true);
   }));
   wireScroll($('#feedScroll',p), $('#homeBar',p));
+  attachPTR($('#feedScroll',p), p, refreshFeed);
   renderFeed(false);
 }
 
@@ -1405,12 +1522,12 @@ function postCard(p, opts={}){
   const tag=TAGS[p.tag];
   return `<article class="card tap stagger" data-post="${p.id}">
     <div class="p-head">
-      <button class="avbtn" data-user="${u.id}" style="display:contents">${avatar(p.av,40,u.img)}</button>
+      <button class="avbtn" data-user="${u.id}" style="display:contents">${uav(p.u,50)}</button>
       <div class="p-meta">
         <div class="p-line">
           <button class="p-name" data-user="${u.id}">${esc(u.name)}</button>
-          ${u.bot?`<span class="badge-bot">${I.bot}BOT</span>`:''}
-          <span class="dot-sep">·</span>
+          ${accountTag(u)}
+          <span class="dot-sep"></span>
           <span class="p-time" data-ts="${p.ts}">${p.edited?'編集済み・':''}${ago(p.ts)}</span>
         </div>
       </div>
@@ -1424,7 +1541,7 @@ function postCard(p, opts={}){
         <button class="act${p.liked?' liked':''}" data-like="${p.id}">
           <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span><span class="num">${p.likes}</span>
         </button>
-        <button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>
+        ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>`}
       </div>
     </div>
   </article>`;
@@ -1513,6 +1630,7 @@ function paneBell(p){
     renderNotes(true);
   }));
   wireScroll($('#noteScroll',p), null);
+  attachPTR($('#noteScroll',p), p, refreshNotes);
   renderNotes();
   raf(()=>moveSeg($('#noteSeg',p),$('#noteInd',p),false));
 }
@@ -1538,8 +1656,8 @@ function renderNotes(animate){
   }
   const paint=()=>{
     host.innerHTML = list.length ? list.map(n=>`
-      <div class="row stagger">
-        ${avatar(n.av,40)}
+      <div class="row stagger${n.p?' tapable':''}"${n.p?` data-open="${n.p}"`:''}>
+        ${uav(n.u,48)}
         <div class="row-main">
           <div class="row-t">${esc(n.t)}</div>
           <div class="row-s">${esc(n.s)}・${ago(n.ts)}</div>
@@ -1551,7 +1669,12 @@ function renderNotes(animate){
     $$('.row',host).forEach(r=>r.addEventListener('pointerdown',e=>rippleAt(r,e)));
     host.onclick=e=>{
       const b=e.target.closest('[data-note]');
-      if(b){ e.stopPropagation(); openNoteMenu(b.dataset.note); }
+      if(b){ e.stopPropagation(); openNoteMenu(b.dataset.note); return; }
+      const row=e.target.closest('[data-open]');
+      if(row){
+        const p=S.posts.find(x=>x.id===row.dataset.open);
+        if(p) pushPostDetail(p.id); else toast('この投稿は見つかりませんでした');
+      }
     };
   };
   if(animate){
@@ -1572,6 +1695,7 @@ function paneChat(p){
     <div class="scroll flush" id="chatScroll"><div id="chatList"></div></div>`;
   $('#chatQ',p).addEventListener('input',()=>renderChatList());
   wireScroll($('#chatScroll',p), $('#chatBar',p));
+  attachPTR($('#chatScroll',p), p, refreshChats);
   renderChatList();
 }
 let chatSig=null;
@@ -1580,23 +1704,25 @@ function renderChatList(){
   const q=QUIET;
   const qq=($('#chatQ')?.value||'').trim();
   const list=S.chats.filter(c=>{
+    if(c.hidden) return false;
     if(!qq) return true;
     const u=S.users[c.u];
     return u.name.includes(qq) || c.msgs.some(m=>m.t.includes(qq));
-  });
-  const sig=list.map(c=>c.id+':'+c.unread+':'+c.msgs.length).join(',');
+  }).sort((a,b)=> (b.pin?1:0)-(a.pin?1:0) || b.ts-a.ts);
+  const sig=list.map(c=>c.id+':'+c.unread+':'+c.msgs.length+':'+(c.pin?1:0)).join(',');
   if(sig===chatSig && host.childElementCount) return;
   chatSig=sig;
   host.innerHTML = list.length ? list.map(c=>{
     const u=S.users[c.u], last=c.msgs[c.msgs.length-1];
+    const preview = last ? (last.sys?last.t:last.t) : '';
     return `<div class="row stagger" data-chat="${c.id}">
-      ${avatar(c.av,44)}
+      <button class="avhit" data-user="${c.u}" aria-label="${esc(u.name)}のプロフィール">${uav(c.u,52)}</button>
       <div class="row-main">
-        <div class="row-t">${esc(u.name)}</div>
-        <div class="row-s">${esc(last?last.t:'')}</div>
+        <div class="row-t">${c.pin?`<span class="pinmark">${I.pin}</span>`:''}${esc(u.name)}${accountTag(u)}</div>
+        <div class="row-s">${esc(preview)}</div>
       </div>
       <div class="row-r">
-        <span class="time-s">${clock(c.ts)}</span>
+        <span class="time-s" data-ts="${c.ts}">${ago(c.ts)}</span>
         ${c.unread?`<span class="unread">${c.unread}</span>`:''}
       </div>
     </div>`;}).join('')
@@ -1604,7 +1730,13 @@ function renderChatList(){
   revealAll(host,0,q);
   $$('.row[data-chat]',host).forEach(r=>{
     r.addEventListener('pointerdown',e=>rippleAt(r,e));
-    r.addEventListener('click',()=>pushThread(r.dataset.chat));
+    r.addEventListener('click',e=>{
+      const av=e.target.closest('[data-user]');
+      if(av){ pushProfile(av.dataset.user); return; }
+      if(r.dataset.longpressed){ delete r.dataset.longpressed; return; }
+      pushThread(r.dataset.chat);
+    });
+    holdMenu(r, ()=>openChatMenu(r.dataset.chat));
   });
 }
 
@@ -1623,6 +1755,7 @@ function paneMe(p){
     <div class="scroll flush" id="meScroll"><div id="meBody"></div></div>`;
   $('#meSettings',p).onclick=()=>pushSettings();
   wireScroll($('#meScroll',p), $('#meBar',p));
+  attachPTR($('#meScroll',p), p, refreshMe);
   renderMe();
 }
 function renderMe(){
@@ -1633,7 +1766,7 @@ function renderMe(){
   host.innerHTML=`
     <div class="banner" style="${bannerCSS(u)}"></div>
     <div class="prof under${q?' noanim':''}">
-      ${avatar(u.av,84,u.img)}
+      ${uav(u.id,84)}
       <h2>${esc(u.name)}</h2>
       <p class="handle">@${esc(u.handle)}</p>
       <p class="bio">${esc(u.bio)}</p>
@@ -1793,10 +1926,10 @@ function pushProfile(uid){
     body.innerHTML=`
       <div class="banner" style="${bannerCSS(u)}"></div>
       <div class="prof under">
-        ${avatar(u.av,84,u.img)}
+        ${uav(u.id,84)}
         <h2>${esc(u.name)}</h2>
         <p class="handle">@${esc(u.handle)}</p>
-        ${u.official?`<span class="pill-official">${I.bot}iroha公式BOT</span>`:''}
+        ${u.official?`<span class="pill-official">${I.bot}iroha公式BOT</span>`:u.demo?`<span class="badge-demo" style="margin-top:11px">DEMO アカウント</span>`:''}
         <p class="bio">${esc(u.bio)}</p>
         <div class="prof-actions">
           <button class="obtn${u.fav?' on':''}" id="favBtn">${I.star}${u.fav?'お気に入り中':'お気に入り'}</button>
@@ -1823,7 +1956,11 @@ function pushProfile(uid){
       b.classList.toggle('on',u.fav);
       b.innerHTML=I.star+(u.fav?'お気に入り中':'お気に入り');
     };
-    $('#dmBtn',body).onclick=()=>{ let c=S.chats.find(c=>c.u===uid); if(c) pushThread(c.id); else openRequest(null,uid); };
+    $('#dmBtn',body).onclick=()=>{
+      if(uid==='me'){ goTab('me'); return; }
+      const c=S.chats.find(c=>c.u===uid);
+      if(c) pushThread(c.id); else openRequest(null,uid);
+    };
     $$('#pfTabs .utab',body).forEach(b=>b.addEventListener('click',()=>{
       if(profTab===b.dataset.ut) return;
       haptic(6); profTab=b.dataset.ut;
@@ -1857,11 +1994,11 @@ function pushThread(cid){
   const c=S.chats.find(x=>x.id===cid); if(!c) return;
   c.unread=0;
   const u=S.users[c.u];
-  const s=el(`<section class="screen">
+  const s=el(`<section class="screen" data-chat="${c.id}" data-owner="${c.u}">
     <header class="navbar">
       <div class="side"><button class="iconbtn js-back" aria-label="戻る">${I.back}</button></div>
       <button class="ttl" id="thHead" style="display:flex;flex-direction:column;align-items:center;gap:1px;flex:1">
-        <span style="display:flex;align-items:center;gap:7px">${avatar(c.av,22)}<span>${esc(u.name)}</span></span>
+        <span style="display:flex;align-items:center;gap:7px">${uav(c.u,22)}<span>${esc(u.name)}</span></span>
         <span style="font-size:11px;color:var(--ink-3);font-weight:700">公式Bot</span>
       </button>
       <div class="side"><button class="iconbtn" id="thMore" aria-label="その他">${I.dots}</button></div>
@@ -1901,7 +2038,7 @@ function pushThread(cid){
     scrollThread(th);
     // bot typing → reply
     setTimeout(()=>{
-      const dots=el(`<div class="msgrow" id="typingRow">${avatar(c.av,30)}<div class="bub"><span class="typing"><i></i><i></i><i></i></span></div></div>`);
+      const dots=el(`<div class="msgrow" id="typingRow">${uav(c.u,30)}<div class="bub"><span class="typing"><i></i><i></i><i></i></span></div></div>`);
       th.appendChild(dots); scrollThread(th);
       setTimeout(()=>{
         dots.remove();
@@ -1930,10 +2067,15 @@ function paintThread(th,c){
   });
 }
 function appendMsg(th,c,m,animate,i=0){
+  if(m.sys){
+    const chip=el(`<div class="syschip">${I.check}<span>${esc(m.t)}</span><span class="t" data-ts="${m.ts}">${ago(m.ts)}</span></div>`);
+    if(!animate) chip.style.animationDelay=Math.min(i*38,300)+'ms';
+    th.appendChild(chip); return;
+  }
   const row=el(`<div class="msgrow${m.me?' me':''}">
-    ${m.me?'':avatar(c.av,30)}
+    ${m.me?uav('me',30):uav(c.u,30)}
     <div class="bub">${esc(m.t)}</div>
-    <span class="mtime">${clock(m.ts)}</span>
+    <span class="mtime" data-ts="${m.ts}">${ago(m.ts)}</span>
   </div>`);
   const bub=row.querySelector('.bub');
   if(!animate){ bub.style.animationDelay=Math.min(i*38,300)+'ms'; }
@@ -1959,11 +2101,11 @@ function pushPostDetail(pid){
     <div class="scroll flush withbar js-scroll">
       <div class="pd-card">
         <div class="pd-head">
-          <button data-user="${u.id}" style="display:contents">${avatar(p.av,44,u.img)}</button>
+          <button data-user="${u.id}" style="display:contents">${uav(p.u,48)}</button>
           <button class="who" data-user="${u.id}" style="text-align:left">
             <b>${esc(u.name)}</b><span data-ts="${p.ts}">${ago(p.ts)}</span>
           </button>
-          <button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>
+          ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>`}
         </div>
         <p class="pd-body">${esc(p.t)}</p>
         ${TAGS[p.tag]?`<span class="tag ${TAGS[p.tag].cls}">${TAGS[p.tag].label}</span>`:''}
@@ -1978,10 +2120,13 @@ function pushPostDetail(pid){
       <div class="pd-sep"></div>
       <div id="repList"></div>
     </div>
-    <div class="reply-bar">
-      ${avatar(me.av,34,me.img)}
-      <textarea class="replyfield" id="repIn" rows="1" placeholder="やさしく返信する…"></textarea>
-      <button class="replysend" id="repSend" aria-label="返信する">${I.send}</button>
+    <div class="reply-dock">
+      <div id="replyTarget"></div>
+      <div class="reply-bar">
+        ${uav('me',34)}
+        <textarea class="replyfield" id="repIn" rows="1" placeholder="やさしく返信する…"></textarea>
+        <button class="replysend" id="repSend" aria-label="返信する">${I.send}</button>
+      </div>
     </div>
   </section>`);
 
@@ -2011,7 +2156,19 @@ function pushPostDetail(pid){
   paintReplies();
 
   /* composer — same mechanics as the DM bar */
-  const inp=$('#repIn',s), send=$('#repSend',s);
+  const inp=$('#repIn',s), send=$('#repSend',s), tgtBox=$('#replyTarget',s);
+  let replyTo=null;
+  function setTarget(uid){
+    replyTo=uid;
+    if(!uid){ tgtBox.innerHTML=''; inp.placeholder='やさしく返信する…'; return; }
+    const u=S.users[uid];
+    tgtBox.innerHTML=`<div class="replying">${I.reply}<span><b>${esc(u.name)}</b>さんに返信中</span>
+      <button class="x" id="repCancel" aria-label="やめる">${I.close}</button></div>`;
+    tgtBox.querySelector('#repCancel').onclick=()=>{ haptic(5); setTarget(null); };
+    inp.placeholder=`${u.name}さんへ返信…`;
+    fitBars(s);
+    setTimeout(()=>inp.focus(),60);
+  }
   const grow=()=>{ inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,120)+'px';
     send.classList.toggle('live', inp.value.trim().length>0); };
   inp.addEventListener('input',grow);
@@ -2023,7 +2180,8 @@ function pushPostDetail(pid){
     haptic(11);
     send.classList.remove('fly'); void send.offsetWidth; send.classList.add('fly');
     setTimeout(()=>send.classList.remove('fly'),540);
-    p.rep.push({u:'me', av:me.av, t, ts:Date.now(), likes:0, liked:false});
+    p.rep.push({u:'me', t, to:replyTo, ts:Date.now(), likes:0, liked:false});
+    setTarget(null);
     p.replies=p.rep.length;
     inp.value=''; grow();
     paintReplies(true);
@@ -2045,10 +2203,11 @@ function pushPostDetail(pid){
         <button data-user="${r.u}" style="display:contents">${uav(r.u,36,r.av)}</button>
         <div class="rep-main">
           <div class="rep-line"><b>${esc(ru.name)}</b>
-            <span>@${esc(ru.handle)}</span><span class="dot-sep">·</span>
+            <span>@${esc(ru.handle)}</span><span class="dot-sep"></span>
             <span data-ts="${r.ts}">${ago(r.ts)}</span></div>
-          <p class="rep-body">${esc(r.t)}</p>
+          <p class="rep-body">${r.to&&S.users[r.to]?`<span class="mention">@${esc(S.users[r.to].handle)}</span> `:''}${esc(r.t)}</p>
           <div class="rep-foot">
+            <button class="act" data-repreply="${i}">${I.reply}<span class="num">返信</span></button>
             <button class="act${r.liked?' liked':''}" data-replike="${i}">
               <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span><span class="num">${r.likes}</span>
             </button>
@@ -2057,6 +2216,8 @@ function pushPostDetail(pid){
       </div>`;
     }).join('');
     list.onclick=e=>{
+      const rr=e.target.closest('[data-repreply]');
+      if(rr){ haptic(6); setTarget(p.rep[+rr.dataset.repreply].u); return; }
       const lk=e.target.closest('[data-replike]'); if(!lk) return;
       const r=p.rep[+lk.dataset.replike];
       r.liked=!r.liked; r.likes+=r.liked?1:-1;
@@ -2093,7 +2254,7 @@ function pushSettings(){
     <div class="group" style="margin-top:14px">
       <div class="gcard">
         <button class="gitem" id="stProf">
-          ${avatar(u.av,44,u.img)}
+          ${uav(u.id,44)}
           <div class="gt" style="margin-left:2px"><b>${esc(u.name)}</b><span>プロフィールと公開情報</span></div>
           <span class="chev">${I.chev}</span>
         </button>
@@ -2443,6 +2604,8 @@ function showScrim(on, onTap){
 function openRequest(postId, uidOverride){
   const p = postId ? S.posts.find(x=>x.id===postId) : null;
   const uid = uidOverride || (p && p.u); if(!uid) return;
+  if(uid==='me'){ toast('自分自身とは会話できません'); return; }
+  if(S.blocked.includes(uid)){ toast('ブロック中の相手には申請できません'); return; }
   const u=S.users[uid];
 
   const sheet=el(`<div class="sheet" id="reqSheet">
@@ -2471,12 +2634,13 @@ function openRequest(postId, uidOverride){
     let c=S.chats.find(x=>x.u===uid);
     const text=ta.value.trim();
     if(!c){
-      c={id:'c'+Date.now(), u:uid, av:(p&&p.av)||u.av, unread:0, ts:Date.now(), msgs:[]};
+      c={id:'c'+Date.now(), u:uid, unread:0, ts:Date.now(), msgs:[]};
       S.chats.push(c);
     }
-    if(text) c.msgs.push({me:true,t:text,ts:Date.now()});
-    c.msgs.push({me:false,t:'申請ありがとうございます。ゆっくり話しましょう。',ts:Date.now()+1});
-    c.unread+=1; c.ts=Date.now();
+    if(text) c.msgs.push({me:true, t:text, ts:Date.now()});
+    else     c.msgs.push({sys:true, t:'会話申請を送信しました', ts:Date.now()});
+    c.ts=Date.now();
+    scheduleReplyTo(c, text);      /* they answer in their own time */
     if(p){ p.req=true;
       const btn=document.querySelector(`[data-talk="${p.id}"]`);
       if(btn){ btn.classList.add('done'); btn.innerHTML=I.reply+'申請済み'; }
@@ -2596,7 +2760,7 @@ function editPost(pid){
     </header>
     <div class="scroll js-scroll">
       <div style="display:flex;gap:12px">
-        ${avatar(p.av,40,S.users.me.img)}
+        ${uav('me',40)}
         <textarea id="epText" maxlength="140" rows="4"
           style="flex:1;font-size:17px;font-weight:600;line-height:1.7;resize:none;min-height:130px">${esc(p.t)}</textarea>
       </div>
@@ -2669,6 +2833,35 @@ function confirmBlock(uid){
   });
 }
 
+/* ---------- chat row menu ---------- */
+function openChatMenu(cid){
+  const c=S.chats.find(x=>x.id===cid); if(!c) return;
+  const u=S.users[c.u];
+  openMenu([
+    {t:c.pin?'固定を解除':'チャットを固定', fn:()=>{
+      c.pin=!c.pin; haptic(10); chatSig=null; renderChatList();
+      toast(c.pin?'チャットを固定しました':'固定を解除しました');
+    }},
+    {t:'チャットを非表示', fn:()=>{
+      c.hidden=true; c.unread=0; haptic(10);
+      chatSig=null; renderChatList(); syncNavBadges();
+      toast('非表示にしました。新しいメッセージで戻ります');
+    }},
+    {t:'チャットを削除', danger:true, fn:()=>confirmSheet({
+      title:`${u.name}とのチャットを削除しますか？`,
+      lead:'メッセージの履歴が消えます。相手に通知は届きません。',
+      go:'削除する', danger:true,
+      fn:()=>{
+        S.chats=S.chats.filter(x=>x.id!==cid);
+        for(let i=stackEls.length-1;i>=0;i--)
+          if(stackEls[i].dataset.chat===cid){ while(stackEls.length>i) pop(); break; }
+        haptic(12); chatSig=null; renderChatList(); syncNavBadges();
+        toast('チャットを削除しました');
+      }
+    })}
+  ]);
+}
+
 /* ---------- notification menu ---------- */
 function openNoteMenu(nid){
   const n=[...S.notes.like,...S.notes.reply].find(x=>x.id===nid); if(!n) return;
@@ -2717,7 +2910,7 @@ function openCompose(){
     </header>
     <div class="scroll js-scroll">
       <div style="display:flex;gap:12px">
-        ${avatar(S.users.me.av,40,S.users.me.img)}
+        ${uav('me',40)}
         <textarea id="cmText" maxlength="140" rows="4" placeholder="いま、何を話したい？"
           style="flex:1;font-size:17px;font-weight:600;line-height:1.7;resize:none;min-height:130px"></textarea>
       </div>
@@ -2749,7 +2942,7 @@ function openCompose(){
     const t=ta.value.trim(); if(!t) return;
     haptic(14);
     const newId='p'+Date.now();
-    S.posts.unshift({id:newId, u:'me', av:S.users.me.av, t, tag, ts:Date.now(),
+    S.posts.unshift({id:newId, u:'me', t, tag, ts:Date.now(),
       likes:0, replies:0, liked:false, req:false, rep:[], arch:false});
     close();
     setTimeout(()=>{
@@ -2772,6 +2965,263 @@ function openCompose(){
   }
 }
 
+
+
+/* =========================================================
+   PULL TO REFRESH
+   ========================================================= */
+const PTR_ICON='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><g class="arc"><path d="M12 4.4a7.6 7.6 0 107.4 9.3"/><path d="M19.6 4.6v4.6h-4.6"/></g></svg>';
+
+function attachPTR(scroller, root, onRefresh){
+  if(!scroller||!root||scroller.dataset.ptr) return;
+  scroller.dataset.ptr='1';
+  const ind=el(`<div class="ptr"><div class="ptr-ring">${PTR_ICON}</div></div>`);
+  root.appendChild(ind);
+  const ring=ind.querySelector('.ptr-ring');
+  const TH=66, MAX=104;
+  let sy=0, pulling=false, dist=0, busy=false;
+
+  scroller.classList.add('pull-host');
+
+  scroller.addEventListener('touchstart',e=>{
+    if(busy || scroller.scrollTop>0 || e.touches.length>1) return;
+    sy=e.touches[0].clientY; pulling=true; dist=0;
+    scroller.style.transition='none';
+  },{passive:true});
+
+  scroller.addEventListener('touchmove',e=>{
+    if(!pulling) return;
+    const dy=e.touches[0].clientY-sy;
+    if(dy<=0){ dist=0; scroller.style.transform=''; ring.style.opacity=0; return; }
+    e.preventDefault();                       /* replace the native rubber band */
+    dist=Math.min(MAX, Math.pow(dy,0.82));
+    const p=Math.min(1, dist/TH);
+    scroller.style.transform=`translate3d(0,${dist.toFixed(1)}px,0)`;
+    ring.style.opacity=p;
+    ring.style.transform=`scale(${(0.5+0.5*p).toFixed(3)}) rotate(${(p*270).toFixed(0)}deg)`;
+    ring.classList.toggle('ready', dist>=TH);
+  },{passive:false});
+
+  const release=()=>{
+    if(!pulling) return; pulling=false;
+    scroller.style.transition='';
+    if(dist>=TH) run(); else settle();
+  };
+  scroller.addEventListener('touchend',release);
+  scroller.addEventListener('touchcancel',release);
+
+  function settle(){
+    scroller.style.transform='';
+    ring.style.opacity=0; ring.style.transform='scale(.5)';
+    ring.classList.remove('ready','busy');
+  }
+  function run(){
+    busy=true; haptic(11);
+    scroller.style.transform='translate3d(0,58px,0)';
+    ring.style.opacity=1; ring.style.transform='scale(1)';
+    ring.classList.remove('ready'); ring.classList.add('busy');
+    const started=Date.now();
+    Promise.resolve().then(onRefresh).catch(()=>{}).then(()=>{
+      const wait=Math.max(0, 620-(Date.now()-started));   /* never flash by */
+      setTimeout(()=>{ busy=false; settle(); }, wait);
+    });
+  }
+}
+
+/* what each screen does when it is pulled */
+function refreshFeed(){
+  demoStep(true);
+  queueDemo(1+Math.floor(Math.random()*3));
+  syncNavBadges();
+  renderFeed(false);
+  const sc=$('#feedScroll'); if(sc) sc.scrollTop=0;
+}
+function refreshNotes(){
+  const who=activeDemos();
+  if(who.length && myPosts().length && Math.random()<0.7){
+    (Math.random()<0.5?demoLike:demoReply)(pick(who));
+  }
+  markNotesSeen(); renderNotes(); syncNavBadges();
+}
+function refreshChats(){
+  const who=activeDemos();
+  if(who.length && Math.random()<0.6){
+    const uid=pick(who);
+    if(!demoDM(uid)) demoRequest(uid);
+  }
+  queueDemo(1+Math.floor(Math.random()*2));
+  chatSig=null; renderChatList(); syncNavBadges();
+}
+function refreshMe(){ quiet(()=>renderMe()); }
+
+/* =========================================================
+   DEMO PEOPLE  —  four accounts that act on their own:
+   they like, reply, start conversations and send DMs.
+   ========================================================= */
+const VOICE = {
+  nagi:{
+    posts:['寝つけないので、部屋の電気を一段暗くしてみた。','考えごとが多い日ほど、言葉にすると軽くなる気がする。','夜のコンビニの明るさ、ちょっと安心する。'],
+    replies:['わかります。夜って考えが増えますよね。','無理にまとめなくて大丈夫だと思います。','読みました。ゆっくりでいいと思う。'],
+    dms:['さっきの投稿、勝手にうなずいてました。','こんばんは。起きてますか？','いま少しだけ話せますか。'],
+    hello:'投稿を読んで、少し話してみたくなりました。'
+  },
+  koto:{
+    posts:['新しいカフェ開拓した。当たりでした。','今日はいい天気だったので遠回りして帰った。','小さい良かったこと、ちゃんと数えたい。'],
+    replies:['それいいですね！','わたしも似たこと考えてました。','聞けてうれしいです、ありがとう。'],
+    dms:['はじめまして！ 投稿おもしろかったです。','よかったらおすすめ教えてください〜','今日はどんな一日でしたか？'],
+    hello:'たのしそうだったので声かけました！'
+  },
+  rui:{
+    posts:['最近やめてよかったこと、募集中です。','人の「こだわり」を聞くのがすきです。','質問ばかりしてしまうのは癖かもしれない。'],
+    replies:['それ、もう少し詳しく聞きたいです。','どうしてそう思ったんですか？','なるほど、参考になります。'],
+    dms:['ひとつ聞いてもいいですか？','さっきの話の続きが気になっています。','よければ経緯を教えてください。'],
+    hello:'気になったので質問させてください。'
+  },
+  mio:{
+    posts:['朝の散歩に合う曲を探し中。','コーヒーを淹れる時間だけは丁寧にやりたい。','雨の音、わりとすき。'],
+    replies:['いいですね、あとで試します。','その感じ、なんとなくわかります。','おすすめあったら教えてください。'],
+    dms:['さっきの投稿、好きでした。','音楽の趣味が近そうだと思って。','おすすめを交換しませんか。'],
+    hello:'趣味が近そうだったので。'
+  }
+};
+
+const DEMO_TAGS=['zatsudan','hitorigoto','soudan','shitsumon'];
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const uid4 = () => Math.random().toString(36).slice(2,8);
+
+function activeDemos(){
+  return S.DEMOS.filter(id => !S.blocked.includes(id));
+}
+function pushNote(kind, uid, t, sub, postId){
+  S.notes[kind].unshift({id:'n'+uid4(), u:uid, p:postId, t, s:sub, ts:Date.now()});
+  if(S.notes[kind].length>40) S.notes[kind].length=40;
+}
+function myPosts(){ return S.posts.filter(p=>p.u==='me' && !p.arch); }
+
+/* --- the individual things a demo person can do --- */
+function demoLike(uid){
+  if(!S.users[uid]) return false;
+  const mine=myPosts().filter(p=>!(p.likedBy||[]).includes(uid));
+  if(!mine.length) return false;
+  const p=pick(mine);
+  (p.likedBy=p.likedBy||[]).push(uid);
+  p.likes++;
+  pushNote('like', uid, `${S.users[uid].name}があなたの投稿にいいねしました`, `「${p.t.slice(0,18)}」`, p.id);
+  return true;
+}
+function demoReply(uid){
+  if(!VOICE[uid]) return false;
+  const mine=myPosts();
+  if(!mine.length) return false;
+  const p=pick(mine), t=pick(VOICE[uid].replies);
+  p.rep.push({u:uid, t, ts:Date.now(), likes:0, liked:false});
+  p.replies=p.rep.length;
+  pushNote('reply', uid, `${S.users[uid].name}があなたの投稿に返信しました`, t, p.id);
+  return true;
+}
+function demoPost(uid){
+  if(!VOICE[uid]) return false;
+  S.posts.unshift({id:'g'+uid4(), u:uid, t:pick(VOICE[uid].posts), tag:pick(DEMO_TAGS),
+    ts:Date.now(), likes:Math.floor(Math.random()*4), replies:0, liked:false,
+    req:false, rep:[], arch:false});
+  if(S.posts.length>60) S.posts.length=60;
+  return true;
+}
+function demoRequest(uid){
+  if(!VOICE[uid] || S.chats.some(c=>c.u===uid)) return false;
+  const c={id:'c'+uid4(), u:uid, unread:1, ts:Date.now(),
+    msgs:[{sys:true, t:'会話の申請が届きました', ts:Date.now()},
+          {me:false, t:VOICE[uid].hello, ts:Date.now()+1}]};
+  S.chats.unshift(c);
+  return true;
+}
+function demoDM(uid){
+  if(!VOICE[uid]) return false;
+  const c=S.chats.find(x=>x.u===uid);
+  if(!c) return false;
+  c.msgs.push({me:false, t:pick(VOICE[uid].dms), ts:Date.now()});
+  c.ts=Date.now(); c.unread++; c.hidden=false;
+  liveThread(c);
+  return true;
+}
+/* if that conversation is open, drop the message straight in */
+function liveThread(c){
+  const scr=stackEls.find(x=>x.dataset.chat===c.id);
+  if(!scr) return;
+  c.unread=0;
+  const th=scr.querySelector('.thread');
+  if(!th) return;
+  appendMsg(th, c, c.msgs[c.msgs.length-1], true);
+  raf(()=>th.scrollTo({top:th.scrollHeight, behavior:'smooth'}));
+}
+
+/* someone answers a conversation request, after a human-ish pause */
+function scheduleReplyTo(c, text){
+  const uid=c.u;
+  setTimeout(()=>{
+    if(S.blocked.includes(uid)) return;
+    const v=VOICE[uid];
+    const t = v ? pick(v.replies) : '申請ありがとうございます。ゆっくり話しましょう。';
+    c.msgs.push({me:false, t, ts:Date.now()});
+    c.ts=Date.now(); c.hidden=false;
+    if(!stackEls.some(x=>x.dataset.chat===c.id)) c.unread++;
+    liveThread(c);
+    syncNavBadges();
+    quiet(()=>{ if(S.tab==='chat') renderChatList(); });
+  }, 2600+Math.random()*4200);
+}
+
+/* --- the loop --- */
+const DEMO_ACTIONS=[
+  {w:34, fn:demoLike},
+  {w:24, fn:demoReply},
+  {w:20, fn:demoPost},
+  {w:12, fn:demoRequest},
+  {w:10, fn:demoDM}
+];
+function demoStep(force){
+  if(document.hidden && !force) return false;
+  const who=activeDemos();
+  if(!who.length) return false;
+  const uid=pick(who);
+  const total=DEMO_ACTIONS.reduce((a,x)=>a+x.w,0);
+  let r=Math.random()*total, act=DEMO_ACTIONS[0];
+  for(const a of DEMO_ACTIONS){ r-=a.w; if(r<=0){ act=a; break; } }
+  const did=act.fn(uid);
+  if(!did && force) return demoPost(uid);   /* a pull must always yield something */
+  return did;
+}
+/* a pull shouldn't dump everything at once — let a couple more things
+   land over the next half minute so the feed keeps breathing */
+function queueDemo(n){
+  for(let i=0;i<n;i++){
+    setTimeout(()=>{
+      if(demoStep(true)){
+        syncNavBadges();
+        quiet(()=>{
+          if($('#feed')) renderFeed(false);
+          if(S.tab==='bell') renderNotes();
+          if(S.tab==='chat'){ chatSig=null; renderChatList(); }
+          if(S.tab==='me')   renderMe();
+        });
+      }
+    }, 5000 + Math.random()*38000);
+  }
+}
+
+function demoTick(){
+  if(demoStep()){
+    syncNavBadges();
+    quiet(()=>{
+      if($('#feed')) renderFeed(false);
+      if(S.tab==='bell') renderNotes();
+      if(S.tab==='chat') renderChatList();
+      if(S.tab==='me')   renderMe();
+    });
+  }
+  setTimeout(demoTick, 11000+Math.random()*13000);
+}
+
 /* =========================================================
    BOOT
    ========================================================= */
@@ -2785,6 +3235,7 @@ function boot(){
     syncNavBadges();
     navMorph.init();
   });
+  setTimeout(demoTick, 6000);
 }
 
 /* keyboard: escape closes topmost layer */
