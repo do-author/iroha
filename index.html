@@ -1,5 +1,3 @@
-# iroha.io
-投稿から会話が始まるSNS
 <!DOCTYPE html>
 <html lang="ja" data-theme="light">
 <head>
@@ -1150,8 +1148,8 @@ const navMorph=(()=>{
     const w=wrap.getBoundingClientRect(), n=nav.getBoundingClientRect(), r=slot.getBoundingClientRect();
     if(!w.width || !n.width) return false;
     baseX = r.left - w.left + r.width/2 - 28;
-    /* settle position matched to the reference clip (FAB centre at 0.81 x screen) */
-    dx = Math.min(n.width*0.34, (n.right - w.left) - 58 - baseX);
+    /* settle flush to the right edge, on the same 16px gutter the cards use */
+    dx = (w.width - 16 - 56) - baseX;
     slotCx = r.left - n.left + r.width/2;
     nav.style.transformOrigin = slotCx.toFixed(1)+'px 50%';
     icons = $$('#nav .navbtn').map((elm,i)=>{
@@ -1169,8 +1167,11 @@ const navMorph=(()=>{
     /* FAB: arc flight + gentle swell tied to how fast it is travelling */
     const arc   = Math.sin(cl01((t+.2)/1.4)*Math.PI)*-7;
     const swell = Math.min(Math.abs(v)*.006, .035);
+    /* sitting on the right gutter, the full overshoot would hit the screen
+       edge — damp it in x only, so the bounce survives without clipping */
+    const tx = t<=1 ? t : 1+(t-1)*0.45;
     fab.style.transform =
-      `translate3d(${(baseX+dx*t).toFixed(2)}px,${(arc-2*b).toFixed(2)}px,0) scale(${(1-.03*b+swell).toFixed(3)})`;
+      `translate3d(${(baseX+dx*tx).toFixed(2)}px,${(arc-2*b).toFixed(2)}px,0) scale(${(1-.03*b+swell).toFixed(3)})`;
     if(core) core.style.boxShadow =
       `0 ${(6+10*b).toFixed(1)}px ${(18+16*b).toFixed(1)}px rgba(196,150,10,${(.42+.14*b).toFixed(2)})`;
 
