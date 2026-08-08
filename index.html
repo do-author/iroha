@@ -1,0 +1,2546 @@
+# iroha.io
+投稿から会話が始まるSNS
+<!DOCTYPE html>
+<html lang="ja" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#FAF8F4">
+<title>iroha</title>
+<style>
+/* ============================================================
+   iroha v2.0  —  design tokens
+   ============================================================ */
+:root{
+  --accent:#F7CE45;
+  --accent-deep:#E4B41C;
+  --accent-ink:#241E05;
+
+  --bg:#FAF8F4;
+  --bg-elev:#FFFFFF;
+  --bar:rgba(250,248,244,.62);
+  --card:#FFFFFF;
+  --card-2:#F5F2EC;
+  --line:#EDE8E0;
+  --line-soft:#F2EEE7;
+  --ink:#1A1917;
+  --ink-2:#5C574F;
+  --ink-3:#A6A099;
+  --field:#F3F0EA;
+  --nav:rgba(255,255,255,.60);
+  --nav-pill:#1A1917;
+  --nav-pill-ink:var(--accent);
+  --shadow-card:0 1px 2px rgba(28,24,16,.04);
+  --shadow-nav:0 8px 30px rgba(40,34,20,.13), 0 2px 6px rgba(40,34,20,.06);
+  --shadow-pop:0 18px 48px rgba(30,26,16,.20);
+  --glow:none;
+  --skel:linear-gradient(90deg,#F0ECE5 0%,#F8F5F0 40%,#F0ECE5 80%);
+  --glass:saturate(185%) blur(30px);
+  --glass-edge:rgba(255,255,255,.72);
+  --glass-line:rgba(120,110,90,.14);
+  --toast-bg:#1A1917; --toast-ink:#fff;
+
+  --ease-out:cubic-bezier(.22,1,.36,1);
+  --ease-in-out:cubic-bezier(.65,0,.35,1);
+  --spring:cubic-bezier(.34,1.42,.5,1);
+  --spring-soft:cubic-bezier(.2,.9,.28,1.06);
+  --dur-1:140ms; --dur-2:220ms; --dur-3:340ms; --dur-4:480ms;
+
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);
+}
+[data-theme="dark"]{
+  --accent:#FBD34D;
+  --accent-deep:#F5C21F;
+  --accent-ink:#241E05;
+
+  --bg:#0B0B0B;
+  --bg-elev:#141414;
+  --bar:rgba(13,13,13,.55);
+  --card:#151414;
+  --card-2:#1D1C1A;
+  --line:#272524;
+  --line-soft:#1E1D1B;
+  --ink:#F7F5F1;
+  --ink-2:#B4AEA6;
+  --ink-3:#7E7972;
+  --field:#1B1A18;
+  --nav:rgba(28,27,25,.55);
+  --nav-pill:#F3EFE6;
+  --nav-pill-ink:#1A1917;
+  --shadow-card:0 1px 2px rgba(0,0,0,.4);
+  --shadow-nav:0 10px 34px rgba(0,0,0,.62);
+  --shadow-pop:0 22px 60px rgba(0,0,0,.7);
+  --glow:0 0 22px rgba(251,211,77,.34);
+  --skel:linear-gradient(90deg,#1A1918 0%,#232120 40%,#1A1918 80%);
+  --glass:saturate(180%) blur(30px);
+  --glass-edge:rgba(255,255,255,.10);
+  --glass-line:rgba(255,255,255,.10);
+  --toast-bg:#F3EFE6; --toast-ink:#171614;
+}
+
+*,*::before,*::after{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;
+  font-size:15px; line-height:1.62;
+  letter-spacing:.01em;
+  -webkit-font-smoothing:antialiased;
+  overscroll-behavior:none;
+  transition:background-color var(--dur-3) var(--ease-out), color var(--dur-3) var(--ease-out);
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
+:focus-visible{outline:2px solid var(--accent-deep);outline-offset:2px;border-radius:8px}
+
+/* ---------- app frame ---------- */
+#app{
+  position:fixed; inset:0;
+  display:flex; flex-direction:column;
+  overflow:hidden;
+  max-width:520px; margin:0 auto;
+  background:var(--bg);
+  transition:background-color var(--dur-3) var(--ease-out);
+}
+.layer{position:absolute; inset:0; display:flex; flex-direction:column; background:var(--bg);
+  transition:background-color var(--dur-3) var(--ease-out)}
+
+/* ============ TAB LAYER ============ */
+.tabs-root{position:absolute; inset:0}
+.tabpane{
+  position:absolute; inset:0;
+  display:flex; flex-direction:column;
+  opacity:0; visibility:hidden;
+  transform:translate3d(0,10px,0) scale(.994);
+  transition:opacity var(--dur-2) var(--ease-out), transform var(--dur-3) var(--ease-out), visibility 0s linear var(--dur-3);
+}
+.tabpane.on{opacity:1; visibility:visible; transform:none; transition:opacity var(--dur-3) var(--ease-out), transform var(--dur-4) var(--spring-soft), visibility 0s;}
+.tabpane.leaving{transform:translate3d(0,-8px,0) scale(.994)}
+
+/* ---------- header ---------- */
+.appbar{
+  position:absolute; top:0; left:0; right:0; z-index:6;
+  padding:calc(var(--safe-t) + 10px) 18px 12px;
+  background:var(--bar);
+  -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
+  box-shadow:inset 0 1px 0 var(--glass-edge);
+  border-bottom:1px solid transparent;
+  transition:border-color var(--dur-3) var(--ease-out), background-color var(--dur-3) var(--ease-out);
+}
+.appbar.stuck{border-bottom-color:var(--glass-line)}
+.appbar-row{display:flex; align-items:center; gap:12px; min-height:34px}
+.brand{display:flex; align-items:baseline; gap:9px; margin-right:auto}
+.brand-dot{
+  width:26px;height:26px;border-radius:50%;
+  background:radial-gradient(circle at 34% 32%,#FFF0B4,var(--accent) 62%,var(--accent-deep));
+  box-shadow:var(--glow);
+  align-self:center; flex:0 0 auto;
+  animation:dotIn 900ms var(--spring) both;
+}
+@keyframes dotIn{0%{transform:scale(.2) rotate(-90deg);opacity:0}100%{transform:none;opacity:1}}
+.brand-name{font-size:26px; font-weight:800; letter-spacing:-.035em; line-height:1}
+.brand-ver{font-size:11px; font-weight:700; color:var(--ink-3); letter-spacing:.02em}
+.iconbtn{
+  width:38px;height:38px;border-radius:50%;
+  display:grid;place-items:center; color:var(--ink);
+  transition:transform var(--dur-2) var(--spring), background-color var(--dur-1) linear;
+}
+.iconbtn:active{transform:scale(.86); background:var(--field)}
+.ttl{font-size:16px;font-weight:800;letter-spacing:.01em}
+
+/* ---------- composer ---------- */
+.composer{
+  margin:14px 0 0; width:100%;
+  display:flex; align-items:center; gap:10px;
+  background:var(--field); border-radius:16px;
+  padding:13px 16px; text-align:left; color:var(--ink-3);
+  font-size:14.5px; font-weight:500;
+  transition:transform var(--dur-2) var(--spring), background-color var(--dur-3) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+}
+.composer span{flex:1}
+.composer:active{transform:scale(.978)}
+
+/* ---------- filter chips ---------- */
+.chiprow{
+  display:flex; gap:9px; margin-top:13px;
+  overflow-x:auto; scrollbar-width:none; -ms-overflow-style:none;
+  padding:2px 18px 2px 0; margin-right:-18px;
+  scroll-behavior:smooth;
+}
+.chiprow::-webkit-scrollbar{display:none}
+.chip{
+  flex:0 0 auto; padding:9px 19px; border-radius:999px;
+  background:var(--field); color:var(--ink); font-size:14px; font-weight:700;
+  transition:transform var(--dur-2) var(--spring), background-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out), box-shadow var(--dur-3) var(--ease-out);
+}
+.chip:active{transform:scale(.93)}
+.chip.on{background:var(--accent); color:var(--accent-ink); box-shadow:var(--glow)}
+
+/* ---------- scroller ---------- */
+.scroll{
+  flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch;
+  overscroll-behavior-y:contain;
+  padding:calc(var(--barH,124px) + 12px) 16px calc(var(--safe-b) + 116px);
+  scrollbar-width:none;
+}
+.scroll.withbar{padding-bottom:calc(var(--barB,66px) + 16px)}
+.scroll::-webkit-scrollbar{display:none}
+.scroll.flush{padding-left:0;padding-right:0}
+
+/* ---------- post card ---------- */
+.card{
+  background:var(--card); border:1px solid var(--line);
+  border-radius:18px; padding:15px 16px 12px; margin-bottom:12px;
+  box-shadow:var(--shadow-card);
+  transition:transform var(--dur-2) var(--ease-out), background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
+}
+.card.tap:active{transform:scale(.988)}
+.p-head{display:flex; align-items:flex-start; gap:11px}
+.av{flex:0 0 auto; border-radius:50%; overflow:hidden; display:block; background:var(--card-2);
+  transition:transform var(--dur-2) var(--spring)}
+.av:active{transform:scale(.92)}
+.av svg{display:block;width:100%;height:100%}
+.p-meta{flex:1 1 auto; min-width:0}
+.p-line{display:flex; align-items:center; gap:6px; flex-wrap:wrap; line-height:1.3}
+.p-name{font-size:14.5px; font-weight:800; letter-spacing:-.005em}
+.badge-bot{
+  display:inline-flex; align-items:center; gap:4px;
+  background:var(--accent); color:var(--accent-ink);
+  font-size:10.5px; font-weight:800; letter-spacing:.06em;
+  padding:2.5px 7px; border-radius:6px;
+}
+[data-theme="dark"] .badge-bot{background:#4A3D14;color:var(--accent)}
+.p-time{font-size:12.5px; color:var(--ink-3); font-weight:600}
+.dot-sep{color:var(--ink-3); font-size:12px}
+.p-more{margin-left:auto; width:30px;height:26px; display:grid;place-items:center; color:var(--ink-3);
+  transition:transform var(--dur-2) var(--spring), color var(--dur-2) linear}
+.p-more:active{transform:scale(.8); color:var(--ink)}
+.p-body{margin:9px 0 0; font-size:15px; font-weight:600; line-height:1.72; letter-spacing:.005em; word-break:break-word; white-space:pre-wrap}
+.p-full .p-body{padding-left:0}
+.p-indent{padding-left:51px}
+.tag{
+  display:inline-block; margin-top:10px;
+  font-size:12px; font-weight:800; padding:4px 10px; border-radius:8px;
+}
+.tag-hitorigoto{background:#FBF0CE;color:#7A6318}
+.tag-soudan{background:#EFE9FB;color:#6A4CA6}
+.tag-zatsudan{background:#E2EFE6;color:#376B48}
+.tag-shitsumon{background:#E3EDF9;color:#2E5C89}
+.p-foot{display:flex; align-items:center; gap:16px; margin-top:11px}
+.act{
+  display:inline-flex; align-items:center; gap:7px;
+  font-size:13px; font-weight:700; color:var(--ink-3);
+  padding:6px 2px; border-radius:10px;
+  transition:color var(--dur-2) var(--ease-out), transform var(--dur-2) var(--spring);
+}
+.act:active{transform:scale(.9)}
+.act.liked{color:#E24A6B}
+.act.liked svg{fill:#E24A6B; stroke:#E24A6B}
+.act .hb{display:inline-grid; place-items:center; position:relative}
+.act.pop .hb{animation:heartPop 560ms var(--spring)}
+@keyframes heartPop{
+  0%{transform:scale(1)} 22%{transform:scale(.78)} 48%{transform:scale(1.36)} 70%{transform:scale(.94)} 100%{transform:scale(1)}
+}
+.burst{position:absolute; inset:-14px; pointer-events:none; overflow:visible; font-size:0; line-height:0}
+.burst i{
+  position:absolute; left:50%; top:50%; width:3.5px;height:3.5px;border-radius:2px;
+  background:#E24A6B; opacity:0;
+}
+.act.pop .burst i{animation:sparkle 640ms var(--ease-out) forwards}
+@keyframes sparkle{
+  0%{opacity:0; transform:translate(-50%,-50%) scale(.3)}
+  25%{opacity:1}
+  100%{opacity:0; transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(.5)}
+}
+.talkbtn{
+  margin-left:auto; display:inline-flex; align-items:center; gap:7px;
+  border:1px solid var(--line); border-radius:999px;
+  padding:8px 16px; font-size:13px; font-weight:800; color:var(--ink);
+  transition:transform var(--dur-2) var(--spring), background-color var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out);
+}
+.talkbtn:active{transform:scale(.92); background:var(--field)}
+.talkbtn.done{border-color:var(--accent); background:var(--accent); color:var(--accent-ink)}
+
+/* entrance stagger */
+.stagger{opacity:0; transform:translate3d(0,16px,0)}
+.stagger.in{animation:riseIn 620ms var(--spring-soft) both}
+@keyframes riseIn{from{opacity:0;transform:translate3d(0,18px,0) scale(.985)}to{opacity:1;transform:none}}
+
+/* ---------- skeleton ---------- */
+.sk{border-radius:8px; background:var(--skel); background-size:220% 100%; animation:shimmer 1.35s linear infinite}
+@keyframes shimmer{from{background-position:120% 0}to{background-position:-120% 0}}
+
+/* ---------- empty ---------- */
+.empty{padding:64px 30px; text-align:center; animation:riseIn 560ms var(--spring-soft) both}
+.empty h3{margin:0 0 8px; font-size:15px; font-weight:800}
+.empty p{margin:0; font-size:13px; color:var(--ink-3); font-weight:600; line-height:1.8}
+
+/* ============ BOTTOM NAV ============ */
+.navwrap{
+  position:absolute; left:0; right:0; bottom:0; z-index:40;
+  padding:0 16px calc(var(--safe-b) + 12px);
+  pointer-events:none;
+  transition:transform var(--dur-3) var(--ease-out), opacity var(--dur-2) var(--ease-out);
+}
+.navwrap.hide{transform:translate3d(0,120%,0); opacity:0}
+.nav{
+  position:relative; pointer-events:auto;
+  height:62px; border-radius:999px;
+  background:var(--nav);
+  -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
+  box-shadow:var(--shadow-nav), inset 0 1px 0 var(--glass-edge);
+  display:grid; grid-template-columns:repeat(5,1fr); align-items:center;
+  border:1px solid var(--glass-line);
+  transform-origin:50% 50%;
+  will-change:transform,opacity;
+  transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
+}
+.nav-ind{
+  position:absolute; top:9px; height:44px; width:46px; border-radius:15px;
+  background:var(--nav-pill); left:0;
+  transition:transform 520ms var(--spring), background-color var(--dur-3) var(--ease-out), width 380ms var(--ease-out);
+  will-change:transform;
+}
+[data-theme="dark"] .nav-ind{border-radius:999px}
+.navbtn{
+  position:relative; will-change:transform,opacity; height:100%; display:grid; place-items:center; color:var(--ink-2);
+  transition:color 300ms var(--ease-out), transform var(--dur-2) var(--spring);
+}
+.navbtn:active{transform:scale(.86)}
+.navbtn.on{color:var(--nav-pill-ink)}
+.navbtn .bdg{
+  position:absolute; top:9px; right:calc(50% - 20px);
+  min-width:18px;height:18px;padding:0 5px; border-radius:9px;
+  background:#E0245E; color:#fff; font-size:10.5px; font-weight:800;
+  display:grid;place-items:center; line-height:1;
+  box-shadow:0 0 0 2px rgba(255,255,255,.55);
+  animation:bdgIn 520ms var(--spring) both;
+}
+@keyframes bdgIn{from{transform:scale(0)}to{transform:none}}
+.fabslot{display:grid;place-items:center; position:relative; z-index:2}
+.fab{
+  position:absolute; top:3px; left:0; width:56px;height:56px;
+  display:grid;place-items:center; pointer-events:auto; z-index:5;
+  will-change:transform;
+}
+.fab-core{
+  width:56px;height:56px;border-radius:50%;
+  background:radial-gradient(circle at 36% 30%,#FFE27E,var(--accent) 60%,var(--accent-deep));
+  color:var(--accent-ink); display:grid;place-items:center;
+  box-shadow:0 6px 18px rgba(228,180,28,.42), var(--glow);
+  transition:transform 320ms var(--spring), box-shadow var(--dur-3) var(--ease-out);
+  will-change:transform;
+}
+.fab:active .fab-core{transform:scale(.86)}
+.fab svg{transition:transform 460ms var(--spring)}
+.fab.x svg{transform:rotate(135deg)}
+
+
+/* ============ STACK SCREENS ============ */
+.stack{position:absolute; inset:0; z-index:50; pointer-events:none}
+.screen{
+  position:absolute; inset:0; pointer-events:auto;
+  background:var(--bg); display:flex; flex-direction:column;
+  transform:translate3d(100%,0,0);
+  box-shadow:-14px 0 40px rgba(0,0,0,.13);
+  transition:transform 420ms var(--ease-out);
+  will-change:transform;
+}
+.screen.in{transform:none}
+.screen.out{transform:translate3d(100%,0,0)}
+.tabs-root{transition:transform 420ms var(--ease-out), filter 420ms var(--ease-out)}
+.tabs-root.pushed{transform:translate3d(-22%,0,0) ; filter:brightness(.94)}
+[data-theme="dark"] .tabs-root.pushed{filter:brightness(.7)}
+
+.navbar{
+  position:absolute; top:0; left:0; right:0; z-index:6;
+  display:flex; align-items:center; gap:6px;
+  padding:calc(var(--safe-t) + 8px) 10px 12px;
+  background:var(--bar);
+  -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
+  box-shadow:inset 0 1px 0 var(--glass-edge);
+  border-bottom:1px solid transparent;
+  transition:border-color var(--dur-3) var(--ease-out), background-color var(--dur-3) var(--ease-out);
+}
+.navbar.stuck{border-bottom-color:var(--glass-line)}
+.navbar .ttl{flex:1 1 auto; text-align:center}
+.navbar .side{min-width:44px; display:flex; justify-content:center; flex:0 0 auto}
+.txtbtn{padding:8px 10px; white-space:nowrap; font-size:14.5px; font-weight:700; border-radius:10px;
+  transition:transform var(--dur-2) var(--spring), opacity var(--dur-1) linear}
+.txtbtn:active{transform:scale(.92); opacity:.6}
+.txtbtn.accent{color:var(--accent-deep); font-weight:800}
+[data-theme="dark"] .txtbtn.accent{color:var(--accent)}
+.txtbtn[disabled]{opacity:.35}
+
+/* ---------- profile ---------- */
+.prof{padding:26px 20px 0; text-align:center}
+.prof .av{margin:0 auto 14px; box-shadow:0 6px 22px rgba(0,0,0,.08); animation:avIn 700ms var(--spring) both}
+@keyframes avIn{from{transform:scale(.7);opacity:0}to{transform:none;opacity:1}}
+.prof h2{margin:0; font-size:23px; font-weight:800; letter-spacing:-.02em}
+.prof .handle{margin:2px 0 0; font-size:14px; color:var(--ink-3); font-weight:600}
+.pill-official{
+  display:inline-flex; align-items:center; gap:5px; margin-top:11px;
+  background:var(--accent); color:var(--accent-ink);
+  font-size:12px; font-weight:800; padding:5px 12px; border-radius:999px;
+}
+[data-theme="dark"] .pill-official{background:#4A3D14;color:var(--accent)}
+.prof .bio{margin:13px 0 0; font-size:14.5px; font-weight:700; line-height:1.8; white-space:pre-wrap}
+.prof-actions{display:flex; gap:12px; justify-content:center; margin-top:18px}
+.obtn{
+  display:inline-flex; align-items:center; gap:8px;
+  border:1px solid var(--line); border-radius:999px;
+  padding:11px 22px; font-size:14px; font-weight:800;
+  transition:transform var(--dur-2) var(--spring), background-color var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
+}
+.obtn:active{transform:scale(.93)}
+.obtn.on{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+.obtn.on svg{fill:var(--accent-ink); stroke:var(--accent-ink)}
+.obtn.wide{width:100%; justify-content:center; padding:12px}
+.note{margin:11px 0 0; font-size:11.5px; color:var(--ink-3); font-weight:600}
+.stats{
+  display:grid; grid-template-columns:repeat(3,1fr); margin:20px 20px 0;
+  border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+  padding:16px 0;
+}
+.stat{text-align:center; position:relative}
+.stat+.stat::before{content:""; position:absolute; left:0; top:6px;bottom:6px; width:1px; background:var(--line)}
+.stat b{display:block; font-size:20px; font-weight:800; letter-spacing:-.02em}
+.stat span{font-size:12px; color:var(--ink-3); font-weight:700}
+
+/* underline tabs */
+.utabs{position:relative; display:flex; margin:6px 20px 0; border-bottom:1px solid var(--line)}
+.utab{flex:1; padding:14px 0; font-size:14px; font-weight:800; color:var(--ink-3);
+  transition:color 300ms var(--ease-out)}
+.utab.on{color:var(--ink)}
+.utab small{font-size:12px; color:var(--ink-3); margin-left:5px; font-weight:700}
+.uind{position:absolute; bottom:-1px; left:0; height:2.5px; border-radius:2px; background:var(--accent-deep);
+  transition:transform 460ms var(--spring), width 380ms var(--ease-out)}
+[data-theme="dark"] .uind{background:var(--accent)}
+
+/* segmented */
+.seg{position:relative; display:flex; margin:12px 16px 0; background:var(--field); border-radius:14px; padding:4px}
+.segbtn{flex:1; padding:10px 0; font-size:14px; font-weight:800; color:var(--ink-3); z-index:1;
+  transition:color 300ms var(--ease-out)}
+.segbtn.on{color:var(--ink)}
+.segbtn small{font-size:11.5px; color:var(--ink-3); margin-left:5px; font-weight:800}
+.segbtn.on small{color:var(--accent-deep)}
+[data-theme="dark"] .segbtn.on small{color:var(--accent)}
+.segind{position:absolute; top:4px; bottom:4px; left:4px; border-radius:11px; background:var(--bg-elev);
+  box-shadow:0 1px 4px rgba(0,0,0,.09);
+  transition:transform 480ms var(--spring), width 340ms var(--ease-out)}
+
+/* ---------- list rows ---------- */
+.row{
+  position:relative; overflow:hidden;
+  display:flex; align-items:flex-start; gap:12px;
+  padding:15px 18px; border-bottom:1px solid var(--line-soft);
+  transition:background-color var(--dur-2) var(--ease-out);
+}
+.row:active{background:var(--field)}
+.row-main{flex:1 1 auto; min-width:0}
+.row-t{font-size:14.5px; font-weight:800; line-height:1.55}
+.row-s{margin-top:2px; font-size:13.5px; color:var(--ink-3); font-weight:600; line-height:1.6;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.row-r{flex:0 0 auto; display:flex; flex-direction:column; align-items:flex-end; gap:7px; padding-top:2px}
+.time-s{font-size:12px; color:var(--ink-3); font-weight:600}
+.unread{
+  min-width:21px;height:21px;padding:0 6px;border-radius:11px;background:#E0245E;color:#fff;
+  font-size:11px;font-weight:800; display:grid;place-items:center; line-height:1;
+}
+.ripple{position:absolute; border-radius:50%; background:currentColor; opacity:.10; transform:scale(0);
+  animation:rip 620ms var(--ease-out) forwards; pointer-events:none}
+@keyframes rip{to{transform:scale(2.6); opacity:0}}
+
+/* ---------- search ---------- */
+.searchbar{
+  flex:1 1 auto; display:flex; align-items:center; gap:9px;
+  background:var(--field); border-radius:13px; padding:10px 13px;
+  transition:background-color var(--dur-3) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+}
+.searchbar:focus-within{box-shadow:0 0 0 2px var(--accent)}
+.searchbar input{flex:1; font-size:14.5px; font-weight:600; min-width:0}
+.searchbar input::placeholder{color:var(--ink-3)}
+.sec-h{padding:16px 18px 8px; font-size:12px; font-weight:800; color:var(--ink-3); letter-spacing:.04em}
+
+/* ---------- chat thread ---------- */
+.thread{flex:1 1 auto; overflow-y:auto; scrollbar-width:none;
+  padding:calc(var(--barH,90px) + 14px) 14px calc(var(--barB,66px) + 16px);
+  display:flex; flex-direction:column; gap:4px; overscroll-behavior-y:contain}
+.thread::-webkit-scrollbar{display:none}
+.msgrow{display:flex; align-items:flex-end; gap:8px; margin-top:8px}
+.msgrow.me{flex-direction:row-reverse}
+.msgrow .av{align-self:flex-end}
+.bub{
+  max-width:74%; padding:11px 14px; border-radius:19px;
+  font-size:14.5px; font-weight:600; line-height:1.68; word-break:break-word;
+  background:var(--card-2); border:1px solid var(--line-soft);
+  border-bottom-left-radius:7px;
+  animation:bubIn 480ms var(--spring-soft) both;
+  transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
+}
+.msgrow.me .bub{
+  background:var(--accent); color:var(--accent-ink); border-color:transparent;
+  border-bottom-left-radius:19px; border-bottom-right-radius:7px;
+}
+@keyframes bubIn{from{opacity:0; transform:translate3d(0,12px,0) scale(.94)}to{opacity:1;transform:none}}
+.mtime{font-size:10.5px; color:var(--ink-3); font-weight:600; align-self:flex-end; padding-bottom:3px; flex:0 0 auto}
+.daychip{align-self:center; margin:14px 0 4px; font-size:11.5px; font-weight:800; color:var(--ink-3);
+  background:var(--field); padding:5px 13px; border-radius:999px}
+.typing{display:inline-flex; gap:4px; align-items:center; padding:14px 16px}
+.typing i{width:6px;height:6px;border-radius:50%;background:var(--ink-3);animation:blink 1.25s infinite}
+.typing i:nth-child(2){animation-delay:.16s} .typing i:nth-child(3){animation-delay:.32s}
+@keyframes blink{0%,60%,100%{opacity:.28;transform:translateY(0)}30%{opacity:1;transform:translateY(-4px)}}
+.composer-bar{
+  position:absolute; left:0; right:0; bottom:0; z-index:6;
+  display:flex; align-items:flex-end; gap:9px;
+  padding:10px 12px calc(var(--safe-b) + 10px);
+  background:var(--bar); border-top:1px solid var(--glass-line);
+  -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
+  transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
+}
+.msgfield{
+  flex:1; background:var(--field); border-radius:20px; padding:10px 15px;
+  font-size:15px; font-weight:600; resize:none; max-height:120px; line-height:1.5;
+  transition:background-color var(--dur-3) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+}
+.msgfield:focus{box-shadow:0 0 0 2px var(--accent)}
+.sendbtn{
+  width:38px;height:38px;border-radius:50%; display:grid;place-items:center; flex:0 0 auto;
+  color:var(--ink-3);
+  transition:transform 420ms var(--spring), color var(--dur-2) linear, background-color var(--dur-2) linear;
+}
+.sendbtn.live{color:var(--accent-ink); background:var(--accent); box-shadow:var(--glow)}
+.sendbtn:active{transform:scale(.84)}
+
+/* ---------- post detail (X-style) ---------- */
+.pd-card{background:var(--bg-elev); padding:16px 18px 0;
+  transition:background-color var(--dur-3) var(--ease-out)}
+.pd-head{display:flex; align-items:center; gap:12px}
+.pd-head .who{flex:1 1 auto; min-width:0; line-height:1.3}
+.pd-head .who b{display:block; font-size:15px; font-weight:800; letter-spacing:-.005em}
+.pd-head .who span{display:block; font-size:12.5px; color:var(--ink-3); font-weight:600; margin-top:1px}
+.pd-body{margin:16px 0 0; font-size:17px; font-weight:700; line-height:1.7; letter-spacing:.002em; white-space:pre-wrap; word-break:break-word}
+.pd-card .tag{margin-top:12px}
+.pd-stats{display:flex; align-items:center; gap:22px; margin-top:14px;
+  padding:13px 0; border-top:1px solid var(--line)}
+.pd-stat{display:inline-flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; color:var(--ink-3);
+  transition:color var(--dur-2) var(--ease-out), transform var(--dur-2) var(--spring)}
+.pd-stat:active{transform:scale(.92)}
+.pd-stat.liked{color:#E24A6B}
+.pd-stat.liked svg{fill:#E24A6B; stroke:#E24A6B}
+.pd-stat .hb{display:inline-grid; place-items:center; position:relative}
+.pd-stat.pop .hb{animation:heartPop 560ms var(--spring)}
+.pd-stat.pop .burst i{animation:sparkle 640ms var(--ease-out) forwards}
+.pd-sep{height:1px; background:var(--line)}
+.rep-empty{padding:52px 24px; text-align:center; font-size:14.5px; font-weight:700; color:var(--ink-3); line-height:2}
+.rep{display:flex; gap:11px; padding:15px 18px; border-bottom:1px solid var(--line-soft)}
+.rep-main{flex:1 1 auto; min-width:0}
+.rep-line{display:flex; align-items:center; gap:6px; flex-wrap:wrap; line-height:1.3}
+.rep-line b{font-size:14px; font-weight:800}
+.rep-line span{font-size:12.5px; color:var(--ink-3); font-weight:600}
+.rep-body{margin:5px 0 0; font-size:14.5px; font-weight:600; line-height:1.7; white-space:pre-wrap; word-break:break-word}
+.rep-foot{margin-top:8px}
+.rep.fresh{animation:repIn 620ms var(--spring-soft) both}
+@keyframes repIn{from{opacity:0; transform:translate3d(0,-10px,0) scale(.97)}to{opacity:1;transform:none}}
+
+/* ---------- reply composer (mirrors DM bar) ---------- */
+.reply-bar{
+  position:absolute; left:0; right:0; bottom:0; z-index:6;
+  display:flex; align-items:flex-end; gap:10px;
+  padding:10px 14px calc(var(--safe-b) + 10px);
+  background:var(--bar); border-top:1px solid var(--glass-line);
+  -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
+  transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
+}
+.reply-bar .av{align-self:center}
+.replyfield{
+  flex:1; background:var(--field); border:1px solid var(--line); border-radius:20px;
+  padding:10px 16px; font-size:15px; font-weight:600; resize:none; max-height:120px; line-height:1.55;
+  transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+}
+.replyfield::placeholder{color:var(--ink-3)}
+.replyfield:focus{border-color:var(--accent); box-shadow:0 0 0 2px rgba(247,206,69,.28)}
+.replysend{
+  width:40px;height:40px;border-radius:50%; flex:0 0 auto; align-self:center;
+  display:grid;place-items:center;
+  background:rgba(247,206,69,.34); color:var(--ink-3);
+  transition:transform 420ms var(--spring), background-color 300ms var(--ease-out), color 260ms var(--ease-out), box-shadow 300ms var(--ease-out);
+}
+[data-theme="dark"] .replysend{background:rgba(251,211,77,.18)}
+.replysend.live{background:var(--accent); color:var(--accent-ink); box-shadow:0 4px 14px rgba(228,180,28,.4), var(--glow)}
+.replysend:active{transform:scale(.85)}
+.replysend.fly svg{animation:planeFly 520ms var(--ease-out)}
+@keyframes planeFly{
+  0%{transform:none} 35%{transform:translate3d(-5px,4px,0) scale(.86)}
+  100%{transform:translate3d(26px,-22px,0) scale(.5); opacity:0}
+}
+
+/* ---------- settings ---------- */
+.group{margin:18px 16px 0}
+.group>h4{margin:0 0 8px 6px; font-size:12px; font-weight:800; color:var(--ink-3); letter-spacing:.04em}
+.gcard{background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden;
+  box-shadow:var(--shadow-card);
+  transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out)}
+.gitem{
+  position:relative; overflow:hidden;
+  display:flex; align-items:center; gap:14px; padding:14px 16px; width:100%; text-align:left;
+  transition:background-color var(--dur-2) var(--ease-out);
+}
+.gitem+.gitem{border-top:1px solid var(--line-soft)}
+.gitem:active{background:var(--field)}
+.gitem .gi{flex:0 0 auto; color:var(--ink-2); display:grid;place-items:center}
+.gitem .gt{flex:1 1 auto; min-width:0}
+.gitem .gt b{display:block; font-size:14.5px; font-weight:800}
+.gitem .gt span{display:block; font-size:12.5px; color:var(--ink-3); font-weight:600; margin-top:1px}
+.chev{color:var(--ink-3); flex:0 0 auto; transition:transform var(--dur-2) var(--ease-out)}
+.gitem:active .chev{transform:translateX(3px)}
+
+.sw{
+  flex:0 0 auto; width:50px;height:30px;border-radius:999px; background:var(--field);
+  border:1px solid var(--line); position:relative;
+  transition:background-color 380ms var(--ease-out), border-color 380ms var(--ease-out);
+}
+.sw::after{
+  content:""; position:absolute; top:2px; left:2px; width:24px;height:24px;border-radius:50%;
+  background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.22);
+  transition:transform 420ms var(--spring), width 200ms var(--ease-out);
+}
+.sw:active::after{width:29px}
+.sw.on{background:var(--accent); border-color:var(--accent)}
+.sw.on::after{transform:translateX(20px)}
+.sw.on:active::after{transform:translateX(15px)}
+
+.radio{
+  flex:0 0 auto; width:22px;height:22px;border-radius:50%;
+  border:2px solid var(--line); position:relative;
+  transition:border-color 320ms var(--ease-out);
+}
+.radio::after{
+  content:""; position:absolute; inset:3px; border-radius:50%; background:var(--accent);
+  transform:scale(0); transition:transform 420ms var(--spring);
+}
+.radio.on{border-color:var(--accent-deep)}
+[data-theme="dark"] .radio.on{border-color:var(--accent)}
+.radio.on::after{transform:scale(1)}
+
+/* ---------- profile banner (X-style header) ---------- */
+.banner{
+  position:relative; height:132px; overflow:hidden;
+  background-size:cover; background-position:center;
+  transition:background-color var(--dur-3) var(--ease-out);
+}
+.banner::after{
+  content:""; position:absolute; inset:0;
+  background:linear-gradient(180deg,rgba(0,0,0,0) 55%,rgba(0,0,0,.10) 100%);
+}
+.banner img{width:100%;height:100%;object-fit:cover;display:block}
+.prof.under{padding-top:0; margin-top:-44px}
+.prof.under .av{border:4px solid var(--bg); box-shadow:0 8px 26px rgba(0,0,0,.16);
+  transition:border-color var(--dur-3) var(--ease-out)}
+.banner-edit{
+  position:relative; border-radius:16px; overflow:hidden; height:118px; margin-top:2px;
+  background-size:cover; background-position:center;
+}
+.banner-edit .campin{right:10px; bottom:10px; border-width:0}
+
+/* ---------- image cropper ---------- */
+.crop{
+  position:absolute; inset:0; z-index:95; background:#0C0C0C; color:#F5F3EF;
+  display:flex; flex-direction:column;
+  transform:translate3d(0,100%,0);
+  transition:transform 480ms var(--spring-soft);
+}
+.crop.on{transform:none}
+.crop-bar{
+  display:flex; align-items:center; gap:8px;
+  padding:calc(var(--safe-t) + 10px) 14px 12px;
+}
+.crop-bar .ttl{flex:1; text-align:center; font-size:16px; font-weight:800; color:#F5F3EF}
+.crop-bar button{font-size:15px; font-weight:800; padding:8px 6px; color:#F5F3EF; white-space:nowrap;
+  transition:transform var(--dur-2) var(--spring), opacity var(--dur-1) linear}
+.crop-bar button:active{transform:scale(.92); opacity:.6}
+.crop-bar .go{color:var(--accent)}
+.crop-stagewrap{flex:1 1 auto; display:grid; place-items:center; padding:0 16px; min-height:0}
+.crop-stage{
+  position:relative; overflow:hidden; touch-action:none; cursor:grab;
+  background:#171717; max-width:100%;
+}
+.crop-stage:active{cursor:grabbing}
+.crop-stage img{
+  position:absolute; left:50%; top:50%; transform-origin:0 0;
+  will-change:transform; user-select:none; -webkit-user-drag:none; pointer-events:none;
+  max-width:none;
+}
+.crop-mask{position:absolute; inset:0; pointer-events:none}
+.crop-mask .hole{position:absolute; inset:0; box-shadow:0 0 0 9999px rgba(10,10,10,.62)}
+.crop-mask .hole.round{border-radius:50%}
+.crop-mask .grid{position:absolute; inset:0; opacity:.34}
+.crop-mask .grid i{position:absolute; background:#fff}
+.crop-mask .grid i.v{top:0;bottom:0;width:1px} .crop-mask .grid i.h{left:0;right:0;height:1px}
+.crop-tools{padding:18px 26px calc(var(--safe-b) + 26px)}
+.crop-hint{text-align:center; font-size:12.5px; font-weight:600; color:#9A958E; margin:0 0 16px}
+.zoomrow{display:flex; align-items:center; gap:14px}
+.zoomrow svg{color:#9A958E; flex:0 0 auto}
+.zoomrow input[type=range]{
+  flex:1; -webkit-appearance:none; appearance:none; height:4px; border-radius:2px;
+  background:#3A3733; outline:none;
+}
+.zoomrow input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; width:26px;height:26px;border-radius:50%; background:#fff;
+  box-shadow:0 2px 8px rgba(0,0,0,.5); cursor:pointer;
+}
+.zoomrow input[type=range]::-moz-range-thumb{
+  width:26px;height:26px;border-radius:50%;background:#fff;border:0;box-shadow:0 2px 8px rgba(0,0,0,.5);
+}
+.imgrow{display:flex; gap:10px; justify-content:center; margin-top:14px}
+.imgrow .ghostbtn{margin:0}
+.dangerlink{background:none; color:#E0245E; font-size:13.5px; font-weight:800; padding:9px 18px; border-radius:999px;
+  transition:transform var(--dur-2) var(--spring)}
+.dangerlink:active{transform:scale(.93)}
+
+/* ---------- edit profile ---------- */
+.editwrap{padding:22px 18px calc(var(--safe-b) + 40px)}
+.avpick{display:grid; place-items:center; position:relative; width:112px; margin:0 auto}
+.avpick .av{box-shadow:0 8px 24px rgba(0,0,0,.10)}
+.campin{
+  position:absolute; right:-2px; bottom:6px; width:36px;height:36px;border-radius:50%;
+  background:var(--ink-2); color:#fff; display:grid;place-items:center;
+  border:3px solid var(--bg);
+  transition:transform var(--dur-2) var(--spring), background-color var(--dur-3) var(--ease-out);
+}
+.campin:active{transform:scale(.86)}
+.ghostbtn{
+  display:block; margin:14px auto 0; background:var(--field); border-radius:999px;
+  padding:9px 20px; font-size:13.5px; font-weight:800;
+  transition:transform var(--dur-2) var(--spring), background-color var(--dur-2) var(--ease-out);
+}
+.ghostbtn:active{transform:scale(.93)}
+.hint{margin:8px 0 0; text-align:center; font-size:11.5px; color:var(--ink-3); font-weight:600}
+.pick-h{margin:22px 0 12px; text-align:center; font-size:14px; font-weight:800}
+.swatches{display:flex; gap:14px; justify-content:center}
+.sw-dot{
+  width:44px;height:44px;border-radius:50%; position:relative;
+  display:grid;place-items:center; color:#fff;
+  box-shadow:inset 0 0 0 2px var(--bg), 0 0 0 2px var(--line);
+  transition:transform 460ms var(--spring), box-shadow 340ms var(--ease-out);
+}
+.sw-dot:active{transform:scale(.86)}
+.sw-dot svg{opacity:0; transform:scale(.4); transition:opacity 260ms var(--ease-out), transform 420ms var(--spring)}
+.sw-dot.on{box-shadow:inset 0 0 0 3px var(--bg), 0 0 0 2.5px var(--ink); transform:scale(1.06)}
+.sw-dot.on svg{opacity:1; transform:none}
+.field{
+  background:var(--field); border-radius:16px; padding:12px 15px 9px; margin-top:14px;
+  border:1.5px solid transparent;
+  transition:border-color var(--dur-2) var(--ease-out), background-color var(--dur-3) var(--ease-out);
+}
+.field:focus-within{border-color:var(--accent)}
+.field label{display:block; font-size:11.5px; font-weight:800; color:var(--ink-2)}
+.field .fin{display:flex; align-items:center; gap:6px; margin-top:3px}
+.field input,.field textarea{width:100%; font-size:17px; font-weight:700; letter-spacing:-.01em}
+.field textarea{resize:none; min-height:74px; font-size:16px; line-height:1.65}
+.field .at{font-size:17px; font-weight:700; color:var(--ink-3)}
+.field .cnt{display:block; text-align:right; font-size:11px; color:var(--ink-3); font-weight:700; margin-top:2px}
+.field .sub{display:block; text-align:right; font-size:11px; color:var(--ink-3); font-weight:600}
+.safety{display:flex; align-items:center; gap:9px; margin-top:20px; font-size:12px; color:var(--ink-3); font-weight:600}
+
+/* ============ OVERLAYS ============ */
+.scrim{
+  position:absolute; inset:0; z-index:60; background:rgba(14,12,8,.42);
+  -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
+  opacity:0; pointer-events:none;
+  transition:opacity 340ms var(--ease-out);
+}
+.scrim.on{opacity:1; pointer-events:auto}
+.sheet{
+  position:absolute; left:0; right:0; bottom:0; z-index:70;
+  background:var(--bg-elev); border-radius:26px 26px 0 0;
+  padding:10px 22px calc(var(--safe-b) + 20px);
+  box-shadow:var(--shadow-pop);
+  transform:translate3d(0,110%,0);
+  transition:transform 520ms var(--spring-soft);
+  will-change:transform; touch-action:none;
+}
+.sheet.on{transform:none}
+.grab{width:44px;height:5px;border-radius:3px;background:var(--line); margin:0 auto 14px}
+.sheet-ico{
+  width:64px;height:64px;border-radius:20px; margin:6px auto 0;
+  background:var(--accent); color:var(--accent-ink); display:grid;place-items:center;
+  box-shadow:var(--glow);
+  animation:icoIn 620ms var(--spring) both;
+}
+[data-theme="dark"] .sheet-ico{background:#F5DE86}
+@keyframes icoIn{from{transform:scale(.4) rotate(-14deg);opacity:0}to{transform:none;opacity:1}}
+.sheet h3{margin:16px 0 0; text-align:center; font-size:21px; font-weight:800; line-height:1.45; letter-spacing:-.01em}
+.sheet .lead{margin:10px 0 0; text-align:center; font-size:12.5px; color:var(--ink-3); font-weight:600; line-height:1.75}
+.bigbtn{
+  display:block; width:100%; margin-top:18px; padding:15px; border-radius:15px;
+  background:var(--accent); color:var(--accent-ink); font-size:15px; font-weight:800; text-align:center;
+  box-shadow:0 6px 18px rgba(228,180,28,.32);
+  transition:transform 420ms var(--spring), opacity var(--dur-2) linear;
+}
+.bigbtn:active{transform:scale(.965)}
+.textlink{display:block; width:100%; margin-top:6px; padding:14px; font-size:14.5px; font-weight:700; color:var(--ink-2); text-align:center;
+  transition:transform var(--dur-2) var(--spring)}
+.textlink:active{transform:scale(.95)}
+.obox{
+  border:1.5px solid var(--line); border-radius:16px; padding:12px 15px 8px; margin-top:18px;
+  transition:border-color var(--dur-2) var(--ease-out);
+}
+.obox:focus-within{border-color:var(--accent)}
+.obox label{font-size:11.5px; font-weight:800}
+.obox label i{font-style:normal; color:var(--ink-3); font-weight:700; font-size:11px; margin-left:4px}
+.obox textarea{width:100%; margin-top:6px; min-height:62px; resize:none; font-size:15.5px; font-weight:600; line-height:1.6}
+.obox textarea::placeholder{color:var(--ink-3)}
+
+/* action menu */
+.menu{
+  position:absolute; left:14px; right:14px; bottom:calc(var(--safe-b) + 14px); z-index:70;
+  transform:translate3d(0,20px,0) scale(.97); opacity:0; pointer-events:none;
+  transition:transform 460ms var(--spring-soft), opacity 260ms var(--ease-out);
+}
+.menu.on{transform:none; opacity:1; pointer-events:auto}
+.menu .mcard{background:var(--bg-elev); border-radius:18px; overflow:hidden; box-shadow:var(--shadow-pop)}
+.menu button{display:block; width:100%; padding:16px; font-size:15.5px; font-weight:700; text-align:center;
+  transition:background-color var(--dur-1) linear}
+.menu button:active{background:var(--field)}
+.menu button+button{border-top:1px solid var(--line-soft)}
+.menu .danger{color:#E0245E; font-weight:800}
+.menu .mcard.solo{margin-top:9px}
+.menu .mcard.solo button{font-weight:800}
+
+/* toast */
+.toastwrap{position:absolute; left:0;right:0; bottom:calc(var(--safe-b) + 96px); z-index:90;
+  display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none}
+.toast{
+  display:inline-flex; align-items:center; gap:9px;
+  background:var(--toast-bg); color:var(--toast-ink);
+  padding:11px 20px; border-radius:999px; font-size:13.5px; font-weight:800;
+  box-shadow:0 10px 30px rgba(0,0,0,.25);
+  animation:toastIn 560ms var(--spring) both;
+}
+.toast.bye{animation:toastOut 300ms var(--ease-in-out) forwards}
+@keyframes toastIn{from{opacity:0; transform:translate3d(0,26px,0) scale(.9)}to{opacity:1;transform:none}}
+@keyframes toastOut{to{opacity:0; transform:translate3d(0,14px,0) scale(.95)}}
+
+/* compose modal */
+.modal{
+  position:absolute; inset:0; z-index:80; background:var(--bg);
+  display:flex; flex-direction:column;
+  transform:translate3d(0,100%,0);
+  transition:transform 500ms var(--spring-soft);
+  will-change:transform;
+}
+.modal.on{transform:none}
+.tagpick{display:flex; gap:9px; flex-wrap:wrap; margin-top:4px}
+.tagopt{
+  padding:9px 16px; border-radius:999px; font-size:13.5px; font-weight:800;
+  border:1.5px solid var(--line); color:var(--ink-2);
+  transition:transform var(--dur-2) var(--spring), background-color var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
+}
+.tagopt:active{transform:scale(.92)}
+.tagopt.on{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+
+/* misc */
+.spin{width:18px;height:18px;border-radius:50%;border:2.5px solid rgba(0,0,0,.16);border-top-color:var(--accent-ink);animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.fadein{animation:fadeIn 420ms var(--ease-out) both}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="tabs-root" id="tabsRoot"></div>
+  <div class="stack" id="stack"></div>
+  <div class="navwrap" id="navwrap"></div>
+  <div class="scrim" id="scrim"></div>
+  <div id="overlays"></div>
+  <div class="toastwrap" id="toasts"></div>
+</div>
+<script>
+/* =========================================================
+   iroha v2.0 — app logic
+   ========================================================= */
+/* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
+const APP_VER='2.7';
+
+const $  = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const el = (h)=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstElementChild;};
+const raf = (fn)=>requestAnimationFrame(()=>requestAnimationFrame(fn));
+const esc = (s='')=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const haptic = (ms=8)=>{try{navigator.vibrate&&navigator.vibrate(ms)}catch(e){}};
+
+/* ---------- icons ---------- */
+const I = {
+  search:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>',
+  gear:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 00.33 1.76l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.6 1.6 0 00-1.76-.33 1.6 1.6 0 00-1 1.47V21a2 2 0 11-4 0v-.1A1.6 1.6 0 008.1 19.4a1.6 1.6 0 00-1.76.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.6 1.6 0 004.6 15a1.6 1.6 0 00-1.47-1H3a2 2 0 110-4h.1A1.6 1.6 0 004.6 9a1.6 1.6 0 00-.33-1.76l-.06-.06a2 2 0 112.83-2.83l.06.06A1.6 1.6 0 009 4.6a1.6 1.6 0 001-1.47V3a2 2 0 114 0v.1a1.6 1.6 0 001 1.47 1.6 1.6 0 001.76-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.6 1.6 0 0019.4 9v0a1.6 1.6 0 001.47 1H21a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1z"/></svg>',
+  pencil:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16.6 3.6a2.1 2.1 0 013 3L7.5 18.7l-4 1 1-4z"/></svg>',
+  home:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M3.5 10.6L12 4l8.5 6.6V20a1 1 0 01-1 1h-15a1 1 0 01-1-1z"/></svg>',
+  bell:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M18 8.5a6 6 0 10-12 0c0 5-2 6.5-2 6.5h16s-2-1.5-2-6.5z"/><path d="M13.7 20a2 2 0 01-3.4 0"/></svg>',
+  chat:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M20.5 11.6c0 4.2-3.8 7.6-8.5 7.6a9.6 9.6 0 01-2.6-.35L4.2 20.5l1.35-4.1A7.3 7.3 0 013.5 11.6C3.5 7.4 7.3 4 12 4s8.5 3.4 8.5 7.6z"/></svg>',
+  person:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><circle cx="12" cy="8" r="3.7"/><path d="M4.8 20.2c.5-3.8 3.5-6.1 7.2-6.1s6.7 2.3 7.2 6.1"/></svg>',
+  plus:'<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  back:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  chev:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
+  dots:'<svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>',
+  reply:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M20.5 11.6c0 4.2-3.8 7.6-8.5 7.6a9.6 9.6 0 01-2.6-.35L4.2 20.5l1.35-4.1A7.3 7.3 0 013.5 11.6C3.5 7.4 7.3 4 12 4s8.5 3.4 8.5 7.6z"/></svg>',
+  heart:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 20.2S3.6 15 3.6 9.3A4.6 4.6 0 0112 6.9a4.6 4.6 0 018.4 2.4C20.4 15 12 20.2 12 20.2z"/></svg>',
+  star:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"><path d="M12 3.6l2.6 5.3 5.8.85-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.75l5.8-.85z"/></svg>',
+  bot:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01"/></svg>',
+  send:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M21 3L10.5 14M21 3l-6.8 18-3.7-7.9L3 9.6z"/></svg>',
+  cam:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M3.5 8.5h3.2l1.4-2.3h7.8l1.4 2.3h3.2v10a1 1 0 01-1 1H4.5a1 1 0 01-1-1z"/><circle cx="12" cy="13.3" r="3.4"/></svg>',
+  check:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.6l5 5L19.5 6.8"/></svg>',
+  moon:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"><path d="M20 14.2A8.4 8.4 0 019.8 4 8.6 8.6 0 1020 14.2z"/></svg>',
+  sun:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>',
+  image:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"><rect x="3.4" y="4.6" width="17.2" height="14.8" rx="3"/><circle cx="8.7" cy="9.7" r="1.6"/><path d="M3.6 16.6l4.6-4 4 3.3 3.3-2.7 4.9 4.2"/></svg>',
+  shield:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"><path d="M12 3.2l7.2 2.6v6c0 4.4-3 8-7.2 9.2-4.2-1.2-7.2-4.8-7.2-9.2v-6z"/><path d="M9 12l2.2 2.2L15.3 10"/></svg>',
+  eyeoff:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 6.3A9 9 0 0112 6.2c5 0 8.4 5.8 8.4 5.8a15.5 15.5 0 01-3 3.8M6.4 8A15.7 15.7 0 003.6 12s3.4 5.8 8.4 5.8a8.7 8.7 0 003.6-.78"/><path d="M10 10a2.8 2.8 0 004 4"/><path d="M3.5 3.5l17 17"/></svg>',
+  ban:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><circle cx="12" cy="12" r="8.6"/><path d="M6 6l12 12"/></svg>',
+  lock:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"><rect x="4.6" y="10.4" width="14.8" height="10" rx="2.8"/><path d="M8.2 10.2V7.8a3.8 3.8 0 017.6 0v2.4"/></svg>',
+  belloff:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8.5a6 6 0 00-9.2-5.1M5.5 6.6A6 6 0 006 8.5c0 5-2 6.5-2 6.5h12.6"/><path d="M13.7 20a2 2 0 01-3.4 0"/><path d="M3.5 3.5l17 17"/></svg>',
+  doc:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"><path d="M6 3.4h7.6L18.6 8v12.6H6z"/><path d="M13.4 3.6V8.2h4.8M8.8 12.6h6.4M8.8 16h4.4"/></svg>',
+  info:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11.2v5M12 7.9h.01"/></svg>',
+  plusS:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
+};
+
+/* ---------- avatar generator ---------- */
+const AV_COLORS = {
+  amber : {bg:'#F0E4C4', head:'#E8B93C', body:'#F5D98C'},
+  slate : {bg:'#D9E2EA', head:'#3E5A70', body:'#E8EEF3'},
+  moss  : {bg:'#D8E7D5', head:'#4E8258', body:'#EAF2E7'},
+  plum  : {bg:'#DED2EE', head:'#F0C43C', body:'#4B2B72'},
+  stone : {bg:'#E3E1DE', head:'#77726B', body:'#CFCCC7'},
+  mist  : {bg:'#DCE4E9', head:'#1F3446', body:'#F2E6D4'},
+  clay  : {bg:'#EFDCD2', head:'#B0654A', body:'#F7EBE3'}
+};
+function avatar(key, size, img){
+  if(img) return `<span class="av" style="width:${size}px;height:${size}px">
+    <img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
+  </span>`;
+  const c = AV_COLORS[key] || AV_COLORS.stone;
+  const id = 'c'+Math.random().toString(36).slice(2,8);
+  return `<span class="av" style="width:${size}px;height:${size}px">
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <defs><clipPath id="${id}"><circle cx="24" cy="24" r="24"/></clipPath></defs>
+      <g clip-path="url(#${id})">
+        <rect width="48" height="48" fill="${c.bg}"/>
+        <path d="M48 0v48H16z" fill="${c.bg}" opacity=".55"/>
+        <circle cx="22.5" cy="18" r="8.4" fill="${c.head}"/>
+        <path d="M24 28.4c9 0 15.4 6.4 15.4 15.2V50H8.6v-6.4C8.6 34.8 15 28.4 24 28.4z" fill="${c.body}"/>
+      </g>
+    </svg></span>`;
+}
+
+
+/* avatar for a known user — uses their uploaded photo when present */
+function uav(uid, size, fallbackKey){
+  const u=S.users[uid];
+  return avatar(fallbackKey || (u && u.av) || 'stone', size, u && u.img);
+}
+/* header background: uploaded image, else a wash built from the chosen colour */
+function bannerCSS(u){
+  if(u.banner) return `background-image:url(${u.banner})`;
+  const c = AV_COLORS[u.av] || AV_COLORS.stone;
+  return `background-image:
+      radial-gradient(115% 150% at 10% -20%, ${c.head}99 0%, transparent 58%),
+      radial-gradient(95% 130% at 95% 118%, ${c.body}CC 0%, transparent 62%),
+      linear-gradient(148deg, ${c.bg} 0%, ${c.body}55 100%)`;
+}
+
+/* ---------- time ---------- */
+function ago(ts){
+  const s=Math.max(0,(Date.now()-ts)/1000);
+  if(s<60) return 'たった今';
+  if(s<3600) return Math.floor(s/60)+'分前';
+  if(s<86400) return Math.floor(s/3600)+'時間前';
+  if(s<86400*7) return Math.floor(s/86400)+'日前';
+  const d=new Date(ts); return (d.getMonth()+1)+'月'+d.getDate()+'日';
+}
+function clock(ts){const d=new Date(ts);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+const MIN=60000, HOUR=3600000;
+
+/* ---------- tags ---------- */
+const TAGS = {
+  hitorigoto:{label:'ひとりごと', cls:'tag-hitorigoto'},
+  soudan    :{label:'相談',       cls:'tag-soudan'},
+  zatsudan  :{label:'雑談',       cls:'tag-zatsudan'},
+  shitsumon :{label:'質問',       cls:'tag-shitsumon'}
+};
+
+/* ---------- state ---------- */
+const now = Date.now();
+const S = {
+  theme:'light',
+  tab:'home',
+  filter:'osusume',
+  media:'safety',
+  quiet:false,
+  users:{
+    me:{id:'me', name:'HIKAKIN', handle:'hikakinjp', bio:'ぶんぶん', av:'plum', bot:false, posts:0, replies:0, talks:1},
+    bot:{id:'bot', name:'iroha Bot', handle:'iroha_official', bio:'irohaの公式Botです。\n会話のきっかけになる話題を届けます。', av:'stone', bot:true, official:true, posts:31, replies:0, talks:1, fav:false}
+  },
+  posts:[
+    {id:'p1', u:'bot', av:'stone', t:'寝る前に考えがちなことってある？ まとまってなくても大丈夫です。', tag:'hitorigoto', ts:now-30*1000,  likes:0, replies:0, liked:false, req:false, rep:[]},
+    {id:'p2', u:'bot', av:'plum',  t:'いま少しだけ誰かに聞いてほしいこと、ここに置いていきませんか？', tag:'soudan', ts:now-60*MIN, likes:0, replies:0, liked:false, req:false, rep:[]},
+    {id:'p3', u:'bot', av:'mist',  t:'最近、時間を忘れて夢中になったものを教えてください。', tag:'zatsudan', ts:now-2*HOUR, likes:0, replies:0, liked:false, req:false, rep:[]},
+    {id:'p4', u:'bot', av:'moss',  t:'今週が終わったら、自分にどんなご褒美をあげたい？', tag:'zatsudan', ts:now-3*HOUR, likes:0, replies:0, liked:false, req:false, rep:[]},
+    {id:'p5', u:'bot', av:'amber', t:'今日いちばん小さくても、うれしかったことは何？', tag:'shitsumon', ts:now-6*HOUR, likes:0, replies:0, liked:false, req:false, rep:[]},
+    {id:'p6', u:'bot', av:'clay',  t:'うまく言葉にならない気持ちも、そのままで置いていって大丈夫です。', tag:'hitorigoto', ts:now-7*HOUR, likes:0, replies:0, liked:false, req:false, rep:[]},
+    {id:'p7', u:'bot', av:'slate', t:'誰かに「ありがとう」と伝えたいこと、ありますか？', tag:'soudan', ts:now-9*HOUR, likes:0, replies:0, liked:false, req:false, rep:[]}
+  ],
+  notes:{
+    like:[{id:'n1', av:'amber', t:'iroha Botがあなたの投稿にいいねしました', s:'「猫にゃう」', ts:now-8*HOUR}],
+    reply:[
+      {id:'n2', av:'amber', t:'iroha Botがあなたの投稿に返信しました', s:'いいですね。似た気持ちの人もいそうです。', ts:now-8*HOUR},
+      {id:'n3', av:'amber', t:'iroha Botが返信しました', s:'いいですね。似た気持ちの人もいそうです。', ts:now-8*HOUR}
+    ]
+  },
+  chats:[
+    {id:'c1', u:'bot', av:'amber', unread:3, ts:now-4*MIN,
+     msgs:[
+       {me:false, t:'さっきの投稿、気になっていました。今日はどんな一日でしたか？', ts:now-9*HOUR},
+       {me:false, t:'返信はいつでも大丈夫です。ゆっくり話そう。',              ts:now-8*HOUR-25*MIN},
+       {me:false, t:'さっきの投稿、気になっていました。今日はどんな一日でしたか？', ts:now-7*HOUR},
+       {me:false, t:'さっきの投稿、気になっていました。今日はどんな一日でしたか？', ts:now-40*MIN},
+       {me:false, t:'さっきの投稿、気になっていました。今日はどんな一日でしたか？', ts:now-8*MIN},
+       {me:false, t:'さっきの投稿、気になっていました。今日はどんな一日でしたか？', ts:now-4*MIN}
+     ]}
+  ]
+};
+const REPLIES = [
+  'いいですね。似た気持ちの人もいそうです。',
+  'そう感じたきっかけって、何かありましたか？',
+  '話してくれてありがとう。無理のない範囲で大丈夫です。',
+  'なるほど。もう少しだけ聞かせてもらえますか？',
+  'その気持ち、ちゃんと届きました。'
+];
+
+/* ---------- theme ---------- */
+function setTheme(t, animate=true){
+  S.theme=t;
+  document.documentElement.dataset.theme=t;
+  const meta=document.querySelector('meta[name=theme-color]');
+  if(meta) meta.content = t==='dark' ? '#0B0B0B' : '#FAF8F4';
+}
+
+/* ---------- toast ---------- */
+let toastTimer=null;
+function toast(msg){
+  const wrap=$('#toasts');
+  wrap.innerHTML='';
+  const t=el(`<div class="toast">${I.check}<span>${esc(msg)}</span></div>`);
+  wrap.appendChild(t);
+  haptic(10);
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>{ t.classList.add('bye'); setTimeout(()=>t.remove(),320); },1900);
+}
+
+/* ---------- ripple ---------- */
+function rippleAt(host, ev){
+  const r=host.getBoundingClientRect();
+  const x=(ev.clientX ?? r.left+r.width/2)-r.left;
+  const y=(ev.clientY ?? r.top+r.height/2)-r.top;
+  const d=Math.max(r.width,r.height);
+  const s=el(`<span class="ripple" style="left:${x-d/2}px;top:${y-d/2}px;width:${d}px;height:${d}px"></span>`);
+  host.appendChild(s); setTimeout(()=>s.remove(),640);
+}
+
+/* ---------- stagger reveal on scroll ---------- */
+const io = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+},{rootMargin:'0px 0px -6% 0px', threshold:.02});
+
+function revealAll(root, base=0){
+  $$('.stagger', root).forEach((n,i)=>{
+    n.style.animationDelay = Math.min(base + i*52, 480)+'ms';
+    io.observe(n);
+  });
+}
+
+/* ---------- scroll shadow + nav autohide ---------- */
+/* the bars float above the scroller, so the scroller needs their heights */
+function fitBars(root){
+  const top=root.querySelector('.appbar,.navbar');
+  const bot=root.querySelector('.composer-bar,.reply-bar');
+  const set=()=>{
+    if(top && top.offsetHeight) root.style.setProperty('--barH', top.offsetHeight+'px');
+    if(bot && bot.offsetHeight) root.style.setProperty('--barB', bot.offsetHeight+'px');
+  };
+  set(); raf(set);
+  if(window.ResizeObserver){
+    const ro=new ResizeObserver(set);
+    if(top) ro.observe(top);
+    if(bot) ro.observe(bot);
+  }
+}
+
+function wireScroll(scroller, bar){
+  const root = scroller.closest('.tabpane,.screen,.modal') || scroller.parentElement;
+  if(root) fitBars(root);
+  let last=0, lastT=performance.now(), ticking=false;
+  scroller.addEventListener('scroll', ()=>{
+    if(ticking) return; ticking=true;
+    requestAnimationFrame(()=>{
+      const y=scroller.scrollTop, now=performance.now();
+      const dt=Math.max(8, now-lastT); lastT=now;
+      const dy=y-last, vel=dy/dt*1000;
+      if(bar) bar.classList.toggle('stuck', y>4);
+      if(!$('#stack').children.length && !$('#composeM')){
+        if(y<=48) navMorph.expand(vel);
+        else if(dy>2.5) navMorph.collapse(vel);
+        else if(dy<-2.5) navMorph.expand(vel);
+      }
+      last=y; ticking=false;
+    });
+  },{passive:true});
+}
+
+/* =========================================================
+   SPRING  —  semi-implicit Euler, sub-stepped for stability
+   ========================================================= */
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+class Spring{
+  constructor(k=210, d=16.4, m=1){
+    this.k=k; this.d=d; this.m=m; this.p=0; this.v=0; this.t=0;
+    this._raf=0; this.onUpdate=null;
+  }
+  set(target, addVel=0){ this.t=target; this.v+=addVel; this._run(); }
+  jump(x){ this.p=x; this.v=0; this.t=x; if(this.onUpdate) this.onUpdate(x,0); }
+  _run(){
+    if(this._raf) return;
+    let last=performance.now();
+    const step=(now)=>{
+      const dt=Math.min(.048,(now-last)/1000)||.016; last=now;
+      const n=Math.max(1,Math.ceil(dt/.005)), h=dt/n;
+      for(let i=0;i<n;i++){
+        const f=-this.k*(this.p-this.t)-this.d*this.v;
+        this.v+=f/this.m*h; this.p+=this.v*h;
+      }
+      if(Math.abs(this.v)<.0015 && Math.abs(this.p-this.t)<.0015){
+        this.p=this.t; this.v=0; this._raf=0;
+        if(this.onUpdate) this.onUpdate(this.p,0);
+        return;
+      }
+      if(this.onUpdate) this.onUpdate(this.p,this.v);
+      this._raf=requestAnimationFrame(step);
+    };
+    this._raf=requestAnimationFrame(step);
+  }
+}
+
+/* =========================================================
+   NAV MORPH  —  the bar collapses into the FAB, which lifts
+   away on an arc.  Travel matches the reference recording.
+   ========================================================= */
+const navMorph=(()=>{
+  const sp=new Spring(210, 16.4, 1);
+  let baseX=0, dx=0, ready=false, icons=[], slotCx=0;
+  const cl01=x=>x<0?0:x>1?1:x;
+
+  function measure(){
+    const wrap=$('#navwrap'), nav=$('#nav'), slot=nav&&nav.querySelector('.fabslot'), fab=$('#fab');
+    if(!wrap||!nav||!slot||!fab) return false;
+    const w=wrap.getBoundingClientRect(), n=nav.getBoundingClientRect(), r=slot.getBoundingClientRect();
+    if(!w.width || !n.width) return false;
+    baseX = r.left - w.left + r.width/2 - 28;
+    /* settle position matched to the reference clip (FAB centre at 0.81 x screen) */
+    dx = Math.min(n.width*0.34, (n.right - w.left) - 58 - baseX);
+    slotCx = r.left - n.left + r.width/2;
+    nav.style.transformOrigin = slotCx.toFixed(1)+'px 50%';
+    icons = $$('#nav .navbtn').map((elm,i)=>{
+      const b=elm.getBoundingClientRect();
+      return {el:elm, off:(b.left+b.width/2)-(n.left+slotCx)};
+    });
+    return true;
+  }
+
+  function apply(t,v){
+    const fab=$('#fab'), nav=$('#nav'), core=fab&&fab.querySelector('.fab-core');
+    if(!fab||!nav) return;
+    const b=cl01(t);
+
+    /* FAB: arc flight + gentle swell tied to how fast it is travelling */
+    const arc   = Math.sin(cl01((t+.2)/1.4)*Math.PI)*-7;
+    const swell = Math.min(Math.abs(v)*.006, .035);
+    fab.style.transform =
+      `translate3d(${(baseX+dx*t).toFixed(2)}px,${(arc-2*b).toFixed(2)}px,0) scale(${(1-.03*b+swell).toFixed(3)})`;
+    if(core) core.style.boxShadow =
+      `0 ${(6+10*b).toFixed(1)}px ${(18+16*b).toFixed(1)}px rgba(196,150,10,${(.42+.14*b).toFixed(2)})`;
+
+    /* bar: shrinks toward the FAB, sinks, and dissolves */
+    nav.style.opacity   = (1-b*1.12).toFixed(3);
+    nav.style.transform = `translate3d(0,${(b*24).toFixed(2)}px,0) scale(${(1-b*.09).toFixed(3)})`;
+    nav.style.pointerEvents = b>.5 ? 'none' : 'auto';
+
+    /* icons peel away outside-in, so the bar reads as folding inward */
+    icons.forEach(ic=>{
+      const far = Math.abs(ic.off)/110;              /* 0 = nearest the FAB */
+      const local = cl01((b - (1-far)*0.07) * 2.1);
+      ic.el.style.opacity = (1-local).toFixed(3);
+      ic.el.style.transform = `translate3d(${(-ic.off*0.12*b).toFixed(2)}px,0,0) scale(${(1-local*.16).toFixed(3)})`;
+    });
+  }
+  sp.onUpdate=apply;
+
+  function init(){
+    ready=measure();
+    if(ready) sp.jump(0); else requestAnimationFrame(init);
+  }
+  return{
+    init,
+    refresh(){ if(measure()) apply(sp.p, sp.v); },
+    /* fire only on a state change — once settled (or in flight toward the
+       same target) further scrolling must not feed the spring again */
+    collapse(pxVel=0){ if(!ready || sp.t===1) return;
+      if(REDUCED){ sp.jump(1); return; }
+      sp.set(1, Math.min(Math.max(pxVel/2600,0),1.3)); },
+    expand(pxVel=0){ if(!ready || sp.t===0) return;
+      if(REDUCED){ sp.jump(0); return; }
+      sp.set(0, Math.max(Math.min(pxVel/2600,0),-1.3)); },
+    _jump(t){ if(ready) sp.jump(t); },
+    _dbg(){ return {baseX,dx,p:sp.p,t:sp.t,v:sp.v}; }
+  };
+})();
+
+/* =========================================================
+   BOTTOM NAV
+   ========================================================= */
+const NAV_ITEMS = [
+  {id:'home',  icon:I.home},
+  {id:'bell',  icon:I.bell},
+  {id:'__fab'},
+  {id:'chat',  icon:I.chat},
+  {id:'me',    icon:I.person}
+];
+
+function buildNav(){
+  const wrap=$('#navwrap');
+  wrap.innerHTML = `<div class="nav" id="nav">
+    <div class="nav-ind" id="navInd"></div>
+    ${NAV_ITEMS.map(it => it.id==='__fab'
+      ? `<div class="fabslot" aria-hidden="true"></div>`
+      : `<button class="navbtn" data-tab="${it.id}" aria-label="${it.id}">${it.icon}</button>`
+    ).join('')}
+  </div>
+  <button class="fab" id="fab" aria-label="投稿する"><span class="fab-core">${I.plus}</span></button>`;
+
+  $$('#nav .navbtn').forEach(b=>{
+    b.addEventListener('click',()=>{ haptic(6); goTab(b.dataset.tab); });
+  });
+  $('#fab').addEventListener('click', ()=>{ haptic(9); openCompose(); });
+  window.addEventListener('resize', ()=>{ moveNavInd(false); navMorph.refresh(); });
+}
+
+function moveNavInd(animate=true){
+  const btn=$(`#nav .navbtn[data-tab="${S.tab}"]`); const ind=$('#navInd');
+  if(!btn||!ind) return;
+  const nav=$('#nav').getBoundingClientRect(), b=btn.getBoundingClientRect();
+  if(!animate) ind.style.transition='none';
+  const w=46;
+  ind.style.width=w+'px';
+  ind.style.transform=`translate3d(${b.left-nav.left+(b.width-w)/2}px,0,0)`;
+  if(!animate) requestAnimationFrame(()=>ind.style.transition='');
+}
+
+function syncNavBadges(){
+  $$('#nav .navbtn').forEach(b=>{
+    b.classList.toggle('on', b.dataset.tab===S.tab);
+    const old=b.querySelector('.bdg'); if(old) old.remove();
+    let n=0;
+    if(b.dataset.tab==='chat') n=S.chats.reduce((a,c)=>a+c.unread,0);
+    if(b.dataset.tab==='bell') n=0;
+    if(n>0) b.appendChild(el(`<span class="bdg">${n}</span>`));
+  });
+}
+
+/* =========================================================
+   TAB ROUTER
+   ========================================================= */
+const PANES={};
+function goTab(id){
+  if(S.tab===id){ // tap-again → scroll to top
+    const sc=PANES[id]&&PANES[id].querySelector('.scroll,.thread');
+    if(sc) sc.scrollTo({top:0,behavior:'smooth'});
+    return;
+  }
+  const prev=PANES[S.tab];
+  S.tab=id;
+  if(prev){ prev.classList.add('leaving'); prev.classList.remove('on');
+    setTimeout(()=>prev.classList.remove('leaving'),340); }
+  const pane=PANES[id]||buildPane(id);
+  raf(()=>pane.classList.add('on'));
+  refreshPane(id);
+  moveNavInd(true);
+  syncNavBadges();
+  $('#navwrap').classList.remove('hide');
+  navMorph.expand();
+}
+
+function buildPane(id){
+  const p=el(`<section class="tabpane" data-pane="${id}"></section>`);
+  $('#tabsRoot').appendChild(p);
+  PANES[id]=p;
+  ({home:paneHome, bell:paneBell, chat:paneChat, me:paneMe})[id](p);
+  return p;
+}
+function refreshPane(id){
+  const p=PANES[id]; if(!p) return;
+  if(id==='bell') renderNotes();
+  if(id==='chat') renderChatList();
+  if(id==='me')   renderMe();
+  if(id==='home') { /* live */ }
+}
+
+/* =========================================================
+   HOME FEED
+   ========================================================= */
+const FILTERS=[
+  {id:'fav',      label:'お気に入り'},
+  {id:'osusume',  label:'おすすめ'},
+  {id:'zatsudan', label:'雑談'},
+  {id:'soudan',   label:'相談'},
+  {id:'shitsumon',label:'質問'}
+];
+
+function paneHome(p){
+  p.innerHTML=`
+    <header class="appbar" id="homeBar">
+      <div class="appbar-row">
+        <div class="brand"><span class="brand-dot"></span><span class="brand-name">iroha</span><span class="brand-ver">v${APP_VER}</span></div>
+        <button class="iconbtn" id="toSearch" aria-label="検索">${I.search}</button>
+        <button class="iconbtn" id="toSettings" aria-label="設定">${I.gear}</button>
+      </div>
+      <button class="composer" id="openCompose"><span>いま、何を話したい？</span>${I.pencil}</button>
+      <div class="chiprow" id="chips">
+        ${FILTERS.map(f=>`<button class="chip${f.id===S.filter?' on':''}" data-f="${f.id}">${f.label}</button>`).join('')}
+      </div>
+    </header>
+    <div class="scroll" id="feedScroll"><div id="feed"></div></div>`;
+
+  $('#toSearch',p).onclick   = ()=>pushSearch();
+  $('#toSettings',p).onclick = ()=>pushSettings();
+  $('#openCompose',p).onclick= ()=>openCompose();
+  $$('.chip',p).forEach(c=>c.addEventListener('click',()=>{
+    if(S.filter===c.dataset.f) return;
+    haptic(6);
+    $$('.chip',p).forEach(x=>x.classList.remove('on'));
+    c.classList.add('on');
+    S.filter=c.dataset.f;
+    c.scrollIntoView({behavior:'smooth', inline:'center', block:'nearest'});
+    renderFeed(true);
+  }));
+  wireScroll($('#feedScroll',p), $('#homeBar',p));
+  renderFeed(false);
+}
+
+function visiblePosts(){
+  if(S.filter==='fav') return S.posts.filter(p=>S.users[p.u]&&S.users[p.u].fav);
+  if(S.filter==='osusume') return S.posts;
+  return S.posts.filter(p=>p.tag===S.filter);
+}
+
+function postCard(p, opts={}){
+  const u=S.users[p.u];
+  const tag=TAGS[p.tag];
+  return `<article class="card tap stagger" data-post="${p.id}">
+    <div class="p-head">
+      <button class="avbtn" data-user="${u.id}" style="display:contents">${avatar(p.av,40,u.img)}</button>
+      <div class="p-meta">
+        <div class="p-line">
+          <button class="p-name" data-user="${u.id}">${esc(u.name)}</button>
+          ${u.bot?`<span class="badge-bot">${I.bot}BOT</span>`:''}
+          <span class="dot-sep">·</span>
+          <span class="p-time" data-ts="${p.ts}">${ago(p.ts)}</span>
+        </div>
+      </div>
+      <button class="p-more" data-more="${p.id}" aria-label="その他">${I.dots}</button>
+    </div>
+    <div class="p-indent">
+      <p class="p-body">${esc(p.t)}</p>
+      ${tag?`<span class="tag ${tag.cls}">${tag.label}</span>`:''}
+      <div class="p-foot">
+        <button class="act" data-reply="${p.id}">${I.reply}<span class="num">${p.replies}</span></button>
+        <button class="act${p.liked?' liked':''}" data-like="${p.id}">
+          <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span><span class="num">${p.likes}</span>
+        </button>
+        <button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>
+      </div>
+    </div>
+  </article>`;
+}
+function burstDots(){
+  let s='';
+  for(let i=0;i<6;i++){
+    const a=(i/6)*Math.PI*2, d=17;
+    s+=`<i style="--dx:${(Math.cos(a)*d).toFixed(1)}px;--dy:${(Math.sin(a)*d).toFixed(1)}px;animation-delay:${i*22}ms"></i>`;
+  }
+  return s;
+}
+
+function renderFeed(animate){
+  const feed=$('#feed'); if(!feed) return;
+  const list=visiblePosts();
+  if(animate){
+    feed.style.transition='opacity 140ms ease, transform 180ms ease';
+    feed.style.opacity='0'; feed.style.transform='translate3d(0,8px,0)';
+    setTimeout(()=>{ paint(); feed.style.opacity='1'; feed.style.transform='none'; },150);
+  } else paint();
+
+  function paint(){
+    feed.innerHTML = list.length
+      ? list.map(p=>postCard(p)).join('')
+      : `<div class="empty"><h3>${S.filter==='fav'?'お気に入りの投稿はまだありません':'まだ投稿がありません'}</h3>
+         <p>${S.filter==='fav'?'プロフィールからお気に入りに登録すると、ここに投稿がまとまります':'最初のひとことを置いてみませんか'}</p></div>`;
+    wirePostActions(feed);
+    revealAll(feed);
+  }
+}
+
+function wirePostActions(root){
+  root.addEventListener('click', onPostClick);
+}
+function onPostClick(e){
+  const like=e.target.closest('[data-like]');
+  if(like){ toggleLike(like.dataset.like, like); return; }
+  const talk=e.target.closest('[data-talk]');
+  if(talk){ openRequest(talk.dataset.talk); return; }
+  const more=e.target.closest('[data-more]');
+  if(more){ openPostMenu(more.dataset.more); return; }
+  const rep=e.target.closest('[data-reply]');
+  if(rep){ openThreadForPost(rep.dataset.reply); return; }
+  const us=e.target.closest('[data-user]');
+  if(us){ pushProfile(us.dataset.user); return; }
+  const card=e.target.closest('[data-post]');
+  if(card){ pushPostDetail(card.dataset.post); }
+}
+
+function toggleLike(id, btn){
+  const p=S.posts.find(x=>x.id===id); if(!p) return;
+  p.liked=!p.liked; p.likes+=p.liked?1:-1;
+  haptic(p.liked?12:5);
+  btn.classList.toggle('liked',p.liked);
+  const n=btn.querySelector('.num'); if(n) n.textContent=p.likes;
+  if(p.liked){ btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop');
+    setTimeout(()=>btn.classList.remove('pop'),700); }
+}
+
+/* live relative time */
+setInterval(()=>{
+  $$('[data-ts]').forEach(n=>{ const t=+n.dataset.ts; const s=ago(t); if(n.textContent!==s) n.textContent=s; });
+},20000);
+
+/* =========================================================
+   NOTIFICATIONS PANE
+   ========================================================= */
+let noteSeg='like';
+function paneBell(p){
+  p.innerHTML=`
+    <header class="appbar" id="bellBar" style="padding-bottom:0">
+      <div class="seg" id="noteSeg" style="margin:2px 0 12px">
+        <div class="segind" id="noteInd"></div>
+        <button class="segbtn on" data-seg="like">いいね <small>${S.notes.like.length}</small></button>
+        <button class="segbtn" data-seg="reply">返信 <small>${S.notes.reply.length}</small></button>
+      </div>
+    </header>
+    <div class="scroll flush" id="noteScroll"><div id="noteList"></div></div>`;
+  $$('.segbtn',p).forEach(b=>b.addEventListener('click',()=>{
+    if(noteSeg===b.dataset.seg) return;
+    haptic(6); noteSeg=b.dataset.seg;
+    $$('.segbtn',p).forEach(x=>x.classList.toggle('on',x===b));
+    moveSeg($('#noteSeg',p),$('#noteInd',p));
+    renderNotes(true);
+  }));
+  wireScroll($('#noteScroll',p), null);
+  renderNotes();
+  raf(()=>moveSeg($('#noteSeg',p),$('#noteInd',p),false));
+}
+function moveSeg(seg, ind, animate=true){
+  const on=seg.querySelector('.segbtn.on'); if(!on) return;
+  if(!animate) ind.style.transition='none';
+  const r=seg.getBoundingClientRect(), b=on.getBoundingClientRect();
+  ind.style.width=b.width+'px';
+  ind.style.transform=`translate3d(${b.left-r.left-4}px,0,0)`;
+  if(!animate) requestAnimationFrame(()=>ind.style.transition='');
+}
+function renderNotes(animate){
+  const host=$('#noteList'); if(!host) return;
+  const list=S.notes[noteSeg];
+  const paint=()=>{
+    host.innerHTML = list.length ? list.map(n=>`
+      <div class="row stagger">
+        ${avatar(n.av,40)}
+        <div class="row-main">
+          <div class="row-t">${esc(n.t)}</div>
+          <div class="row-s">${esc(n.s)}・${ago(n.ts)}</div>
+        </div>
+        <button class="p-more" aria-label="その他">${I.dots}</button>
+      </div>`).join('')
+      : `<div class="empty"><h3>お知らせはまだありません</h3><p>いいねや返信が届くと、ここに表示されます</p></div>`;
+    revealAll(host);
+    $$('.row',host).forEach(r=>r.addEventListener('pointerdown',e=>rippleAt(r,e)));
+  };
+  if(animate){
+    host.style.transition='opacity 130ms ease, transform 170ms ease';
+    host.style.opacity='0'; host.style.transform='translate3d(0,8px,0)';
+    setTimeout(()=>{ paint(); host.style.opacity='1'; host.style.transform='none'; },140);
+  } else paint();
+}
+
+/* =========================================================
+   CHAT LIST PANE
+   ========================================================= */
+function paneChat(p){
+  p.innerHTML=`
+    <header class="appbar" id="chatBar" style="padding-bottom:12px">
+      <div class="appbar-row"><div class="searchbar">${I.search}<input id="chatQ" placeholder="チャットを検索"></div></div>
+    </header>
+    <div class="scroll flush" id="chatScroll"><div id="chatList"></div></div>`;
+  $('#chatQ',p).addEventListener('input',()=>renderChatList());
+  wireScroll($('#chatScroll',p), $('#chatBar',p));
+  renderChatList();
+}
+function renderChatList(){
+  const host=$('#chatList'); if(!host) return;
+  const q=($('#chatQ')?.value||'').trim();
+  const list=S.chats.filter(c=>{
+    if(!q) return true;
+    const u=S.users[c.u];
+    return u.name.includes(q) || c.msgs.some(m=>m.t.includes(q));
+  });
+  host.innerHTML = list.length ? list.map(c=>{
+    const u=S.users[c.u], last=c.msgs[c.msgs.length-1];
+    return `<div class="row stagger" data-chat="${c.id}">
+      ${avatar(c.av,44)}
+      <div class="row-main">
+        <div class="row-t">${esc(u.name)}</div>
+        <div class="row-s">${esc(last?last.t:'')}</div>
+      </div>
+      <div class="row-r">
+        <span class="time-s">${clock(c.ts)}</span>
+        ${c.unread?`<span class="unread">${c.unread}</span>`:''}
+      </div>
+    </div>`;}).join('')
+    : `<div class="empty"><h3>${q?'見つかりませんでした':'会話はまだありません'}</h3><p>${q?'別のことばで探してみてください':'気になる投稿から「話す」を押すと、ここに会話が並びます'}</p></div>`;
+  revealAll(host);
+  $$('.row[data-chat]',host).forEach(r=>{
+    r.addEventListener('pointerdown',e=>rippleAt(r,e));
+    r.addEventListener('click',()=>pushThread(r.dataset.chat));
+  });
+}
+
+/* =========================================================
+   MY PROFILE PANE
+   ========================================================= */
+let meTab='posts';
+function paneMe(p){
+  p.innerHTML=`
+    <header class="appbar" id="meBar">
+      <div class="appbar-row">
+        <div class="brand"><span class="brand-dot"></span><span class="brand-name">iroha</span><span class="brand-ver">v${APP_VER}</span></div>
+        <button class="iconbtn" id="meSettings" aria-label="設定">${I.gear}</button>
+      </div>
+    </header>
+    <div class="scroll flush" id="meScroll"><div id="meBody"></div></div>`;
+  $('#meSettings',p).onclick=()=>pushSettings();
+  wireScroll($('#meScroll',p), $('#meBar',p));
+  renderMe();
+}
+function renderMe(){
+  const host=$('#meBody'); if(!host) return;
+  const u=S.users.me;
+  const mine=S.posts.filter(p=>p.u==='me');
+  host.innerHTML=`
+    <div class="banner" style="${bannerCSS(u)}"></div>
+    <div class="prof under">
+      ${avatar(u.av,84,u.img)}
+      <h2>${esc(u.name)}</h2>
+      <p class="handle">@${esc(u.handle)}</p>
+      <p class="bio">${esc(u.bio)}</p>
+      <div class="prof-actions"><button class="obtn" id="editProf">プロフィールを編集</button></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>${mine.length}</b><span>投稿</span></div>
+      <div class="stat"><b>${u.replies}</b><span>返信</span></div>
+      <div class="stat"><b>${S.chats.length}</b><span>会話</span></div>
+    </div>
+    <div class="utabs" id="meTabs">
+      <button class="utab${meTab==='posts'?' on':''}" data-ut="posts">投稿 <small>${mine.length}</small></button>
+      <button class="utab${meTab==='replies'?' on':''}" data-ut="replies">返信 <small>${u.replies}</small></button>
+      <div class="uind" id="meInd"></div>
+    </div>
+    <div style="padding:6px 16px 0" id="meList"></div>`;
+  $('#editProf').onclick=()=>pushEdit();
+  $$('#meTabs .utab').forEach(b=>b.addEventListener('click',()=>{
+    if(meTab===b.dataset.ut) return;
+    haptic(6); meTab=b.dataset.ut;
+    $$('#meTabs .utab').forEach(x=>x.classList.toggle('on',x===b));
+    moveU($('#meTabs'),$('#meInd'));
+    paintMeList();
+  }));
+  paintMeList();
+  raf(()=>moveU($('#meTabs'),$('#meInd'),false));
+
+  function paintMeList(){
+    const box=$('#meList');
+    const arr = meTab==='posts' ? mine : [];
+    box.style.transition='opacity 130ms ease, transform 170ms ease';
+    box.style.opacity='0'; box.style.transform='translate3d(0,8px,0)';
+    setTimeout(()=>{
+      box.innerHTML = arr.length ? arr.map(p=>miniPost(p)).join('')
+        : `<div class="empty"><h3>${meTab==='posts'?'公開中の投稿はありません':'公開中の返信はありません'}</h3><p>${meTab==='posts'?'「＋」から、いまの気持ちを置いてみましょう':'返信すると、ここにまとまります'}</p></div>`;
+      revealAll(box);
+      box.style.opacity='1'; box.style.transform='none';
+      box.onclick=onMiniClick;
+    },140);
+  }
+}
+function moveU(tabs, ind, animate=true){
+  const on=tabs.querySelector('.utab.on'); if(!on||!ind) return;
+  if(!animate) ind.style.transition='none';
+  const r=tabs.getBoundingClientRect(), b=on.getBoundingClientRect();
+  const w=Math.min(b.width, 110);
+  ind.style.width=w+'px';
+  ind.style.transform=`translate3d(${b.left-r.left+(b.width-w)/2}px,0,0)`;
+  if(!animate) requestAnimationFrame(()=>ind.style.transition='');
+}
+function miniPost(p){
+  const tag=TAGS[p.tag];
+  return `<article class="card stagger" data-mini="${p.id}">
+    <div style="display:flex;align-items:center;gap:10px">
+      ${tag?`<span class="tag ${tag.cls}" style="margin-top:0">${tag.label}</span>`:''}
+      <span class="p-time" data-ts="${p.ts}" style="margin-left:auto">${ago(p.ts)}</span>
+    </div>
+    <p class="p-body">${esc(p.t)}</p>
+    <div class="p-foot">
+      <button class="act" data-reply="${p.id}">${I.reply}<span class="num">${p.replies}件の返信</span></button>
+      <button class="act${p.liked?' liked':''}" data-like="${p.id}">
+        <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span><span class="num">${p.likes}</span></button>
+    </div>
+  </article>`;
+}
+function onMiniClick(e){
+  const like=e.target.closest('[data-like]');
+  if(like){ toggleLike(like.dataset.like, like); return; }
+  const rep=e.target.closest('[data-reply]');
+  if(rep){ openThreadForPost(rep.dataset.reply); }
+}
+
+/* =========================================================
+   STACK NAVIGATION
+   ========================================================= */
+const stackEls=[];
+function push(node){
+  $('#stack').appendChild(node);
+  fitBars(node);                       /* heights are only real once attached */
+  stackEls.push(node);
+  $('#tabsRoot').classList.add('pushed');
+  $('#navwrap').classList.add('hide');
+  raf(()=>node.classList.add('in'));
+  wireEdgeBack(node);
+  return node;
+}
+function pop(){
+  const node=stackEls.pop(); if(!node) return;
+  node.classList.remove('in'); node.classList.add('out');
+  if(!stackEls.length){
+    $('#tabsRoot').classList.remove('pushed');
+    $('#navwrap').classList.remove('hide');
+    }
+  setTimeout(()=>node.remove(),430);
+  refreshPane(S.tab); syncNavBadges();
+}
+/* edge swipe back */
+function wireEdgeBack(node){
+  let sx=0, sy=0, dragging=false, w=window.innerWidth;
+  node.addEventListener('touchstart',e=>{
+    const t=e.touches[0];
+    if(t.clientX>28) return;
+    sx=t.clientX; sy=t.clientY; dragging=true; w=node.getBoundingClientRect().width;
+    node.style.transition='none';
+  },{passive:true});
+  node.addEventListener('touchmove',e=>{
+    if(!dragging) return;
+    const t=e.touches[0], dx=Math.max(0,t.clientX-sx), dy=Math.abs(t.clientY-sy);
+    if(dy>44 && dx<10){ dragging=false; node.style.transition=''; node.style.transform=''; return; }
+    node.style.transform=`translate3d(${dx}px,0,0)`;
+    const pr=Math.min(1,dx/w);
+    $('#tabsRoot').style.transform=`translate3d(${-22+22*pr}%,0,0)`;
+  },{passive:true});
+  const end=()=>{
+    if(!dragging) return; dragging=false;
+    const m=/translate3d\((-?[\d.]+)px/.exec(node.style.transform);
+    const dx=m?parseFloat(m[1]):0;
+    node.style.transition=''; node.style.transform='';
+    $('#tabsRoot').style.transform='';
+    if(dx>w*0.30){ pop(); }
+  };
+  node.addEventListener('touchend',end); node.addEventListener('touchcancel',end);
+}
+
+function screenShell(title, {left, right, big}={}){
+  const s=el(`<section class="screen">
+    <header class="navbar">
+      <div class="side">${left===false?'':`<button class="iconbtn js-back" aria-label="戻る">${I.back}</button>`}</div>
+      <div class="ttl">${esc(title)}</div>
+      <div class="side">${right||''}</div>
+    </header>
+    <div class="scroll flush js-scroll"></div>
+  </section>`);
+  const bk=s.querySelector('.js-back'); if(bk) bk.onclick=()=>{haptic(5);pop();};
+  wireScroll(s.querySelector('.js-scroll'), s.querySelector('.navbar'));
+  return s;
+}
+
+/* ---------- user profile ---------- */
+let profTab='posts';
+function pushProfile(uid){
+  const u=S.users[uid];
+  if(uid==='me'){ goTab('me'); return; }
+  profTab='posts';
+  const s=screenShell('プロフィール');
+  const body=s.querySelector('.js-scroll');
+  const paint=()=>{
+    const mine=S.posts.filter(p=>p.u===uid);
+    body.innerHTML=`
+      <div class="banner" style="${bannerCSS(u)}"></div>
+      <div class="prof under">
+        ${avatar(u.av,84,u.img)}
+        <h2>${esc(u.name)}</h2>
+        <p class="handle">@${esc(u.handle)}</p>
+        ${u.official?`<span class="pill-official">${I.bot}iroha公式BOT</span>`:''}
+        <p class="bio">${esc(u.bio)}</p>
+        <div class="prof-actions">
+          <button class="obtn${u.fav?' on':''}" id="favBtn">${I.star}${u.fav?'お気に入り中':'お気に入り'}</button>
+          <button class="obtn" id="dmBtn">${I.reply}DM</button>
+        </div>
+        <p class="note">お気に入りは相手へ通知されず、他の人にも表示されません</p>
+      </div>
+      <div class="stats">
+        <div class="stat"><b>${u.posts}</b><span>投稿</span></div>
+        <div class="stat"><b>${u.replies}</b><span>返信</span></div>
+        <div class="stat"><b>${u.talks}</b><span>会話</span></div>
+      </div>
+      <div class="utabs" id="pfTabs">
+        <button class="utab${profTab==='posts'?' on':''}" data-ut="posts">投稿 <small>${u.posts}</small></button>
+        <button class="utab${profTab==='replies'?' on':''}" data-ut="replies">返信 <small>${u.replies}</small></button>
+        <div class="uind" id="pfInd"></div>
+      </div>
+      <div style="padding:6px 16px 40px" id="pfList"></div>`;
+
+    $('#favBtn',body).onclick=()=>{
+      u.fav=!u.fav; haptic(10);
+      toast(u.fav?'お気に入りに追加しました':'お気に入りを解除しました');
+      const b=$('#favBtn',body);
+      b.classList.toggle('on',u.fav);
+      b.innerHTML=I.star+(u.fav?'お気に入り中':'お気に入り');
+    };
+    $('#dmBtn',body).onclick=()=>{ let c=S.chats.find(c=>c.u===uid); if(c) pushThread(c.id); else openRequest(null,uid); };
+    $$('#pfTabs .utab',body).forEach(b=>b.addEventListener('click',()=>{
+      if(profTab===b.dataset.ut) return;
+      haptic(6); profTab=b.dataset.ut;
+      $$('#pfTabs .utab',body).forEach(x=>x.classList.toggle('on',x===b));
+      moveU($('#pfTabs',body),$('#pfInd',body)); paintList();
+    }));
+    paintList();
+    raf(()=>moveU($('#pfTabs',body),$('#pfInd',body),false));
+
+    function paintList(){
+      const box=$('#pfList',body);
+      const arr = profTab==='posts' ? mine : [];
+      box.style.transition='opacity 130ms ease, transform 170ms ease';
+      box.style.opacity='0'; box.style.transform='translate3d(0,8px,0)';
+      setTimeout(()=>{
+        box.innerHTML = arr.length ? arr.map(p=>miniPost(p)).join('')
+          : `<div class="empty"><h3>${profTab==='posts'?'公開中の投稿はありません':'公開中の返信はありません'}</h3><p>公開されると、ここに並びます</p></div>`;
+        revealAll(box); box.style.opacity='1'; box.style.transform='none';
+        box.onclick=onMiniClick;
+      },140);
+    }
+  };
+  paint();
+  push(s);
+}
+
+/* =========================================================
+   DM THREAD
+   ========================================================= */
+function pushThread(cid){
+  const c=S.chats.find(x=>x.id===cid); if(!c) return;
+  c.unread=0;
+  const u=S.users[c.u];
+  const s=el(`<section class="screen">
+    <header class="navbar">
+      <div class="side"><button class="iconbtn js-back" aria-label="戻る">${I.back}</button></div>
+      <button class="ttl" id="thHead" style="display:flex;flex-direction:column;align-items:center;gap:1px;flex:1">
+        <span style="display:flex;align-items:center;gap:7px">${avatar(c.av,22)}<span>${esc(u.name)}</span></span>
+        <span style="font-size:11px;color:var(--ink-3);font-weight:700">公式Bot</span>
+      </button>
+      <div class="side"><button class="iconbtn" id="thMore" aria-label="その他">${I.dots}</button></div>
+    </header>
+    <div class="thread" id="thread"></div>
+    <div class="composer-bar">
+      <button class="iconbtn" aria-label="追加">${I.plusS}</button>
+      <textarea class="msgfield" id="msgIn" rows="1" placeholder="メッセージ…"></textarea>
+      <button class="sendbtn" id="sendBtn" aria-label="送信">${I.send}</button>
+    </div>
+  </section>`);
+  s.querySelector('.js-back').onclick=()=>{haptic(5);pop();};
+  $('#thHead',s).onclick=()=>pushProfile(c.u);
+  $('#thMore',s).onclick=()=>openMenu([
+    {t:'プロフィールを見る', fn:()=>pushProfile(c.u)},
+    {t:'通知をオフにする', fn:()=>toast('通知をオフにしました')},
+    {t:'ブロックする', danger:true, fn:()=>toast('ブロックしました')}
+  ]);
+
+  fitBars(s);
+  const th=$('#thread',s);
+  paintThread(th,c);
+
+  const inp=$('#msgIn',s), send=$('#sendBtn',s);
+  const autoGrow=()=>{ inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,120)+'px';
+    send.classList.toggle('live', inp.value.trim().length>0); };
+  inp.addEventListener('input',autoGrow);
+  inp.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();fire();} });
+  send.onclick=fire;
+
+  function fire(){
+    const t=inp.value.trim(); if(!t) return;
+    haptic(9);
+    c.msgs.push({me:true,t,ts:Date.now()}); c.ts=Date.now();
+    inp.value=''; autoGrow();
+    appendMsg(th,c,c.msgs[c.msgs.length-1],true);
+    scrollThread(th);
+    // bot typing → reply
+    setTimeout(()=>{
+      const dots=el(`<div class="msgrow" id="typingRow">${avatar(c.av,30)}<div class="bub"><span class="typing"><i></i><i></i><i></i></span></div></div>`);
+      th.appendChild(dots); scrollThread(th);
+      setTimeout(()=>{
+        dots.remove();
+        const m={me:false, t:REPLIES[Math.floor(Math.random()*REPLIES.length)], ts:Date.now()};
+        c.msgs.push(m); c.ts=Date.now();
+        appendMsg(th,c,m,true); scrollThread(th);
+      }, 1150+Math.random()*700);
+    }, 420);
+  }
+  push(s);
+  raf(()=>{ th.scrollTop=th.scrollHeight; });
+}
+
+function paintThread(th,c){
+  th.innerHTML='';
+  let lastDay='';
+  c.msgs.forEach((m,i)=>{
+    const day=new Date(m.ts).toDateString();
+    if(day!==lastDay){
+      lastDay=day;
+      const d=new Date(m.ts), today=new Date().toDateString();
+      const label = day===today ? '今日' : `${d.getMonth()+1}月${d.getDate()}日`;
+      th.appendChild(el(`<div class="daychip">${label}</div>`));
+    }
+    appendMsg(th,c,m,false,i);
+  });
+}
+function appendMsg(th,c,m,animate,i=0){
+  const row=el(`<div class="msgrow${m.me?' me':''}">
+    ${m.me?'':avatar(c.av,30)}
+    <div class="bub">${esc(m.t)}</div>
+    <span class="mtime">${clock(m.ts)}</span>
+  </div>`);
+  const bub=row.querySelector('.bub');
+  if(!animate){ bub.style.animationDelay=Math.min(i*38,300)+'ms'; }
+  th.appendChild(row);
+}
+function scrollThread(th){ raf(()=>th.scrollTo({top:th.scrollHeight, behavior:'smooth'})); }
+
+function openThreadForPost(pid){ pushPostDetail(pid); }
+
+/* =========================================================
+   POST DETAIL  —  replies live here
+   ========================================================= */
+function pushPostDetail(pid){
+  const p=S.posts.find(x=>x.id===pid); if(!p) return;
+  const u=S.users[p.u], me=S.users.me;
+
+  const s=el(`<section class="screen">
+    <header class="navbar">
+      <div class="side"><button class="iconbtn js-back" aria-label="戻る">${I.back}</button></div>
+      <div class="ttl">投稿</div>
+      <div class="side"><button class="iconbtn" id="pdMore" aria-label="その他">${I.dots}</button></div>
+    </header>
+    <div class="scroll flush withbar js-scroll">
+      <div class="pd-card">
+        <div class="pd-head">
+          <button data-user="${u.id}" style="display:contents">${avatar(p.av,44,u.img)}</button>
+          <button class="who" data-user="${u.id}" style="text-align:left">
+            <b>${esc(u.name)}</b><span data-ts="${p.ts}">${ago(p.ts)}</span>
+          </button>
+          <button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>
+        </div>
+        <p class="pd-body">${esc(p.t)}</p>
+        ${TAGS[p.tag]?`<span class="tag ${TAGS[p.tag].cls}">${TAGS[p.tag].label}</span>`:''}
+        <div class="pd-stats">
+          <span class="pd-stat" id="pdRepCount">${I.reply}<span class="num">${p.replies}件の返信</span></span>
+          <button class="pd-stat${p.liked?' liked':''}" id="pdLike">
+            <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span>
+            <span class="num">${p.likes}件のいいね</span>
+          </button>
+        </div>
+      </div>
+      <div class="pd-sep"></div>
+      <div id="repList"></div>
+    </div>
+    <div class="reply-bar">
+      ${avatar(me.av,34,me.img)}
+      <textarea class="replyfield" id="repIn" rows="1" placeholder="やさしく返信する…"></textarea>
+      <button class="replysend" id="repSend" aria-label="返信する">${I.send}</button>
+    </div>
+  </section>`);
+
+  s.querySelector('.js-back').onclick=()=>{haptic(5);pop();};
+  wireScroll(s.querySelector('.js-scroll'), s.querySelector('.navbar'));
+  $('#pdMore',s).onclick=()=>openPostMenu(p.id);
+  s.addEventListener('click',e=>{
+    const us=e.target.closest('[data-user]'); if(us){ pushProfile(us.dataset.user); return; }
+    const tk=e.target.closest('[data-talk]'); if(tk){ openRequest(tk.dataset.talk); }
+  });
+
+  /* like — kept in sync with the feed card */
+  const likeBtn=$('#pdLike',s);
+  likeBtn.onclick=()=>{
+    p.liked=!p.liked; p.likes+=p.liked?1:-1;
+    haptic(p.liked?12:5);
+    likeBtn.classList.toggle('liked',p.liked);
+    likeBtn.querySelector('.num').textContent=p.likes+'件のいいね';
+    if(p.liked){ likeBtn.classList.remove('pop'); void likeBtn.offsetWidth; likeBtn.classList.add('pop');
+      setTimeout(()=>likeBtn.classList.remove('pop'),700); }
+    syncCard(p);
+  };
+
+  const list=$('#repList',s);
+  paintReplies();
+
+  /* composer — same mechanics as the DM bar */
+  const inp=$('#repIn',s), send=$('#repSend',s);
+  const grow=()=>{ inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,120)+'px';
+    send.classList.toggle('live', inp.value.trim().length>0); };
+  inp.addEventListener('input',grow);
+  inp.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();fire();} });
+  send.onclick=fire;
+
+  function fire(){
+    const t=inp.value.trim(); if(!t) return;
+    haptic(11);
+    send.classList.remove('fly'); void send.offsetWidth; send.classList.add('fly');
+    setTimeout(()=>send.classList.remove('fly'),540);
+    p.rep.push({u:'me', av:me.av, t, ts:Date.now(), likes:0, liked:false});
+    p.replies=p.rep.length;
+    inp.value=''; grow();
+    paintReplies(true);
+    $('#pdRepCount',s).querySelector('.num').textContent=p.replies+'件の返信';
+    syncCard(p);
+    const sc=s.querySelector('.js-scroll');
+    raf(()=>sc.scrollTo({top:sc.scrollHeight, behavior:'smooth'}));
+  }
+
+  function paintReplies(fresh){
+    if(!p.rep.length){
+      list.innerHTML=`<div class="rep-empty">まだ返信がありません。<br>最初に声をかけてみよう。</div>`;
+      return;
+    }
+    list.innerHTML=p.rep.map((r,i)=>{
+      const ru=S.users[r.u];
+      return `<div class="rep${fresh&&i===p.rep.length-1?' fresh':''}" data-rep="${i}">
+        <button data-user="${r.u}" style="display:contents">${uav(r.u,36,r.av)}</button>
+        <div class="rep-main">
+          <div class="rep-line"><b>${esc(ru.name)}</b>
+            <span>@${esc(ru.handle)}</span><span class="dot-sep">·</span>
+            <span data-ts="${r.ts}">${ago(r.ts)}</span></div>
+          <p class="rep-body">${esc(r.t)}</p>
+          <div class="rep-foot">
+            <button class="act${r.liked?' liked':''}" data-replike="${i}">
+              <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span><span class="num">${r.likes}</span>
+            </button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    list.onclick=e=>{
+      const lk=e.target.closest('[data-replike]'); if(!lk) return;
+      const r=p.rep[+lk.dataset.replike];
+      r.liked=!r.liked; r.likes+=r.liked?1:-1;
+      haptic(r.liked?11:5);
+      lk.classList.toggle('liked',r.liked);
+      lk.querySelector('.num').textContent=r.likes;
+      if(r.liked){ lk.classList.remove('pop'); void lk.offsetWidth; lk.classList.add('pop');
+        setTimeout(()=>lk.classList.remove('pop'),700); }
+    };
+  }
+  push(s);
+}
+
+/* keep a feed card's counters in step with the detail screen */
+function syncCard(p){
+  document.querySelectorAll(`[data-post="${p.id}"],[data-mini="${p.id}"]`).forEach(card=>{
+    const lk=card.querySelector('[data-like]');
+    if(lk){ lk.classList.toggle('liked',p.liked);
+      lk.querySelector('.num').textContent=p.likes; }
+    const rp=card.querySelector('[data-reply]');
+    if(rp){ const t=rp.querySelector('.num');
+      t.textContent = card.dataset.mini ? p.replies+'件の返信' : p.replies; }
+  });
+}
+
+/* =========================================================
+   SETTINGS
+   ========================================================= */
+function pushSettings(){
+  const s=screenShell('設定');
+  const body=s.querySelector('.js-scroll');
+  const u=S.users.me;
+  body.innerHTML=`
+    <div class="group" style="margin-top:14px">
+      <div class="gcard">
+        <button class="gitem" id="stProf">
+          ${avatar(u.av,44,u.img)}
+          <div class="gt" style="margin-left:2px"><b>${esc(u.name)}</b><span>プロフィールと公開情報</span></div>
+          <span class="chev">${I.chev}</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="group"><h4>表示</h4>
+      <div class="gcard">
+        <button class="gitem" id="stTheme">
+          <span class="gi" id="stThemeIco">${S.theme==='dark'?I.sun:I.moon}</span>
+          <div class="gt"><b>ダークモード</b><span>目にやさしい暗い表示</span></div>
+          <span class="sw${S.theme==='dark'?' on':''}" id="stSw"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="group"><h4>画像・動画</h4>
+      <div class="gcard" id="mediaGroup">
+        ${[['raw',I.image,'そのまま表示','画像と動画を自動で表示します'],
+           ['safety',I.shield,'セーフティ表示','ぼかして、タップ後に表示します'],
+           ['hide',I.eyeoff,'非表示','画像と動画を読み取り画面に出しません']]
+          .map(([k,ic,t,sub])=>`<button class="gitem" data-media="${k}">
+            <span class="gi">${ic}</span><div class="gt"><b>${t}</b><span>${sub}</span></div>
+            <span class="radio${S.media===k?' on':''}"></span></button>`).join('')}
+      </div>
+    </div>
+
+    <div class="group"><h4>安心・安全</h4>
+      <div class="gcard">
+        <button class="gitem" id="stBlock"><span class="gi">${I.ban}</span>
+          <div class="gt"><b>ブロックしたユーザー</b><span>表示と会話を制限します</span></div><span class="chev">${I.chev}</span></button>
+        <button class="gitem" id="stWho"><span class="gi">${I.lock}</span>
+          <div class="gt"><b>会話できる相手</b><span>返信した相手のみ</span></div><span class="chev">${I.chev}</span></button>
+        <button class="gitem" id="stQuiet"><span class="gi">${I.belloff}</span>
+          <div class="gt"><b>おやすみモード</b><span>通知を一時停止します</span></div>
+          <span class="sw${S.quiet?' on':''}" id="quietSw"></span></button>
+      </div>
+    </div>
+
+    <div class="group" style="margin-bottom:40px"><h4>サポート</h4>
+      <div class="gcard">
+        <button class="gitem" id="stGuide"><span class="gi">${I.doc}</span>
+          <div class="gt"><b>コミュニティガイドライン</b><span>安心して話すための約束</span></div><span class="chev">${I.chev}</span></button>
+        <button class="gitem" id="stAbout"><span class="gi">${I.info}</span>
+          <div class="gt"><b>irohaについて</b><span>バージョン ${APP_VER}</span></div><span class="chev">${I.chev}</span></button>
+      </div>
+    </div>`;
+
+  $$('.gitem',body).forEach(g=>g.addEventListener('pointerdown',e=>rippleAt(g,e)));
+  $('#stProf',body).onclick=()=>pushEdit();
+  $('#stTheme',body).onclick=()=>{
+    haptic(9);
+    setTheme(S.theme==='dark'?'light':'dark');
+    $('#stSw',body).classList.toggle('on', S.theme==='dark');
+    const ico=$('#stThemeIco',body);
+    ico.style.transition='transform 420ms cubic-bezier(.34,1.42,.5,1), opacity 200ms ease';
+    ico.style.transform='rotate(-140deg) scale(.5)'; ico.style.opacity='0';
+    setTimeout(()=>{ ico.innerHTML = S.theme==='dark'?I.sun:I.moon;
+      ico.style.transform=''; ico.style.opacity='1'; },170);
+  };
+  $$('[data-media]',body).forEach(b=>b.addEventListener('click',()=>{
+    haptic(6); S.media=b.dataset.media;
+    $$('[data-media] .radio',body).forEach(r=>r.classList.remove('on'));
+    b.querySelector('.radio').classList.add('on');
+  }));
+  $('#stQuiet',body).onclick=()=>{
+    haptic(8); S.quiet=!S.quiet;
+    $('#quietSw',body).classList.toggle('on',S.quiet);
+    toast(S.quiet?'おやすみモードをオンにしました':'おやすみモードをオフにしました');
+  };
+  ['stBlock','stWho','stGuide','stAbout'].forEach(id=>{
+    const n=$('#'+id,body); if(n) n.onclick=()=>toast('準備中です');
+  });
+  push(s);
+}
+
+/* =========================================================
+   EDIT PROFILE
+   ========================================================= */
+const SWATCHES=['amber','slate','moss','plum','stone'];
+const SW_HEX={amber:'#E8B93C', slate:'#4B7093', moss:'#5A9163', plum:'#7C4FBF', stone:'#84807A'};
+function pushEdit(){
+  const u=S.users.me;
+  const draft={name:u.name, handle:u.handle, bio:u.bio, av:u.av, img:u.img||null, banner:u.banner||null};
+  const s=el(`<section class="screen">
+    <header class="navbar">
+      <div class="side" style="justify-content:flex-start"><button class="txtbtn" id="edCancel">キャンセル</button></div>
+      <div class="ttl">プロフィールを編集</div>
+      <div class="side" style="justify-content:flex-end"><button class="txtbtn accent" id="edSave">保存</button></div>
+    </header>
+    <div class="scroll flush js-scroll"><div class="editwrap" style="padding-top:14px">
+      <h4 class="pick-h" style="margin:0 0 10px">プロフィール背景</h4>
+      <div class="banner-edit" id="edBanner" style="${bannerCSS(draft)}">
+        <button class="campin" id="edBanCam" aria-label="背景画像を追加">${I.cam}</button>
+      </div>
+      <div class="imgrow">
+        <button class="ghostbtn" id="edBanAdd">背景画像を選ぶ</button>
+        <button class="dangerlink" id="edBanDel" style="${draft.banner?'':'display:none'}">背景を削除</button>
+      </div>
+      <div class="avpick" style="margin-top:22px"><span id="edAv">${avatar(draft.av,104,draft.img)}</span>
+        <button class="campin" id="edCam" aria-label="画像を追加">${I.cam}</button></div>
+      <div class="imgrow">
+        <button class="ghostbtn" id="edAdd">画像を追加</button>
+        <button class="dangerlink" id="edImgDel" style="${draft.img?'':'display:none'}">画像を削除</button>
+      </div>
+      <p class="hint">ドラッグとピンチで切り抜く範囲を選べます</p>
+      <h4 class="pick-h">画像を使わない場合のカラー</h4>
+      <div class="swatches" id="edSw">
+        ${SWATCHES.map(k=>`<button class="sw-dot${k===draft.av?' on':''}" data-c="${k}" style="background:${SW_HEX[k]}" aria-label="${k}">${I.check}</button>`).join('')}
+      </div>
+      <div class="field"><label>表示名</label>
+        <div class="fin"><input id="edName" maxlength="20" value="${esc(draft.name)}"></div>
+        <span class="cnt" id="cName">${[...draft.name].length}/20</span></div>
+      <div class="field"><label>ユーザーID</label>
+        <div class="fin"><span class="at">@</span><input id="edHandle" maxlength="20" value="${esc(draft.handle)}"></div>
+        <span class="sub">半角英数字とアンダーバー・3文字以上</span></div>
+      <div class="field"><label>自己紹介</label>
+        <div class="fin"><textarea id="edBio" maxlength="100">${esc(draft.bio)}</textarea></div>
+        <span class="cnt" id="cBio">${[...draft.bio].length}/100</span></div>
+      <p class="safety">${I.shield}<span>本名や住所など、個人を特定できる情報は載せないでください</span></p>
+    </div></div>
+  </section>`);
+  wireScroll(s.querySelector('.js-scroll'), s.querySelector('.navbar'));
+
+  $('#edCancel',s).onclick=()=>{haptic(5);pop();};
+
+  const addPhoto=()=>pickImage(src=>openCropper(src,
+      {aspect:1, round:true, out:512, title:'アイコンを切り抜く'},
+      url=>{ draft.img=url; refreshAv(); toast('アイコンを設定しました'); }));
+  $('#edCam',s).onclick=$('#edAdd',s).onclick=addPhoto;
+  $('#edImgDel',s).onclick=()=>{ draft.img=null; refreshAv(); toast('画像を削除しました'); };
+
+  const addBanner=()=>pickImage(src=>openCropper(src,
+      {aspect:3, round:false, out:1080, title:'背景を切り抜く'},
+      url=>{ draft.banner=url; refreshBanner(); toast('背景を設定しました'); }));
+  $('#edBanCam',s).onclick=$('#edBanAdd',s).onclick=addBanner;
+  $('#edBanDel',s).onclick=()=>{ draft.banner=null; refreshBanner(); toast('背景を削除しました'); };
+
+  function refreshAv(){
+    const box=$('#edAv',s);
+    box.style.transition='transform 300ms cubic-bezier(.34,1.42,.5,1), opacity 160ms ease';
+    box.style.transform='scale(.82)'; box.style.opacity='.25';
+    setTimeout(()=>{ box.innerHTML=avatar(draft.av,104,draft.img);
+      box.style.transform=''; box.style.opacity='1'; },140);
+    $('#edImgDel',s).style.display = draft.img?'':'none';
+  }
+  function refreshBanner(){
+    const b=$('#edBanner',s);
+    b.style.cssText = bannerCSS(draft);
+    b.style.opacity='0'; requestAnimationFrame(()=>{
+      b.style.transition='opacity 320ms ease'; b.style.opacity='1'; });
+    $('#edBanDel',s).style.display = draft.banner?'':'none';
+  }
+  $$('.sw-dot',s).forEach(b=>b.addEventListener('click',()=>{
+    haptic(7); draft.av=b.dataset.c;
+    $$('.sw-dot',s).forEach(x=>x.classList.toggle('on',x===b));
+    refreshAv(); refreshBanner();
+  }));
+  const nm=$('#edName',s), hd=$('#edHandle',s), bio=$('#edBio',s);
+  nm.addEventListener('input',()=>$('#cName',s).textContent=[...nm.value].length+'/20');
+  bio.addEventListener('input',()=>{
+    $('#cBio',s).textContent=[...bio.value].length+'/100';
+    bio.style.height='auto'; bio.style.height=Math.max(74,bio.scrollHeight)+'px';
+  });
+  hd.addEventListener('input',()=>{ hd.value=hd.value.replace(/[^a-zA-Z0-9_]/g,'').toLowerCase(); });
+
+  $('#edSave',s).onclick=()=>{
+    const h=hd.value.trim();
+    if(!nm.value.trim()){ toast('表示名を入力してください'); return; }
+    if(h.length<3){ toast('ユーザーIDは3文字以上にしてください'); return; }
+    u.name=nm.value.trim(); u.handle=h; u.bio=bio.value; u.av=draft.av;
+    u.img=draft.img; u.banner=draft.banner;
+    haptic(12); pop(); toast('プロフィールを更新しました');
+  };
+  push(s);
+}
+
+/* =========================================================
+   SEARCH
+   ========================================================= */
+function pushSearch(){
+  const s=el(`<section class="screen">
+    <header class="navbar">
+      <div class="side"><button class="iconbtn js-back" aria-label="戻る">${I.back}</button></div>
+      <div class="searchbar" style="margin-right:8px">${I.search}<input id="sq" placeholder="投稿やユーザーを検索" autocomplete="off"></div>
+    </header>
+    <div class="scroll js-scroll"><div class="sec-h" id="sqHead">最近の投稿</div><div id="sqList"></div></div>
+  </section>`);
+  s.querySelector('.js-back').onclick=()=>{haptic(5);pop();};
+  wireScroll(s.querySelector('.js-scroll'), s.querySelector('.navbar'));
+  const list=$('#sqList',s), head=$('#sqHead',s), q=$('#sq',s);
+  const paint=()=>{
+    const v=q.value.trim();
+    head.textContent = v ? `「${v}」の検索結果` : '最近の投稿';
+    const arr = v ? S.posts.filter(p=>p.t.includes(v)||S.users[p.u].name.includes(v)) : S.posts.slice(0,6);
+    list.innerHTML = arr.length ? arr.map(p=>postCard(p)).join('')
+      : `<div class="empty"><h3>見つかりませんでした</h3><p>別のことばで探してみてください</p></div>`;
+    list.onclick=onPostClick;
+    revealAll(list);
+  };
+  let t=null;
+  q.addEventListener('input',()=>{ clearTimeout(t); t=setTimeout(paint,140); });
+  paint();
+  push(s);
+  setTimeout(()=>q.focus(),420);
+}
+
+
+/* =========================================================
+   IMAGE CROPPER  —  pick, pan, pinch/slide to zoom, export
+   ========================================================= */
+function pickImage(cb){
+  const inp=el('<input type="file" accept="image/*" style="position:absolute;left:-9999px">');
+  document.body.appendChild(inp);
+  inp.addEventListener('change',()=>{
+    const f=inp.files && inp.files[0];
+    inp.remove();
+    if(!f) return;
+    if(!/^image\//.test(f.type)){ toast('画像ファイルを選んでください'); return; }
+    const rd=new FileReader();
+    rd.onload=()=>cb(rd.result);
+    rd.onerror=()=>toast('画像を読み込めませんでした');
+    rd.readAsDataURL(f);
+  });
+  inp.click();
+}
+
+/* aspect: 1 = square/avatar, 3 = wide banner.  out = exported width in px. */
+function openCropper(src, {aspect=1, round=false, out=512, title='切り抜き'}, done){
+  const vw=Math.min(window.innerWidth, 520);
+  const fw=Math.min(vw-32, 340);
+  const fh=Math.round(fw/aspect);
+
+  const m=el(`<div class="crop">
+    <div class="crop-bar">
+      <button id="crNo">キャンセル</button>
+      <div class="ttl">${esc(title)}</div>
+      <button class="go" id="crGo">完了</button>
+    </div>
+    <div class="crop-stagewrap">
+      <div class="crop-stage" id="crStage" style="width:${fw}px;height:${fh}px">
+        <img id="crImg" alt="">
+        <div class="crop-mask">
+          <div class="hole${round?' round':''}"></div>
+          <div class="grid">
+            <i class="v" style="left:33.33%"></i><i class="v" style="left:66.66%"></i>
+            <i class="h" style="top:33.33%"></i><i class="h" style="top:66.66%"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="crop-tools">
+      <p class="crop-hint">ドラッグで位置を調整・ピンチかスライダーで拡大</p>
+      <div class="zoomrow">
+        ${I.image}
+        <input type="range" id="crZoom" min="100" max="320" value="100">
+        ${I.plusS}
+      </div>
+    </div>
+  </div>`);
+  $('#overlays').appendChild(m);
+  raf(()=>m.classList.add('on'));
+
+  const img=$('#crImg',m), stage=$('#crStage',m), zoom=$('#crZoom',m);
+  let nw=0, nh=0, base=1, z=1, x=0, y=0;
+
+  img.onload=()=>{
+    nw=img.naturalWidth; nh=img.naturalHeight;
+    base=Math.max(fw/nw, fh/nh);          /* cover the frame */
+    z=1; x=0; y=0; apply();
+  };
+  img.src=src;
+
+  function clamp(){
+    const sw=nw*base*z, sh=nh*base*z;
+    const mx=Math.max(0,(sw-fw)/2), my=Math.max(0,(sh-fh)/2);
+    x=Math.min(mx,Math.max(-mx,x));
+    y=Math.min(my,Math.max(-my,y));
+  }
+  function apply(){
+    clamp();
+    const sw=nw*base*z, sh=nh*base*z;
+    img.style.transform=`translate3d(${(x-sw/2).toFixed(2)}px,${(y-sh/2).toFixed(2)}px,0)`;
+    img.style.width=sw+'px'; img.style.height=sh+'px';
+  }
+
+  /* pan + pinch */
+  const pts=new Map();
+  let startX=0, startY=0, startZ=1, pinch0=0;
+  stage.addEventListener('pointerdown',e=>{
+    stage.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===1){ startX=e.clientX-x; startY=e.clientY-y; }
+    if(pts.size===2){ pinch0=dist(); startZ=z; }
+  });
+  stage.addEventListener('pointermove',e=>{
+    if(!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===1){ const p=[...pts.values()][0]; x=p.x-startX; y=p.y-startY; apply(); }
+    else if(pts.size===2 && pinch0>0){
+      z=Math.min(3.2,Math.max(1,startZ*(dist()/pinch0)));
+      zoom.value=Math.round(z*100); apply();
+    }
+  });
+  const drop=e=>{ pts.delete(e.pointerId); if(pts.size<2) pinch0=0;
+    if(pts.size===1){ const p=[...pts.values()][0]; startX=p.x-x; startY=p.y-y; } };
+  stage.addEventListener('pointerup',drop);
+  stage.addEventListener('pointercancel',drop);
+  function dist(){ const [a,b]=[...pts.values()]; return Math.hypot(a.x-b.x,a.y-b.y); }
+
+  zoom.addEventListener('input',()=>{ z=+zoom.value/100; apply(); });
+
+  $('#crNo',m).onclick=close;
+  $('#crGo',m).onclick=()=>{
+    const scale=base*z;
+    const cv=document.createElement('canvas');
+    cv.width=out; cv.height=Math.round(out/aspect);
+    const g=cv.getContext('2d');
+    g.imageSmoothingQuality='high';
+    /* frame rectangle expressed in source-image coordinates */
+    const sw=fw/scale, sh=fh/scale;
+    const sx=nw/2-(fw/2+x)/scale, sy=nh/2-(fh/2+y)/scale;
+    g.drawImage(img, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+    let url;
+    try{ url=cv.toDataURL('image/jpeg',0.88); }
+    catch(err){ toast('画像を書き出せませんでした'); return; }
+    haptic(12); close(); setTimeout(()=>done(url),200);
+  };
+  function close(){ m.classList.remove('on'); setTimeout(()=>m.remove(),500); }
+}
+
+/* =========================================================
+   OVERLAYS
+   ========================================================= */
+function showScrim(on, onTap){
+  const sc=$('#scrim');
+  sc.classList.toggle('on',on);
+  sc.onclick = on && onTap ? onTap : null;
+}
+
+/* ---------- request-to-talk sheet (drag dismissible) ---------- */
+function openRequest(postId, uidOverride){
+  const p = postId ? S.posts.find(x=>x.id===postId) : null;
+  const uid = uidOverride || (p && p.u); if(!uid) return;
+  const u=S.users[uid];
+
+  const sheet=el(`<div class="sheet" id="reqSheet">
+    <div class="grab"></div>
+    <div class="sheet-ico">${I.reply}</div>
+    <h3>${esc(u.name)}さんに<br>会話を申請</h3>
+    <p class="lead">申請後もこの画面に残ります。DMは一覧へ追加され、文章を添えた場合は最初のメッセージとして相手にも届きます。</p>
+    <div class="obox"><label>申請メッセージ <i>任意</i></label>
+      <textarea id="reqMsg" maxlength="120" placeholder="投稿を見て話してみたいと思いました"></textarea>
+      <span class="cnt" style="display:block;text-align:right;font-size:11px;color:var(--ink-3);font-weight:700" id="reqCnt">0/120</span></div>
+    <button class="bigbtn" id="reqGo">会話を申請する</button>
+    <button class="textlink" id="reqNo">キャンセル</button>
+  </div>`);
+  $('#overlays').appendChild(sheet);
+  showScrim(true, close);
+  raf(()=>sheet.classList.add('on'));
+
+  const ta=$('#reqMsg',sheet);
+  ta.addEventListener('input',()=>{
+    $('#reqCnt',sheet).textContent=[...ta.value].length+'/120';
+    ta.style.height='auto'; ta.style.height=Math.max(62,ta.scrollHeight)+'px';
+  });
+  $('#reqNo',sheet).onclick=close;
+  $('#reqGo',sheet).onclick=()=>{
+    haptic(14);
+    let c=S.chats.find(x=>x.u===uid);
+    const text=ta.value.trim();
+    if(!c){
+      c={id:'c'+Date.now(), u:uid, av:(p&&p.av)||u.av, unread:0, ts:Date.now(), msgs:[]};
+      S.chats.push(c);
+    }
+    if(text) c.msgs.push({me:true,t:text,ts:Date.now()});
+    c.msgs.push({me:false,t:'申請ありがとうございます。ゆっくり話しましょう。',ts:Date.now()+1});
+    c.unread+=1; c.ts=Date.now();
+    if(p){ p.req=true;
+      const btn=document.querySelector(`[data-talk="${p.id}"]`);
+      if(btn){ btn.classList.add('done'); btn.innerHTML=I.reply+'申請済み'; }
+    }
+    close(); syncNavBadges();
+    setTimeout(()=>toast('会話を申請しました'),180);
+  };
+
+  /* drag to dismiss */
+  let sy=0, dy=0, drag=false;
+  const start=e=>{ const t=e.touches?e.touches[0]:e;
+    if(e.target.closest('textarea')) return;
+    sy=t.clientY; drag=true; sheet.style.transition='none'; };
+  const move=e=>{ if(!drag) return; const t=e.touches?e.touches[0]:e;
+    dy=Math.max(0,t.clientY-sy);
+    sheet.style.transform=`translate3d(0,${dy}px,0)`;
+    $('#scrim').style.opacity = String(Math.max(0, 1-dy/380)); };
+  const end=()=>{ if(!drag) return; drag=false;
+    sheet.style.transition=''; $('#scrim').style.opacity='';
+    if(dy>110) close(); else sheet.style.transform=''; dy=0; };
+  sheet.addEventListener('touchstart',start,{passive:true});
+  sheet.addEventListener('touchmove',move,{passive:true});
+  sheet.addEventListener('touchend',end); sheet.addEventListener('touchcancel',end);
+
+  function close(){
+    sheet.classList.remove('on'); sheet.style.transform='';
+    showScrim(false); setTimeout(()=>sheet.remove(),520);
+  }
+}
+
+/* ---------- action menu ---------- */
+function openMenu(items){
+  const m=el(`<div class="menu" id="actMenu">
+    <div class="mcard">${items.map((it,i)=>`<button data-i="${i}"${it.danger?' class="danger"':''}>${esc(it.t)}</button>`).join('')}</div>
+    <div class="mcard solo"><button data-close="1">キャンセル</button></div>
+  </div>`);
+  $('#overlays').appendChild(m);
+  showScrim(true, close);
+  raf(()=>m.classList.add('on'));
+  m.addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    if(b.dataset.close){ close(); return; }
+    const it=items[+b.dataset.i]; close(); setTimeout(()=>it.fn&&it.fn(),240);
+  });
+  function close(){ m.classList.remove('on'); showScrim(false); setTimeout(()=>m.remove(),480); }
+}
+function openPostMenu(pid){
+  const p=S.posts.find(x=>x.id===pid); if(!p) return;
+  haptic(6);
+  openMenu([
+    {t:'この投稿をシェア', fn:()=>toast('リンクをコピーしました')},
+    {t:'この話題を減らす', fn:()=>toast('表示を減らします')},
+    {t:'報告する', danger:true, fn:()=>toast('報告を受け付けました')}
+  ]);
+}
+
+/* ---------- compose modal ---------- */
+function openCompose(){
+  const fab=$('#fab'); if(fab) fab.classList.add('x');
+  const m=el(`<div class="modal" id="composeM">
+    <header class="navbar">
+      <div class="side" style="justify-content:flex-start"><button class="txtbtn" id="cmNo">キャンセル</button></div>
+      <div class="ttl">いまの気持ち</div>
+      <div class="side" style="justify-content:flex-end"><button class="txtbtn accent" id="cmGo" disabled>投稿</button></div>
+    </header>
+    <div class="scroll js-scroll">
+      <div style="display:flex;gap:12px">
+        ${avatar(S.users.me.av,40,S.users.me.img)}
+        <textarea id="cmText" maxlength="140" rows="4" placeholder="いま、何を話したい？"
+          style="flex:1;font-size:17px;font-weight:600;line-height:1.7;resize:none;min-height:130px"></textarea>
+      </div>
+      <div style="margin-top:6px;text-align:right;font-size:12px;color:var(--ink-3);font-weight:700" id="cmCnt">0/140</div>
+      <h4 style="margin:18px 0 10px;font-size:13px;font-weight:800">話題のタグ</h4>
+      <div class="tagpick" id="cmTags">
+        ${Object.entries(TAGS).map(([k,v],i)=>`<button class="tagopt${i===0?' on':''}" data-t="${k}">${v.label}</button>`).join('')}
+      </div>
+      <p class="safety" style="margin-top:22px">${I.shield}<span>個人を特定できる情報は書かないでください</span></p>
+    </div>
+  </div>`);
+  $('#overlays').appendChild(m);
+  fitBars(m);
+  raf(()=>m.classList.add('on'));
+
+  let tag='hitorigoto';
+  const ta=$('#cmText',m), go=$('#cmGo',m);
+  ta.addEventListener('input',()=>{
+    const n=[...ta.value].length;
+    $('#cmCnt',m).textContent=n+'/140';
+    go.disabled = ta.value.trim().length===0;
+  });
+  $$('.tagopt',m).forEach(b=>b.addEventListener('click',()=>{
+    haptic(6); tag=b.dataset.t;
+    $$('.tagopt',m).forEach(x=>x.classList.toggle('on',x===b));
+  }));
+  $('#cmNo',m).onclick=close;
+  $('#cmGo',m).onclick=()=>{
+    const t=ta.value.trim(); if(!t) return;
+    haptic(14);
+    S.posts.unshift({id:'p'+Date.now(), u:'me', av:S.users.me.av, t, tag, ts:Date.now(),
+      likes:0, replies:0, liked:false, req:false, rep:[]});
+    close();
+    setTimeout(()=>{
+      if(S.tab!=='home'){ goTab('home'); }
+      if(S.filter!=='osusume'){
+        S.filter='osusume';
+        $$('#chips .chip').forEach(c=>c.classList.toggle('on',c.dataset.f==='osusume'));
+      }
+      renderFeed(true);
+      const sc=$('#feedScroll'); if(sc) sc.scrollTo({top:0,behavior:'smooth'});
+      toast('投稿しました');
+    },260);
+  };
+  setTimeout(()=>ta.focus(),380);
+
+  function close(){
+    m.classList.remove('on');
+    if(fab) fab.classList.remove('x');
+    setTimeout(()=>m.remove(),520);
+  }
+}
+
+/* =========================================================
+   BOOT
+   ========================================================= */
+function boot(){
+  setTheme('light',false);
+  buildNav();
+  buildPane('home');
+  raf(()=>{
+    PANES.home.classList.add('on');
+    moveNavInd(false);
+    syncNavBadges();
+    navMorph.init();
+  });
+}
+
+/* keyboard: escape closes topmost layer */
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape') return;
+  const cr=$('.crop'); if(cr){ $('#crNo',cr)?.click(); return; }
+  const m=$('#composeM'); if(m){ $('#cmNo',m)?.click(); return; }
+  const sh=$('#reqSheet'); if(sh){ $('#reqNo',sh)?.click(); return; }
+  const am=$('#actMenu'); if(am){ am.querySelector('[data-close]')?.click(); return; }
+  if(stackEls.length) pop();
+});
+
+/* prevent iOS rubber-band on the shell */
+document.addEventListener('touchmove',e=>{
+  if(!e.target.closest('.scroll,.thread,.chiprow,textarea')) e.preventDefault();
+},{passive:false});
+
+boot();
+
+
+</script>
+</body>
+</html>
