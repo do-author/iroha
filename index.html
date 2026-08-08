@@ -95,7 +95,8 @@ body{
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 :focus-visible{outline:2px solid var(--accent-deep);outline-offset:2px;border-radius:8px}
-.msgfield:focus-visible,.replyfield:focus-visible{outline:none}
+.msgfield:focus-visible,.replyfield:focus-visible,.field input:focus-visible,
+.field textarea:focus-visible,.obox textarea:focus-visible{outline:none}
 .msgfield,.replyfield{
   -webkit-appearance:none; appearance:none;
   resize:none; overflow-y:auto; scrollbar-width:none;
@@ -151,7 +152,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .brand-name{font-size:26px; font-weight:800; letter-spacing:-.035em; line-height:1}
 .brand-ver{font-size:11px; font-weight:700; color:var(--ink-3); letter-spacing:.02em}
 .iconbtn{
-  width:38px;height:38px;border-radius:50%;
+  width:42px;height:42px;border-radius:50%;
   display:grid;place-items:center; color:var(--ink);
   transition:transform var(--dur-2) var(--spring), background-color var(--dur-1) linear;
 }
@@ -174,7 +175,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .chiprow{
   display:flex; gap:9px; margin-top:13px;
   overflow-x:auto; scrollbar-width:none; -ms-overflow-style:none;
-  padding:2px 18px 2px 0; margin-right:-18px;
+  padding:2px 18px; margin-left:-18px; margin-right:-18px;
   scroll-behavior:smooth;
 }
 .chiprow::-webkit-scrollbar{display:none}
@@ -233,47 +234,68 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .p-meta{flex:1 1 auto; min-width:0}
 .p-line{display:flex; align-items:center; gap:5px; flex-wrap:nowrap; line-height:1.35; min-width:0}
 .p-name{font-size:15px; font-weight:800; letter-spacing:-.01em; white-space:nowrap; flex:0 0 auto}
+.gtag{
+  flex:0 0 auto; width:18px; height:18px; border-radius:50%;
+  display:inline-grid; place-items:center;
+  font-size:12px; font-weight:700; line-height:1;
+  transition:background-color var(--dur-3) var(--ease-out);
+}
+.g-male{background:rgba(74,124,180,.16); color:#4A7CB4}
+.g-female{background:rgba(196,96,132,.16); color:#C46084}
+[data-theme="dark"] .g-male{background:rgba(122,166,214,.18); color:#7AA6D6}
+[data-theme="dark"] .g-female{background:rgba(224,138,170,.18); color:#E08AAA}
 .badge-demo{
   flex:0 0 auto;
   display:inline-flex; align-items:center; gap:4px;
   background:var(--field); color:var(--ink-2); border:1px solid var(--line);
-  font-size:10px; font-weight:800; letter-spacing:.08em;
-  padding:1.5px 6px; border-radius:6px;
+  font-size:10.5px; font-weight:700; letter-spacing:.06em;
+  padding:3px 10px; border-radius:999px;
 }
 .badge-bot{
   flex:0 0 auto;
   display:inline-flex; align-items:center; gap:4px;
-  background:var(--accent); color:var(--accent-ink);
-  font-size:11.5px; font-weight:800; letter-spacing:.06em;
-  padding:3.5px 9px; border-radius:7px;
+  background:rgba(228,180,28,.20); color:#8A6B14;
+  font-size:11px; font-weight:700; letter-spacing:.05em;
+  padding:3.5px 10px; border-radius:999px;
 }
-[data-theme="dark"] .badge-demo{
+[data-theme="dark"] .gtag{
+  flex:0 0 auto; width:18px; height:18px; border-radius:50%;
+  display:inline-grid; place-items:center;
+  font-size:12px; font-weight:700; line-height:1;
+  transition:background-color var(--dur-3) var(--ease-out);
+}
+.g-male{background:rgba(74,124,180,.16); color:#4A7CB4}
+.g-female{background:rgba(196,96,132,.16); color:#C46084}
+[data-theme="dark"] .g-male{background:rgba(122,166,214,.18); color:#7AA6D6}
+[data-theme="dark"] .g-female{background:rgba(224,138,170,.18); color:#E08AAA}
+.badge-demo{
   flex:0 0 auto;
   display:inline-flex; align-items:center; gap:4px;
   background:var(--field); color:var(--ink-2); border:1px solid var(--line);
-  font-size:10px; font-weight:800; letter-spacing:.08em;
-  padding:1.5px 6px; border-radius:6px;
+  font-size:10.5px; font-weight:700; letter-spacing:.06em;
+  padding:3px 10px; border-radius:999px;
 }
 .badge-bot{background:#4A3D14;color:var(--accent)}
-.p-time{font-size:13px; white-space:nowrap; color:var(--ink-3); font-weight:600}
+.p-time{font-size:13px; white-space:nowrap; color:var(--ink-3); font-weight:500}
 .dot-sep{width:3.5px; height:3.5px; border-radius:50%; background:var(--ink-3);
   display:inline-block; margin:0 4px; flex:0 0 auto; align-self:center}
-.p-more{margin-left:auto; width:34px;height:30px; display:grid;place-items:center; color:var(--ink-3);
+.p-more{margin-left:auto; width:34px;height:22px; display:grid;place-items:center; color:var(--ink-3);
   transition:transform var(--dur-2) var(--spring), color var(--dur-2) linear}
 .p-more:active{transform:scale(.8); color:var(--ink)}
-.p-body{margin:11px 0 0; font-size:16px; font-weight:600; line-height:1.64; letter-spacing:.005em; word-break:break-word; white-space:pre-wrap}
+.p-body{margin:9px 0 0; font-size:16px; font-weight:600; line-height:1.64; letter-spacing:.005em; word-break:break-word; white-space:pre-wrap}
 .p-full .p-body{padding-left:0}
-.p-indent{padding-left:63px}
+.p-col{flex:1 1 auto; min-width:0}
 .tag{
-  display:inline-block; margin-top:11px;
-  font-size:12.5px; font-weight:800; padding:4.5px 11px; border-radius:8px;
+  display:inline-block; margin-top:9px;
+  font-size:12.5px; font-weight:700; line-height:1.25; padding:4px 11px; border-radius:9px;
 }
-.tag-hitorigoto{background:#FBF0CE;color:#7A6318}
-.tag-soudan{background:#EFE9FB;color:#6A4CA6}
-.tag-zatsudan{background:#E2EFE6;color:#376B48}
-.tag-shitsumon{background:#E3EDF9;color:#2E5C89}
+.tag-hitorigoto{background:#F6F0DC;color:#7B6A42}
+.tag-soudan{background:#EDE9F7;color:#625787}
+.tag-zatsudan{background:#E7F0E8;color:#4E6B54}
+.tag-shitsumon{background:#F5ECE7;color:#87614F}
+.tag-shumi{background:#E6EFF6;color:#4B6075}
 .tag-arch{background:var(--field);color:var(--ink-3)}
-.p-foot{display:flex; align-items:center; gap:22px; margin-top:13px}
+.p-foot{display:flex; align-items:center; gap:22px; margin-top:9px}
 .act{
   display:inline-flex; align-items:center; gap:8px;
   font-size:14px; font-weight:700; color:var(--ink-3);
@@ -431,7 +453,9 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .prof .av{margin:0 auto 14px; box-shadow:0 6px 22px rgba(0,0,0,.08); animation:avIn 380ms var(--spring) both}
 .prof.noanim .av{animation:none}
 @keyframes avIn{from{transform:scale(.7);opacity:0}to{transform:none;opacity:1}}
-.prof h2{margin:0; font-size:23px; font-weight:800; letter-spacing:-.02em}
+.prof h2{margin:0; font-size:23px; font-weight:800; letter-spacing:-.02em;
+  display:flex; align-items:center; justify-content:center; gap:8px}
+.prof h2 .gtag{width:22px;height:22px;font-size:14px}
 .prof .handle{margin:2px 0 0; font-size:14px; color:var(--ink-3); font-weight:600}
 .pill-official{
   display:inline-flex; align-items:center; gap:5px; margin-top:11px;
@@ -517,7 +541,8 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   background:var(--field); border-radius:13px; padding:10px 13px;
   transition:background-color var(--dur-3) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
 }
-.searchbar:focus-within{box-shadow:0 0 0 2px var(--accent)}
+.searchbar:focus-within{box-shadow:inset 0 0 0 1.5px var(--accent)}
+.searchbar input:focus-visible{outline:none}
 .searchbar input{flex:1; font-size:14.5px; font-weight:600; min-width:0}
 .searchbar input::placeholder{color:var(--ink-3)}
 .sec-h{padding:16px 18px 8px; font-size:12px; font-weight:800; color:var(--ink-3); letter-spacing:.04em}
@@ -811,6 +836,17 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .hint{margin:8px 0 0; text-align:center; font-size:11.5px; color:var(--ink-3); font-weight:600}
 .pick-h{margin:22px 0 12px; text-align:center; font-size:14px; font-weight:800}
 .swatches{display:flex; gap:14px; justify-content:center}
+.genderpick{display:flex; gap:10px; justify-content:center}
+.gopt{
+  display:flex; align-items:center; gap:8px;
+  padding:10px 18px; border-radius:999px;
+  border:1.5px solid var(--line); color:var(--ink-2);
+  font-size:14px; font-weight:700;
+  transition:transform var(--dur-2) var(--spring), border-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out), background-color var(--dur-2) var(--ease-out);
+}
+.gopt:active{transform:scale(.93)}
+.gopt.on{border-color:var(--accent); background:var(--field); color:var(--ink)}
+.g-secret{background:var(--field); color:var(--ink-3)}
 .sw-dot{
   width:44px;height:44px;border-radius:50%; position:relative;
   display:grid;place-items:center; color:#fff;
@@ -959,7 +995,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.19';
+const APP_VER='2.23';
 
 const $  = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -970,7 +1006,7 @@ const haptic = (ms=8)=>{try{navigator.vibrate&&navigator.vibrate(ms)}catch(e){}}
 
 /* ---------- icons ---------- */
 const I = {
-  search:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>',
+  search:'<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>',
   gear:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 00.33 1.76l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.6 1.6 0 00-1.76-.33 1.6 1.6 0 00-1 1.47V21a2 2 0 11-4 0v-.1A1.6 1.6 0 008.1 19.4a1.6 1.6 0 00-1.76.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.6 1.6 0 004.6 15a1.6 1.6 0 00-1.47-1H3a2 2 0 110-4h.1A1.6 1.6 0 004.6 9a1.6 1.6 0 00-.33-1.76l-.06-.06a2 2 0 112.83-2.83l.06.06A1.6 1.6 0 009 4.6a1.6 1.6 0 001-1.47V3a2 2 0 114 0v.1a1.6 1.6 0 001 1.47 1.6 1.6 0 001.76-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.6 1.6 0 0019.4 9v0a1.6 1.6 0 001.47 1H21a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1z"/></svg>',
   pencil:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16.6 3.6a2.1 2.1 0 013 3L7.5 18.7l-4 1 1-4z"/></svg>',
   home:'<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M3.5 10.6L12 4l8.5 6.6V20a1 1 0 01-1 1h-15a1 1 0 01-1-1z"/><path d="M9.7 21v-6.2a1 1 0 011-1h2.6a1 1 0 011 1V21"/></svg>',
@@ -1000,6 +1036,7 @@ const I = {
   info:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11.2v5M12 7.9h.01"/></svg>',
   close:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   pin:'<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M14.5 2.5l7 7-2.1 2.1-1.4-.5-3.2 3.2.6 3.6-1.8 1.8-4-4L4 21l-.8-.8 5.3-5.6-4-4L6.3 8.8l3.6.6L13.1 6l-.5-1.4z"/></svg>',
+  lockS:'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"><rect x="4.6" y="10.4" width="14.8" height="10" rx="2.8"/><path d="M8.2 10.2V7.8a3.8 3.8 0 017.6 0v2.4"/></svg>',
   plusS:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
 };
 
@@ -1047,6 +1084,18 @@ function bannerCSS(u){
       linear-gradient(148deg, ${c.bg} 0%, ${c.body}55 100%)`;
 }
 
+const GENDERS={
+  male  :{label:'男',   sym:'♂', cls:'g-male'},
+  female:{label:'女',   sym:'♀', cls:'g-female'},
+  secret:{label:'秘密', sym:'',  cls:'g-secret'}
+};
+/* 秘密 deliberately renders nothing — that is what keeping it private means */
+function genderTag(u){
+  const g=u && GENDERS[u.gender];
+  if(!g || !g.sym) return '';
+  return `<span class="gtag ${g.cls}" title="${g.label}" aria-label="${g.label}">${g.sym}</span>`;
+}
+
 /* the small chip shown after a display name */
 function accountTag(u){
   if(!u) return '';
@@ -1072,10 +1121,15 @@ const TAGS = {
   hitorigoto:{label:'ひとりごと', cls:'tag-hitorigoto'},
   soudan    :{label:'相談',       cls:'tag-soudan'},
   zatsudan  :{label:'雑談',       cls:'tag-zatsudan'},
+  shumi     :{label:'趣味',       cls:'tag-shumi'},
   shitsumon :{label:'質問',       cls:'tag-shitsumon'}
 };
 
 /* ---------- state ---------- */
+/* a brand-new account: no handle chosen yet, colour drawn at random */
+const FRESH_HANDLE = 'u' + Math.random().toString(36).slice(2,9);
+const FRESH_AV = Object.keys(AV_COLORS)[Math.floor(Math.random()*Object.keys(AV_COLORS).length)];
+
 const now = Date.now();
 const S = {
   theme:'light',
@@ -1087,12 +1141,12 @@ const S = {
   blocked:[],          /* user ids — their posts vanish entirely */
   muted:[],            /* user ids — quieter, but still reachable */
   users:{
-    me  :{id:'me', name:'HIKAKIN', handle:'hikakinjp', bio:'ぶんぶん', av:'plum', posts:0, replies:0, talks:1},
+    me  :{id:'me', name:'妖精さん', handle:FRESH_HANDLE, bio:'', av:FRESH_AV, gender:'secret', posts:0, replies:0, talks:0},
     bot :{id:'bot', name:'iroha Bot', handle:'iroha_official', bio:'irohaの公式Botです。\n会話のきっかけになる話題を届けます。', av:'stone', bot:true, official:true, posts:31, replies:0, talks:1, fav:false},
-    nagi:{id:'nagi', name:'なぎ', handle:'nagi_0000', bio:'夜のほうが言葉が出てくる。', av:'slate', demo:true, posts:12, replies:8, talks:0, fav:false},
-    koto:{id:'koto', name:'ことは', handle:'kotoha_pon', bio:'たのしいことを集めています。', av:'amber', demo:true, posts:24, replies:19, talks:0, fav:false},
-    rui :{id:'rui', name:'るい', handle:'rui_room', bio:'気になったことはだいたい聞きます。', av:'moss', demo:true, posts:17, replies:22, talks:0, fav:false},
-    mio :{id:'mio', name:'みお', handle:'mio_note', bio:'music / coffee / 散歩', av:'clay', demo:true, posts:9, replies:6, talks:0, fav:false}
+    nagi:{id:'nagi', gender:'secret', name:'なぎ', handle:'nagi_0000', bio:'夜のほうが言葉が出てくる。', av:'slate', demo:true, posts:12, replies:8, talks:0, fav:false},
+    koto:{id:'koto', gender:'female', name:'ことは', handle:'kotoha_pon', bio:'たのしいことを集めています。', av:'amber', demo:true, posts:24, replies:19, talks:0, fav:false},
+    rui :{id:'rui', gender:'male', name:'るい', handle:'rui_room', bio:'気になったことはだいたい聞きます。', av:'moss', demo:true, posts:17, replies:22, talks:0, fav:false},
+    mio :{id:'mio', gender:'female', name:'みお', handle:'mio_note', bio:'music / coffee / 散歩', av:'clay', demo:true, posts:9, replies:6, talks:0, fav:false}
   },
   DEMOS:['nagi','koto','rui','mio'],
   posts:[
@@ -1108,24 +1162,8 @@ const S = {
     {id:'d3', u:'rui', t:'みんなが最近やめてよかったことって何ですか？ 参考にしたい。', tag:'shitsumon', ts:now-4*HOUR, likes:3, replies:0, liked:false, req:false, rep:[], arch:false},
     {id:'d4', u:'mio', t:'散歩中に流す曲を探しています。テンポ遅めがすき。', tag:'zatsudan', ts:now-5*HOUR, likes:5, replies:1, liked:false, req:false, rep:[], arch:false}
   ],
-  notes:{
-    like:[{id:'n1', u:'bot', p:'p1', t:'iroha Botがあなたの投稿にいいねしました', s:'「猫にゃう」', ts:now-8*HOUR}],
-    reply:[
-      {id:'n2', u:'bot', p:'p1', t:'iroha Botがあなたの投稿に返信しました', s:'いいですね。似た気持ちの人もいそうです。', ts:now-8*HOUR},
-      {id:'n3', u:'bot', p:'p2', t:'iroha Botが返信しました', s:'いいですね。似た気持ちの人もいそうです。', ts:now-8*HOUR}
-    ]
-  },
-  chats:[
-    {id:'c1', u:'bot', unread:3, ts:now-4*MIN,
-     msgs:[
-       {me:false, t:'さっきの投稿、気になっていました。今日はどんな一日でしたか？', ts:now-9*HOUR},
-       {me:false, t:'返信はいつでも大丈夫です。ゆっくり話そう。',              ts:now-8*HOUR-25*MIN},
-       {me:false, t:'さっきの投稿、気になっていました。今日はどんな一日でしたか？', ts:now-7*HOUR},
-       {me:false, t:'さっきの投稿、気になっていました。今日はどんな一日でしたか？', ts:now-40*MIN},
-       {me:false, t:'さっきの投稿、気になっていました。今日はどんな一日でしたか？', ts:now-8*MIN},
-       {me:false, t:'さっきの投稿、気になっていました。今日はどんな一日でしたか？', ts:now-4*MIN}
-     ]}
-  ]
+  notes:{ like:[], reply:[] },
+  chats:[]
 };
 const REPLIES = [
   'いいですね。似た気持ちの人もいそうです。',
@@ -1291,14 +1329,19 @@ const navMorph=(()=>{
     const w=wrap.getBoundingClientRect(), n=nav.getBoundingClientRect(), r=slot.getBoundingClientRect();
     if(!w.width || !n.width) return false;
     baseX = r.left - w.left + r.width/2 - FAB_R;
-    /* park the "+" centre on the left edge of a card's "…" button */
-    const more=document.querySelector('.p-more');
-    const card=document.querySelector('.card');
-    const targetCx = more ? more.getBoundingClientRect().left - w.left : w.width - 66;
-    const cardR = card ? card.getBoundingClientRect().right - w.left : w.width - 16;
-    dx = (targetCx - FAB_R) - baseX;
-    /* and keep even the overshoot clear of the card's right edge */
-    dx = Math.min(dx, (cardR - 8 - FAB_D - baseX)/PEAK_TX);
+    /* measured off the reference photo: the "+" settles with its right edge
+       8px inside the card's right edge */
+    /* derive the card's right edge from the scroller's padding — reading a
+       card directly can catch it mid entry-animation, where scale() lies */
+    const sc=document.querySelector('#feedScroll');
+    let cardR = w.width - 12;
+    if(sc){
+      const sb=sc.getBoundingClientRect();
+      cardR = (sb.right - w.left) - parseFloat(getComputedStyle(sc).paddingRight || 12);
+    }
+    dx = (cardR - 8 - FAB_D) - baseX;
+    /* the damped overshoot still has to stay on screen */
+    dx = Math.min(dx, (w.width - 6 - FAB_D - baseX)/PEAK_TX);
     slotCx = r.left - n.left + r.width/2;
     nav.style.transformOrigin = slotCx.toFixed(1)+'px 50%';
     icons = $$('#nav .navbtn').map((elm,i)=>{
@@ -1472,6 +1515,7 @@ const FILTERS=[
   {id:'osusume',  label:'おすすめ'},
   {id:'zatsudan', label:'雑談'},
   {id:'soudan',   label:'相談'},
+  {id:'shumi',    label:'趣味'},
   {id:'shitsumon',label:'質問'}
 ];
 
@@ -1522,18 +1566,15 @@ function postCard(p, opts={}){
   const tag=TAGS[p.tag];
   return `<article class="card tap stagger" data-post="${p.id}">
     <div class="p-head">
-      <button class="avbtn" data-user="${u.id}" style="display:contents">${uav(p.u,50)}</button>
-      <div class="p-meta">
+      <button class="avbtn" data-user="${u.id}" style="display:contents">${uav(p.u,48)}</button>
+      <div class="p-col">
         <div class="p-line">
           <button class="p-name" data-user="${u.id}">${esc(u.name)}</button>
-          ${accountTag(u)}
+          ${genderTag(u)}${accountTag(u)}
           <span class="dot-sep"></span>
           <span class="p-time" data-ts="${p.ts}">${p.edited?'編集済み・':''}${ago(p.ts)}</span>
+          <button class="p-more" data-more="${p.id}" aria-label="その他">${I.dots}</button>
         </div>
-      </div>
-      <button class="p-more" data-more="${p.id}" aria-label="その他">${I.dots}</button>
-    </div>
-    <div class="p-indent">
       <p class="p-body">${esc(p.t)}</p>
       ${tag?`<span class="tag ${tag.cls}">${tag.label}</span>`:''}
       <div class="p-foot">
@@ -1542,6 +1583,7 @@ function postCard(p, opts={}){
           <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span><span class="num">${p.likes}</span>
         </button>
         ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>`}
+      </div>
       </div>
     </div>
   </article>`;
@@ -1572,6 +1614,7 @@ function renderFeed(animate){
          <p>${S.filter==='fav'?'プロフィールからお気に入りに登録すると、ここに投稿がまとまります':'最初のひとことを置いてみませんか'}</p></div>`;
     wirePostActions(feed);
     revealAll(feed,0,q);
+    if(typeof navMorph!=='undefined') navMorph.refresh();
   }
 }
 
@@ -1718,7 +1761,7 @@ function renderChatList(){
     return `<div class="row stagger" data-chat="${c.id}">
       <button class="avhit" data-user="${c.u}" aria-label="${esc(u.name)}のプロフィール">${uav(c.u,52)}</button>
       <div class="row-main">
-        <div class="row-t">${c.pin?`<span class="pinmark">${I.pin}</span>`:''}${esc(u.name)}${accountTag(u)}</div>
+        <div class="row-t">${c.pin?`<span class="pinmark">${I.pin}</span>`:''}${esc(u.name)}${genderTag(u)}${accountTag(u)}</div>
         <div class="row-s">${esc(preview)}</div>
       </div>
       <div class="row-r">
@@ -1767,7 +1810,7 @@ function renderMe(){
     <div class="banner" style="${bannerCSS(u)}"></div>
     <div class="prof under${q?' noanim':''}">
       ${uav(u.id,84)}
-      <h2>${esc(u.name)}</h2>
+      <h2>${esc(u.name)}${genderTag(u)}</h2>
       <p class="handle">@${esc(u.handle)}</p>
       <p class="bio">${esc(u.bio)}</p>
       <div class="prof-actions"><button class="obtn" id="editProf">プロフィールを編集</button></div>
@@ -1927,7 +1970,7 @@ function pushProfile(uid){
       <div class="banner" style="${bannerCSS(u)}"></div>
       <div class="prof under">
         ${uav(u.id,84)}
-        <h2>${esc(u.name)}</h2>
+        <h2>${esc(u.name)}${genderTag(u)}</h2>
         <p class="handle">@${esc(u.handle)}</p>
         ${u.official?`<span class="pill-official">${I.bot}iroha公式BOT</span>`:u.demo?`<span class="badge-demo" style="margin-top:11px">DEMO アカウント</span>`:''}
         <p class="bio">${esc(u.bio)}</p>
@@ -2103,7 +2146,7 @@ function pushPostDetail(pid){
         <div class="pd-head">
           <button data-user="${u.id}" style="display:contents">${uav(p.u,48)}</button>
           <button class="who" data-user="${u.id}" style="text-align:left">
-            <b>${esc(u.name)}</b><span data-ts="${p.ts}">${ago(p.ts)}</span>
+            <b>${esc(u.name)}${genderTag(u)}</b><span data-ts="${p.ts}">${ago(p.ts)}</span>
           </button>
           ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>`}
         </div>
@@ -2202,7 +2245,7 @@ function pushPostDetail(pid){
       return `<div class="rep${fresh&&i===p.rep.length-1?' fresh':''}" data-rep="${i}">
         <button data-user="${r.u}" style="display:contents">${uav(r.u,36,r.av)}</button>
         <div class="rep-main">
-          <div class="rep-line"><b>${esc(ru.name)}</b>
+          <div class="rep-line"><b>${esc(ru.name)}</b>${genderTag(ru)}
             <span>@${esc(ru.handle)}</span><span class="dot-sep"></span>
             <span data-ts="${r.ts}">${ago(r.ts)}</span></div>
           <p class="rep-body">${r.to&&S.users[r.to]?`<span class="mention">@${esc(S.users[r.to].handle)}</span> `:''}${esc(r.t)}</p>
@@ -2338,7 +2381,8 @@ const SWATCHES=['amber','slate','moss','plum','stone'];
 const SW_HEX={amber:'#E8B93C', slate:'#4B7093', moss:'#5A9163', plum:'#7C4FBF', stone:'#84807A'};
 function pushEdit(){
   const u=S.users.me;
-  const draft={name:u.name, handle:u.handle, bio:u.bio, av:u.av, img:u.img||null, banner:u.banner||null};
+  const draft={name:u.name, handle:u.handle, bio:u.bio, av:u.av, img:u.img||null,
+               banner:u.banner||null, gender:u.gender||'secret'};
   const s=el(`<section class="screen">
     <header class="navbar">
       <div class="side" style="justify-content:flex-start"><button class="txtbtn" id="edCancel">キャンセル</button></div>
@@ -2365,6 +2409,13 @@ function pushEdit(){
       <div class="swatches" id="edSw">
         ${SWATCHES.map(k=>`<button class="sw-dot${k===draft.av?' on':''}" data-c="${k}" style="background:${SW_HEX[k]}" aria-label="${k}">${I.check}</button>`).join('')}
       </div>
+      <h4 class="pick-h">性別</h4>
+      <div class="genderpick" id="edGender">
+        ${Object.entries(GENDERS).map(([k,v])=>`<button class="gopt${k===draft.gender?' on':''}" data-g="${k}">
+          ${v.sym?`<span class="gtag ${v.cls}">${v.sym}</span>`:`<span class="gtag g-secret">${I.lockS}</span>`}
+          <span>${v.label}</span></button>`).join('')}
+      </div>
+      <p class="hint">「秘密」を選ぶと、どこにも表示されません</p>
       <div class="field"><label>表示名</label>
         <div class="fin"><input id="edName" maxlength="20" value="${esc(draft.name)}"></div>
         <span class="cnt" id="cName">${[...draft.name].length}/20</span></div>
@@ -2408,6 +2459,10 @@ function pushEdit(){
       b.style.transition='opacity 320ms ease'; b.style.opacity='1'; });
     $('#edBanDel',s).style.display = draft.banner?'':'none';
   }
+  $$('.gopt',s).forEach(b=>b.addEventListener('click',()=>{
+    haptic(6); draft.gender=b.dataset.g;
+    $$('.gopt',s).forEach(x=>x.classList.toggle('on',x===b));
+  }));
   $$('.sw-dot',s).forEach(b=>b.addEventListener('click',()=>{
     haptic(7); draft.av=b.dataset.c;
     $$('.sw-dot',s).forEach(x=>x.classList.toggle('on',x===b));
@@ -2426,7 +2481,7 @@ function pushEdit(){
     if(!nm.value.trim()){ toast('表示名を入力してください'); return; }
     if(h.length<3){ toast('ユーザーIDは3文字以上にしてください'); return; }
     u.name=nm.value.trim(); u.handle=h; u.bio=bio.value; u.av=draft.av;
-    u.img=draft.img; u.banner=draft.banner;
+    u.img=draft.img; u.banner=draft.banner; u.gender=draft.gender;
     haptic(12); pop(); toast('プロフィールを更新しました');
   };
   push(s);
@@ -3085,7 +3140,7 @@ const VOICE = {
   }
 };
 
-const DEMO_TAGS=['zatsudan','hitorigoto','soudan','shitsumon'];
+const DEMO_TAGS=['zatsudan','hitorigoto','soudan','shumi','shitsumon'];
 const pick = a => a[Math.floor(Math.random()*a.length)];
 const uid4 = () => Math.random().toString(36).slice(2,8);
 
