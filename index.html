@@ -115,9 +115,9 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   display:flex; flex-direction:column;
   opacity:0; visibility:hidden;
   transform:translate3d(0,10px,0) scale(.994);
-  transition:opacity var(--dur-2) var(--ease-out), transform var(--dur-3) var(--ease-out), visibility 0s linear var(--dur-3);
+  transition:opacity 110ms var(--ease-out), transform 170ms var(--ease-out), visibility 0s linear 170ms;
 }
-.tabpane.on{opacity:1; visibility:visible; transform:none; transition:opacity var(--dur-3) var(--ease-out), transform var(--dur-4) var(--spring-soft), visibility 0s;}
+.tabpane.on{opacity:1; visibility:visible; transform:none; transition:opacity 170ms var(--ease-out), transform 260ms var(--spring-soft), visibility 0s;}
 .tabpane.leaving{transform:translate3d(0,-8px,0) scale(.994)}
 
 /* ---------- header ---------- */
@@ -267,7 +267,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 
 /* entrance stagger */
 .stagger{opacity:0; transform:translate3d(0,16px,0)}
-.stagger.in{animation:riseIn 620ms var(--spring-soft) both}
+.stagger.in{animation:riseIn 330ms var(--spring-soft) both}
 @keyframes riseIn{from{opacity:0;transform:translate3d(0,18px,0) scale(.985)}to{opacity:1;transform:none}}
 
 /* ---------- skeleton ---------- */
@@ -275,7 +275,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 @keyframes shimmer{from{background-position:120% 0}to{background-position:-120% 0}}
 
 /* ---------- empty ---------- */
-.empty{padding:64px 30px; text-align:center; animation:riseIn 560ms var(--spring-soft) both}
+.empty{padding:64px 30px; text-align:center; animation:riseIn 300ms var(--spring-soft) both}
 .empty h3{margin:0 0 8px; font-size:15px; font-weight:800}
 .empty p{margin:0; font-size:13px; color:var(--ink-3); font-weight:600; line-height:1.8}
 
@@ -385,7 +385,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 
 /* ---------- profile ---------- */
 .prof{padding:26px 20px 0; text-align:center}
-.prof .av{margin:0 auto 14px; box-shadow:0 6px 22px rgba(0,0,0,.08); animation:avIn 700ms var(--spring) both}
+.prof .av{margin:0 auto 14px; box-shadow:0 6px 22px rgba(0,0,0,.08); animation:avIn 380ms var(--spring) both}
 .prof.noanim .av{animation:none}
 @keyframes avIn{from{transform:scale(.7);opacity:0}to{transform:none;opacity:1}}
 .prof h2{margin:0; font-size:23px; font-weight:800; letter-spacing:-.02em}
@@ -878,7 +878,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.13';
+const APP_VER='2.15';
 
 const $  = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -1079,7 +1079,7 @@ function revealAll(root, base=0, q=false){
   $$('.stagger', root).forEach((n,i)=>{
     if(q){ n.classList.add('in'); n.style.animation='none';
            n.style.opacity='1'; n.style.transform='none'; return; }
-    n.style.animationDelay = Math.min(base + i*52, 480)+'ms';
+    n.style.animationDelay = Math.min(base + i*26, 240)+'ms';
     io.observe(n);
   });
 }
@@ -1323,7 +1323,7 @@ function goTab(id){
   const prev=PANES[S.tab];
   S.tab=id;
   if(prev){ prev.classList.add('leaving'); prev.classList.remove('on');
-    setTimeout(()=>prev.classList.remove('leaving'),340); }
+    setTimeout(()=>prev.classList.remove('leaving'),180); }
   const pane=PANES[id]||buildPane(id);
   raf(()=>pane.classList.add('on'));
   refreshPane(id);
@@ -1443,9 +1443,9 @@ function renderFeed(animate){
   const q=QUIET;
   const list=visiblePosts();
   if(animate){
-    feed.style.transition='opacity 140ms ease, transform 180ms ease';
+    feed.style.transition='opacity 85ms ease, transform 115ms ease';
     feed.style.opacity='0'; feed.style.transform='translate3d(0,8px,0)';
-    setTimeout(()=>{ paint(); feed.style.opacity='1'; feed.style.transform='none'; },150);
+    setTimeout(()=>{ paint(); feed.style.opacity='1'; feed.style.transform='none'; },90);
   } else paint();
 
   function paint(){
@@ -1555,9 +1555,9 @@ function renderNotes(animate){
     };
   };
   if(animate){
-    host.style.transition='opacity 130ms ease, transform 170ms ease';
+    host.style.transition='opacity 80ms ease, transform 110ms ease';
     host.style.opacity='0'; host.style.transform='translate3d(0,8px,0)';
-    setTimeout(()=>{ paint(); host.style.opacity='1'; host.style.transform='none'; },140);
+    setTimeout(()=>{ paint(); host.style.opacity='1'; host.style.transform='none'; },85);
   } else paint();
 }
 
@@ -1574,6 +1574,7 @@ function paneChat(p){
   wireScroll($('#chatScroll',p), $('#chatBar',p));
   renderChatList();
 }
+let chatSig=null;
 function renderChatList(){
   const host=$('#chatList'); if(!host) return;
   const q=QUIET;
@@ -1583,6 +1584,9 @@ function renderChatList(){
     const u=S.users[c.u];
     return u.name.includes(qq) || c.msgs.some(m=>m.t.includes(qq));
   });
+  const sig=list.map(c=>c.id+':'+c.unread+':'+c.msgs.length).join(',');
+  if(sig===chatSig && host.childElementCount) return;
+  chatSig=sig;
   host.innerHTML = list.length ? list.map(c=>{
     const u=S.users[c.u], last=c.msgs[c.msgs.length-1];
     return `<div class="row stagger" data-chat="${c.id}">
@@ -1669,9 +1673,9 @@ function renderMe(){
       box.onclick=onMiniClick;
     };
     if(still){ box.style.transition='none'; fill(); return; }
-    box.style.transition='opacity 130ms ease, transform 170ms ease';
+    box.style.transition='opacity 80ms ease, transform 110ms ease';
     box.style.opacity='0'; box.style.transform='translate3d(0,8px,0)';
-    setTimeout(fill,140);
+    setTimeout(fill,85);
   }
 }
 function moveU(tabs, ind, animate=true){
@@ -1782,7 +1786,7 @@ function pushProfile(uid){
   if(uid==='me'){ goTab('me'); return; }
   profTab='posts';
   const s=screenShell('プロフィール');
-  s.dataset.user=uid;
+  s.dataset.owner=uid;
   const body=s.querySelector('.js-scroll');
   const paint=()=>{
     const mine=S.posts.filter(p=>p.u===uid);
@@ -1832,14 +1836,14 @@ function pushProfile(uid){
     function paintList(){
       const box=$('#pfList',body);
       const arr = profTab==='posts' ? mine : [];
-      box.style.transition='opacity 130ms ease, transform 170ms ease';
+      box.style.transition='opacity 80ms ease, transform 110ms ease';
       box.style.opacity='0'; box.style.transform='translate3d(0,8px,0)';
       setTimeout(()=>{
         box.innerHTML = arr.length ? arr.map(p=>miniPost(p)).join('')
           : `<div class="empty"><h3>${profTab==='posts'?'公開中の投稿はありません':'公開中の返信はありません'}</h3><p>公開されると、ここに並びます</p></div>`;
         revealAll(box); box.style.opacity='1'; box.style.transform='none';
         box.onclick=onMiniClick;
-      },140);
+      },85);
     }
   };
   paint();
@@ -1946,7 +1950,7 @@ function pushPostDetail(pid){
   const p=S.posts.find(x=>x.id===pid); if(!p) return;
   const u=S.users[p.u], me=S.users.me;
 
-  const s=el(`<section class="screen" data-post="${p.id}" data-user="${p.u}">
+  const s=el(`<section class="screen" data-post="${p.id}" data-owner="${p.u}">
     <header class="navbar">
       <div class="side"><button class="iconbtn js-back" aria-label="戻る">${I.back}</button></div>
       <div class="ttl">投稿</div>
@@ -1985,8 +1989,10 @@ function pushPostDetail(pid){
   wireScroll(s.querySelector('.js-scroll'), s.querySelector('.navbar'));
   $('#pdMore',s).onclick=()=>openPostMenu(p.id);
   s.addEventListener('click',e=>{
-    const us=e.target.closest('[data-user]'); if(us){ pushProfile(us.dataset.user); return; }
-    const tk=e.target.closest('[data-talk]'); if(tk){ openRequest(tk.dataset.talk); }
+    const us=e.target.closest('button[data-user]');
+    if(us){ pushProfile(us.dataset.user); return; }
+    const tk=e.target.closest('button[data-talk]');
+    if(tk){ openRequest(tk.dataset.talk); }
   });
 
   /* like — kept in sync with the feed card */
@@ -2279,10 +2285,15 @@ function pushSearch(){
   s.querySelector('.js-back').onclick=()=>{haptic(5);pop();};
   wireScroll(s.querySelector('.js-scroll'), s.querySelector('.navbar'));
   const list=$('#sqList',s), head=$('#sqHead',s), q=$('#sq',s);
+  let lastSig=null;
   const paint=()=>{
     const v=q.value.trim();
     head.textContent = v ? `「${v}」の検索結果` : '最近の投稿';
     const arr = v ? S.posts.filter(p=>p.t.includes(v)||S.users[p.u].name.includes(v)) : S.posts.slice(0,6);
+    /* typing on through a dead end shouldn't replay the empty state */
+    const sig = arr.map(p=>p.id).join(',');
+    if(sig===lastSig) return;
+    lastSig=sig;
     list.innerHTML = arr.length ? arr.map(p=>postCard(p)).join('')
       : `<div class="empty"><h3>見つかりませんでした</h3><p>別のことばで探してみてください</p></div>`;
     list.onclick=onPostClick;
@@ -2650,7 +2661,7 @@ function confirmBlock(uid){
       haptic(12);
       /* leave any screen that belongs to the blocked person */
       for(let i=stackEls.length-1;i>=0;i--){
-        if(stackEls[i].dataset.user===uid){ while(stackEls.length>i) pop(); break; }
+        if(stackEls[i].dataset.owner===uid){ while(stackEls.length>i) pop(); break; }
       }
       refreshInPlace(); syncNavBadges();
       toast(`${u.name}をブロックしました`);
