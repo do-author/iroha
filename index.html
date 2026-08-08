@@ -16,7 +16,7 @@
 
   --bg:#FAF8F4;
   --bg-elev:#FFFFFF;
-  --bar:rgba(250,248,244,.62);
+  --bar:rgba(250,248,244,.52);
   --card:#FFFFFF;
   --card-2:#F5F2EC;
   --line:#EDE8E0;
@@ -25,7 +25,8 @@
   --ink-2:#5C574F;
   --ink-3:#A6A099;
   --field:#F3F0EA;
-  --nav:rgba(255,255,255,.60);
+  --nav:rgba(255,255,255,.48);
+  --nav-ring:rgba(252,251,248,.9);
   --nav-pill:#1A1917;
   --nav-pill-ink:var(--accent);
   --shadow-card:0 1px 2px rgba(28,24,16,.04);
@@ -33,7 +34,7 @@
   --shadow-pop:0 18px 48px rgba(30,26,16,.20);
   --glow:none;
   --skel:linear-gradient(90deg,#F0ECE5 0%,#F8F5F0 40%,#F0ECE5 80%);
-  --glass:saturate(185%) blur(30px);
+  --glass:saturate(200%) blur(38px);
   --glass-edge:rgba(255,255,255,.72);
   --glass-line:rgba(120,110,90,.14);
   --toast-bg:#1A1917; --toast-ink:#fff;
@@ -54,7 +55,7 @@
 
   --bg:#0B0B0B;
   --bg-elev:#141414;
-  --bar:rgba(13,13,13,.55);
+  --bar:rgba(13,13,13,.44);
   --card:#151414;
   --card-2:#1D1C1A;
   --line:#272524;
@@ -63,7 +64,8 @@
   --ink-2:#B4AEA6;
   --ink-3:#7E7972;
   --field:#1B1A18;
-  --nav:rgba(28,27,25,.55);
+  --nav:rgba(28,27,25,.44);
+  --nav-ring:rgba(30,29,27,.92);
   --nav-pill:#F3EFE6;
   --nav-pill-ink:#705816;
   --shadow-card:0 1px 2px rgba(0,0,0,.4);
@@ -71,7 +73,7 @@
   --shadow-pop:0 22px 60px rgba(0,0,0,.7);
   --glow:0 0 22px rgba(251,211,77,.34);
   --skel:linear-gradient(90deg,#1A1918 0%,#232120 40%,#1A1918 80%);
-  --glass:saturate(180%) blur(30px);
+  --glass:saturate(190%) blur(38px);
   --glass-edge:rgba(255,255,255,.10);
   --glass-line:rgba(255,255,255,.10);
   --toast-bg:#F3EFE6; --toast-ink:#171614;
@@ -227,6 +229,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .tag-soudan{background:#EFE9FB;color:#6A4CA6}
 .tag-zatsudan{background:#E2EFE6;color:#376B48}
 .tag-shitsumon{background:#E3EDF9;color:#2E5C89}
+.tag-arch{background:var(--field);color:var(--ink-3)}
 .p-foot{display:flex; align-items:center; gap:16px; margin-top:11px}
 .act{
   display:inline-flex; align-items:center; gap:7px;
@@ -318,15 +321,21 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   box-shadow:0 0 0 2px rgba(255,255,255,.55);
   animation:bdgIn 520ms var(--spring) both;
 }
+/* unread notifications read as a plain dot, not a count */
+.navbtn .bdg.dot{
+  top:18px; right:calc(50% - 16px);
+  min-width:0; width:11px; height:11px; padding:0; border-radius:50%;
+  background:var(--accent); box-shadow:0 0 0 2.5px var(--nav-ring), 0 0 8px rgba(247,206,69,.55);
+}
 @keyframes bdgIn{from{transform:scale(0)}to{transform:none}}
 .fabslot{display:grid;place-items:center; position:relative; z-index:2}
 .fab{
-  position:absolute; top:-5px; left:0; width:56px;height:56px;
+  position:absolute; top:-8px; left:0; width:62px;height:62px;
   display:grid;place-items:center; pointer-events:auto; z-index:5;
   will-change:transform;
 }
 .fab-core{
-  width:56px;height:56px;border-radius:50%;
+  width:62px;height:62px;border-radius:50%;
   background:radial-gradient(circle at 36% 30%,#FFE27E,var(--accent) 60%,var(--accent-deep));
   color:var(--accent-ink); display:grid;place-items:center;
   box-shadow:0 6px 18px rgba(228,180,28,.42), var(--glow);
@@ -377,6 +386,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 /* ---------- profile ---------- */
 .prof{padding:26px 20px 0; text-align:center}
 .prof .av{margin:0 auto 14px; box-shadow:0 6px 22px rgba(0,0,0,.08); animation:avIn 700ms var(--spring) both}
+.prof.noanim .av{animation:none}
 @keyframes avIn{from{transform:scale(.7);opacity:0}to{transform:none;opacity:1}}
 .prof h2{margin:0; font-size:23px; font-weight:800; letter-spacing:-.02em}
 .prof .handle{margin:2px 0 0; font-size:14px; color:var(--ink-3); font-weight:600}
@@ -781,6 +791,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   transition:transform 420ms var(--spring), opacity var(--dur-2) linear;
 }
 .bigbtn:active{transform:scale(.965)}
+.bigbtn.danger{background:#E0245E; color:#fff; box-shadow:0 6px 18px rgba(224,36,94,.34)}
 .textlink{display:block; width:100%; margin-top:6px; padding:14px; font-size:14.5px; font-weight:700; color:var(--ink-2); text-align:center;
   transition:transform var(--dur-2) var(--spring)}
 .textlink:active{transform:scale(.95)}
@@ -867,7 +878,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.8';
+const APP_VER='2.13';
 
 const $  = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -981,24 +992,27 @@ const S = {
   filter:'osusume',
   media:'safety',
   quiet:false,
+  noteSeen:new Set(),   /* notification ids already looked at */
+  blocked:[],          /* user ids — their posts vanish entirely */
+  muted:[],            /* user ids — quieter, but still reachable */
   users:{
     me:{id:'me', name:'HIKAKIN', handle:'hikakinjp', bio:'ぶんぶん', av:'plum', bot:false, posts:0, replies:0, talks:1},
     bot:{id:'bot', name:'iroha Bot', handle:'iroha_official', bio:'irohaの公式Botです。\n会話のきっかけになる話題を届けます。', av:'stone', bot:true, official:true, posts:31, replies:0, talks:1, fav:false}
   },
   posts:[
-    {id:'p1', u:'bot', av:'stone', t:'寝る前に考えがちなことってある？ まとまってなくても大丈夫です。', tag:'hitorigoto', ts:now-30*1000,  likes:0, replies:0, liked:false, req:false, rep:[]},
-    {id:'p2', u:'bot', av:'plum',  t:'いま少しだけ誰かに聞いてほしいこと、ここに置いていきませんか？', tag:'soudan', ts:now-60*MIN, likes:0, replies:0, liked:false, req:false, rep:[]},
-    {id:'p3', u:'bot', av:'mist',  t:'最近、時間を忘れて夢中になったものを教えてください。', tag:'zatsudan', ts:now-2*HOUR, likes:0, replies:0, liked:false, req:false, rep:[]},
-    {id:'p4', u:'bot', av:'moss',  t:'今週が終わったら、自分にどんなご褒美をあげたい？', tag:'zatsudan', ts:now-3*HOUR, likes:0, replies:0, liked:false, req:false, rep:[]},
-    {id:'p5', u:'bot', av:'amber', t:'今日いちばん小さくても、うれしかったことは何？', tag:'shitsumon', ts:now-6*HOUR, likes:0, replies:0, liked:false, req:false, rep:[]},
-    {id:'p6', u:'bot', av:'clay',  t:'うまく言葉にならない気持ちも、そのままで置いていって大丈夫です。', tag:'hitorigoto', ts:now-7*HOUR, likes:0, replies:0, liked:false, req:false, rep:[]},
-    {id:'p7', u:'bot', av:'slate', t:'誰かに「ありがとう」と伝えたいこと、ありますか？', tag:'soudan', ts:now-9*HOUR, likes:0, replies:0, liked:false, req:false, rep:[]}
+    {id:'p1', u:'bot', av:'stone', t:'寝る前に考えがちなことってある？ まとまってなくても大丈夫です。', tag:'hitorigoto', ts:now-30*1000,  likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
+    {id:'p2', u:'bot', av:'plum',  t:'いま少しだけ誰かに聞いてほしいこと、ここに置いていきませんか？', tag:'soudan', ts:now-60*MIN, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
+    {id:'p3', u:'bot', av:'mist',  t:'最近、時間を忘れて夢中になったものを教えてください。', tag:'zatsudan', ts:now-2*HOUR, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
+    {id:'p4', u:'bot', av:'moss',  t:'今週が終わったら、自分にどんなご褒美をあげたい？', tag:'zatsudan', ts:now-3*HOUR, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
+    {id:'p5', u:'bot', av:'amber', t:'今日いちばん小さくても、うれしかったことは何？', tag:'shitsumon', ts:now-6*HOUR, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
+    {id:'p6', u:'bot', av:'clay',  t:'うまく言葉にならない気持ちも、そのままで置いていって大丈夫です。', tag:'hitorigoto', ts:now-7*HOUR, likes:0, replies:0, liked:false, req:false, rep:[], arch:false},
+    {id:'p7', u:'bot', av:'slate', t:'誰かに「ありがとう」と伝えたいこと、ありますか？', tag:'soudan', ts:now-9*HOUR, likes:0, replies:0, liked:false, req:false, rep:[], arch:false}
   ],
   notes:{
-    like:[{id:'n1', av:'amber', t:'iroha Botがあなたの投稿にいいねしました', s:'「猫にゃう」', ts:now-8*HOUR}],
+    like:[{id:'n1', u:'bot', av:'amber', t:'iroha Botがあなたの投稿にいいねしました', s:'「猫にゃう」', ts:now-8*HOUR}],
     reply:[
-      {id:'n2', av:'amber', t:'iroha Botがあなたの投稿に返信しました', s:'いいですね。似た気持ちの人もいそうです。', ts:now-8*HOUR},
-      {id:'n3', av:'amber', t:'iroha Botが返信しました', s:'いいですね。似た気持ちの人もいそうです。', ts:now-8*HOUR}
+      {id:'n2', u:'bot', av:'amber', t:'iroha Botがあなたの投稿に返信しました', s:'いいですね。似た気持ちの人もいそうです。', ts:now-8*HOUR},
+      {id:'n3', u:'bot', av:'amber', t:'iroha Botが返信しました', s:'いいですね。似た気持ちの人もいそうです。', ts:now-8*HOUR}
     ]
   },
   chats:[
@@ -1056,8 +1070,15 @@ const io = new IntersectionObserver((entries)=>{
   entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
 },{rootMargin:'0px 0px -6% 0px', threshold:.02});
 
-function revealAll(root, base=0){
+/* QUIET marks a re-render caused by a data change rather than by the person
+   arriving at a screen — nothing should animate in that case */
+let QUIET=false;
+function quiet(fn){ const p=QUIET; QUIET=true; try{ fn(); } finally { QUIET=p; } }
+
+function revealAll(root, base=0, q=false){
   $$('.stagger', root).forEach((n,i)=>{
+    if(q){ n.classList.add('in'); n.style.animation='none';
+           n.style.opacity='1'; n.style.transform='none'; return; }
     n.style.animationDelay = Math.min(base + i*52, 480)+'ms';
     io.observe(n);
   });
@@ -1091,7 +1112,7 @@ function wireScroll(scroller, bar){
       const dt=Math.max(8, now-lastT); lastT=now;
       const dy=y-last, vel=dy/dt*1000;
       if(bar) bar.classList.toggle('stuck', y>4);
-      if(!$('#stack').children.length && !$('#composeM')){
+      if(S.tab==='home' && !$('#stack').children.length && !$('#composeM')){
         if(y<=48) navMorph.expand(vel);
         else if(dy>2.5) navMorph.collapse(vel);
         else if(dy<-2.5) navMorph.expand(vel);
@@ -1138,9 +1159,14 @@ class Spring{
    NAV MORPH  —  the bar collapses into the FAB, which lifts
    away on an arc.  Travel matches the reference recording.
    ========================================================= */
+const FAB_D=62, FAB_R=FAB_D/2;   /* circle diameter */
+const PEAK_TX=1.05;              /* furthest x the damped overshoot reaches */
+const OUT_DIP=4;                 /* px the FAB sags on the way out */
+const BACK_LIFT=22;              /* px the FAB rises on the way home */
+
 const navMorph=(()=>{
   const sp=new Spring(210, 16.4, 1);
-  let baseX=0, dx=0, ready=false, icons=[], slotCx=0;
+  let baseX=0, dx=0, ready=false, icons=[], slotCx=0, dir=1;
   const cl01=x=>x<0?0:x>1?1:x;
 
   function measure(){
@@ -1148,9 +1174,15 @@ const navMorph=(()=>{
     if(!wrap||!nav||!slot||!fab) return false;
     const w=wrap.getBoundingClientRect(), n=nav.getBoundingClientRect(), r=slot.getBoundingClientRect();
     if(!w.width || !n.width) return false;
-    baseX = r.left - w.left + r.width/2 - 28;
-    /* settle flush to the right edge, on the same 16px gutter the cards use */
-    dx = (w.width - 16 - 56) - baseX;
+    baseX = r.left - w.left + r.width/2 - FAB_R;
+    /* park the "+" centre on the left edge of a card's "…" button */
+    const more=document.querySelector('.p-more');
+    const card=document.querySelector('.card');
+    const targetCx = more ? more.getBoundingClientRect().left - w.left : w.width - 66;
+    const cardR = card ? card.getBoundingClientRect().right - w.left : w.width - 16;
+    dx = (targetCx - FAB_R) - baseX;
+    /* and keep even the overshoot clear of the card's right edge */
+    dx = Math.min(dx, (cardR - 8 - FAB_D - baseX)/PEAK_TX);
     slotCx = r.left - n.left + r.width/2;
     nav.style.transformOrigin = slotCx.toFixed(1)+'px 50%';
     icons = $$('#nav .navbtn').map((elm,i)=>{
@@ -1165,16 +1197,20 @@ const navMorph=(()=>{
     if(!fab||!nav) return;
     const b=cl01(t);
 
-    /* FAB: arc flight + gentle swell tied to how fast it is travelling */
-    const arc   = Math.sin(cl01((t+.2)/1.4)*Math.PI)*-7;
+    /* The reference clip is asymmetric: leaving the bar the FAB tracks a
+       straight line (it only dips a hair), while coming home it swings up
+       through a clear parabola.  bell peaks mid-flight, zero at both ends. */
+    const bell = 4*b*(1-b);
+    const arc  = dir===1 ? bell*OUT_DIP : bell*-BACK_LIFT;
+
     const swell = Math.min(Math.abs(v)*.006, .035);
-    /* sitting on the right gutter, the full overshoot would hit the screen
-       edge — damp it in x only, so the bounce survives without clipping */
+    /* the full overshoot would push past the card edge — damp it in x only,
+       so the bounce survives without the circle running out of room */
     const tx = t<=1 ? t : 1+(t-1)*0.45;
     fab.style.transform =
-      `translate3d(${(baseX+dx*tx).toFixed(2)}px,${(arc-2*b).toFixed(2)}px,0) scale(${(1-.03*b+swell).toFixed(3)})`;
+      `translate3d(${(baseX+dx*tx).toFixed(2)}px,${arc.toFixed(2)}px,0) scale(${(1-.03*b+swell).toFixed(3)})`;
     if(core) core.style.boxShadow =
-      `0 ${(6+10*b).toFixed(1)}px ${(18+16*b).toFixed(1)}px rgba(196,150,10,${(.42+.14*b).toFixed(2)})`;
+      `0 ${(6+10*b).toFixed(1)}px ${(20+16*b).toFixed(1)}px rgba(196,150,10,${(.42+.14*b).toFixed(2)})`;
 
     /* bar: shrinks toward the FAB, sinks, and dissolves */
     nav.style.opacity   = (1-b*1.12).toFixed(3);
@@ -1201,12 +1237,14 @@ const navMorph=(()=>{
     /* fire only on a state change — once settled (or in flight toward the
        same target) further scrolling must not feed the spring again */
     collapse(pxVel=0){ if(!ready || sp.t===1) return;
+      dir=1;
       if(REDUCED){ sp.jump(1); return; }
       sp.set(1, Math.min(Math.max(pxVel/2600,0),1.3)); },
     expand(pxVel=0){ if(!ready || sp.t===0) return;
+      dir=0;
       if(REDUCED){ sp.jump(0); return; }
       sp.set(0, Math.max(Math.min(pxVel/2600,0),-1.3)); },
-    _jump(t){ if(ready) sp.jump(t); },
+    _jump(t,d){ if(!ready) return; if(d!==undefined) dir=d; sp.jump(t); },
     _dbg(){ return {baseX,dx,p:sp.p,t:sp.t,v:sp.v}; }
   };
 })();
@@ -1251,15 +1289,23 @@ function moveNavInd(animate=true){
   if(!animate) requestAnimationFrame(()=>ind.style.transition='');
 }
 
+function allNotes(){ return [...S.notes.like, ...S.notes.reply]; }
+function unseenNotes(){ return allNotes().filter(n=>!S.noteSeen.has(n.id)).length; }
+function markNotesSeen(){ allNotes().forEach(n=>S.noteSeen.add(n.id)); }
+
 function syncNavBadges(){
   $$('#nav .navbtn').forEach(b=>{
     b.classList.toggle('on', b.dataset.tab===S.tab);
+    const dotTab = b.dataset.tab==='bell';
     let n=0;
     if(b.dataset.tab==='chat') n=S.chats.reduce((a,c)=>a+c.unread,0);
+    if(dotTab) n=unseenNotes();
     let bdg=b.querySelector('.bdg');
     if(n>0){
-      if(!bdg) b.appendChild(el(`<span class="bdg">${n}</span>`));      /* animates in once */
-      else if(bdg.textContent!==String(n)) bdg.textContent=n;           /* silent update */
+      if(!bdg){
+        bdg=el(`<span class="bdg${dotTab?' dot':''}">${dotTab?'':n}</span>`);
+        b.appendChild(bdg);                                   /* animates in once */
+      }else if(!dotTab && bdg.textContent!==String(n)) bdg.textContent=n;  /* silent update */
     }else if(bdg) bdg.remove();
   });
 }
@@ -1296,7 +1342,7 @@ function buildPane(id){
 }
 function refreshPane(id){
   const p=PANES[id]; if(!p) return;
-  if(id==='bell') renderNotes();
+  if(id==='bell'){ markNotesSeen(); renderNotes(); syncNavBadges(); }
   if(id==='chat') renderChatList();
   if(id==='me')   renderMe();
   if(id==='home') { /* live */ }
@@ -1345,9 +1391,13 @@ function paneHome(p){
 }
 
 function visiblePosts(){
-  if(S.filter==='fav') return S.posts.filter(p=>S.users[p.u]&&S.users[p.u].fav);
-  if(S.filter==='osusume') return S.posts;
-  return S.posts.filter(p=>p.tag===S.filter);
+  let list=S.posts.filter(p=>
+    !S.blocked.includes(p.u) &&
+    !(p.arch && p.u!=='me')          /* archived posts stay visible only to me */
+  );
+  if(S.filter==='fav') return list.filter(p=>S.users[p.u]&&S.users[p.u].fav);
+  if(S.filter==='osusume') return list.filter(p=>!S.muted.includes(p.u) && !p.arch);
+  return list.filter(p=>p.tag===S.filter);
 }
 
 function postCard(p, opts={}){
@@ -1361,7 +1411,7 @@ function postCard(p, opts={}){
           <button class="p-name" data-user="${u.id}">${esc(u.name)}</button>
           ${u.bot?`<span class="badge-bot">${I.bot}BOT</span>`:''}
           <span class="dot-sep">·</span>
-          <span class="p-time" data-ts="${p.ts}">${ago(p.ts)}</span>
+          <span class="p-time" data-ts="${p.ts}">${p.edited?'編集済み・':''}${ago(p.ts)}</span>
         </div>
       </div>
       <button class="p-more" data-more="${p.id}" aria-label="その他">${I.dots}</button>
@@ -1390,6 +1440,7 @@ function burstDots(){
 
 function renderFeed(animate){
   const feed=$('#feed'); if(!feed) return;
+  const q=QUIET;
   const list=visiblePosts();
   if(animate){
     feed.style.transition='opacity 140ms ease, transform 180ms ease';
@@ -1403,7 +1454,7 @@ function renderFeed(animate){
       : `<div class="empty"><h3>${S.filter==='fav'?'お気に入りの投稿はまだありません':'まだ投稿がありません'}</h3>
          <p>${S.filter==='fav'?'プロフィールからお気に入りに登録すると、ここに投稿がまとまります':'最初のひとことを置いてみませんか'}</p></div>`;
     wirePostActions(feed);
-    revealAll(feed);
+    revealAll(feed,0,q);
   }
 }
 
@@ -1475,7 +1526,16 @@ function moveSeg(seg, ind, animate=true){
 }
 function renderNotes(animate){
   const host=$('#noteList'); if(!host) return;
+  const q=QUIET;
   const list=S.notes[noteSeg];
+  const seg=$('#noteSeg');
+  if(seg){
+    const l=seg.querySelector('[data-seg="like"] small'),
+          r=seg.querySelector('[data-seg="reply"] small');
+    if(l) l.textContent=S.notes.like.length;
+    if(r) r.textContent=S.notes.reply.length;
+    raf(()=>moveSeg(seg,$('#noteInd')));   /* widths change with the numbers */
+  }
   const paint=()=>{
     host.innerHTML = list.length ? list.map(n=>`
       <div class="row stagger">
@@ -1484,11 +1544,15 @@ function renderNotes(animate){
           <div class="row-t">${esc(n.t)}</div>
           <div class="row-s">${esc(n.s)}・${ago(n.ts)}</div>
         </div>
-        <button class="p-more" aria-label="その他">${I.dots}</button>
+        <button class="p-more" data-note="${n.id}" aria-label="その他">${I.dots}</button>
       </div>`).join('')
       : `<div class="empty"><h3>お知らせはまだありません</h3><p>いいねや返信が届くと、ここに表示されます</p></div>`;
-    revealAll(host);
+    revealAll(host,0,q);
     $$('.row',host).forEach(r=>r.addEventListener('pointerdown',e=>rippleAt(r,e)));
+    host.onclick=e=>{
+      const b=e.target.closest('[data-note]');
+      if(b){ e.stopPropagation(); openNoteMenu(b.dataset.note); }
+    };
   };
   if(animate){
     host.style.transition='opacity 130ms ease, transform 170ms ease';
@@ -1512,11 +1576,12 @@ function paneChat(p){
 }
 function renderChatList(){
   const host=$('#chatList'); if(!host) return;
-  const q=($('#chatQ')?.value||'').trim();
+  const q=QUIET;
+  const qq=($('#chatQ')?.value||'').trim();
   const list=S.chats.filter(c=>{
-    if(!q) return true;
+    if(!qq) return true;
     const u=S.users[c.u];
-    return u.name.includes(q) || c.msgs.some(m=>m.t.includes(q));
+    return u.name.includes(qq) || c.msgs.some(m=>m.t.includes(qq));
   });
   host.innerHTML = list.length ? list.map(c=>{
     const u=S.users[c.u], last=c.msgs[c.msgs.length-1];
@@ -1531,8 +1596,8 @@ function renderChatList(){
         ${c.unread?`<span class="unread">${c.unread}</span>`:''}
       </div>
     </div>`;}).join('')
-    : `<div class="empty"><h3>${q?'見つかりませんでした':'会話はまだありません'}</h3><p>${q?'別のことばで探してみてください':'気になる投稿から「話す」を押すと、ここに会話が並びます'}</p></div>`;
-  revealAll(host);
+    : `<div class="empty"><h3>${qq?'見つかりませんでした':'会話はまだありません'}</h3><p>${qq?'別のことばで探してみてください':'気になる投稿から「話す」を押すと、ここに会話が並びます'}</p></div>`;
+  revealAll(host,0,q);
   $$('.row[data-chat]',host).forEach(r=>{
     r.addEventListener('pointerdown',e=>rippleAt(r,e));
     r.addEventListener('click',()=>pushThread(r.dataset.chat));
@@ -1558,11 +1623,12 @@ function paneMe(p){
 }
 function renderMe(){
   const host=$('#meBody'); if(!host) return;
+  const q=QUIET;
   const u=S.users.me;
   const mine=S.posts.filter(p=>p.u==='me');
   host.innerHTML=`
     <div class="banner" style="${bannerCSS(u)}"></div>
-    <div class="prof under">
+    <div class="prof under${q?' noanim':''}">
       ${avatar(u.av,84,u.img)}
       <h2>${esc(u.name)}</h2>
       <p class="handle">@${esc(u.handle)}</p>
@@ -1586,23 +1652,26 @@ function renderMe(){
     haptic(6); meTab=b.dataset.ut;
     $$('#meTabs .utab').forEach(x=>x.classList.toggle('on',x===b));
     moveU($('#meTabs'),$('#meInd'));
-    paintMeList();
+    paintMeList(true);
   }));
   paintMeList();
   raf(()=>moveU($('#meTabs'),$('#meInd'),false));
 
-  function paintMeList(){
+  function paintMeList(fromTap){
     const box=$('#meList');
     const arr = meTab==='posts' ? mine : [];
-    box.style.transition='opacity 130ms ease, transform 170ms ease';
-    box.style.opacity='0'; box.style.transform='translate3d(0,8px,0)';
-    setTimeout(()=>{
+    const still = q && !fromTap;                 /* data refresh → no fade */
+    const fill=()=>{
       box.innerHTML = arr.length ? arr.map(p=>miniPost(p)).join('')
         : `<div class="empty"><h3>${meTab==='posts'?'公開中の投稿はありません':'公開中の返信はありません'}</h3><p>${meTab==='posts'?'「＋」から、いまの気持ちを置いてみましょう':'返信すると、ここにまとまります'}</p></div>`;
-      revealAll(box);
+      revealAll(box,0,still);
       box.style.opacity='1'; box.style.transform='none';
       box.onclick=onMiniClick;
-    },140);
+    };
+    if(still){ box.style.transition='none'; fill(); return; }
+    box.style.transition='opacity 130ms ease, transform 170ms ease';
+    box.style.opacity='0'; box.style.transform='translate3d(0,8px,0)';
+    setTimeout(fill,140);
   }
 }
 function moveU(tabs, ind, animate=true){
@@ -1619,7 +1688,9 @@ function miniPost(p){
   return `<article class="card stagger" data-mini="${p.id}">
     <div style="display:flex;align-items:center;gap:10px">
       ${tag?`<span class="tag ${tag.cls}" style="margin-top:0">${tag.label}</span>`:''}
-      <span class="p-time" data-ts="${p.ts}" style="margin-left:auto">${ago(p.ts)}</span>
+      ${p.arch?`<span class="tag tag-arch" style="margin-top:0">アーカイブ</span>`:''}
+      <span class="p-time" data-ts="${p.ts}" style="margin-left:auto">${p.edited?'編集済み・':''}${ago(p.ts)}</span>
+      <button class="p-more" data-more="${p.id}" aria-label="その他">${I.dots}</button>
     </div>
     <p class="p-body">${esc(p.t)}</p>
     <div class="p-foot">
@@ -1630,6 +1701,8 @@ function miniPost(p){
   </article>`;
 }
 function onMiniClick(e){
+  const more=e.target.closest('[data-more]');
+  if(more){ e.stopPropagation(); openPostMenu(more.dataset.more); return; }
   const like=e.target.closest('[data-like]');
   if(like){ toggleLike(like.dataset.like, like); return; }
   const rep=e.target.closest('[data-reply]');
@@ -1709,6 +1782,7 @@ function pushProfile(uid){
   if(uid==='me'){ goTab('me'); return; }
   profTab='posts';
   const s=screenShell('プロフィール');
+  s.dataset.user=uid;
   const body=s.querySelector('.js-scroll');
   const paint=()=>{
     const mine=S.posts.filter(p=>p.u===uid);
@@ -1872,7 +1946,7 @@ function pushPostDetail(pid){
   const p=S.posts.find(x=>x.id===pid); if(!p) return;
   const u=S.users[p.u], me=S.users.me;
 
-  const s=el(`<section class="screen">
+  const s=el(`<section class="screen" data-post="${p.id}" data-user="${p.u}">
     <header class="navbar">
       <div class="side"><button class="iconbtn js-back" aria-label="戻る">${I.back}</button></div>
       <div class="ttl">投稿</div>
@@ -1949,6 +2023,7 @@ function pushPostDetail(pid){
     paintReplies(true);
     $('#pdRepCount',s).querySelector('.num').textContent=p.replies+'件の返信';
     syncCard(p);
+    quiet(()=>{ if($('#feed')) renderFeed(false); });
     const sc=s.querySelector('.js-scroll');
     raf(()=>sc.scrollTo({top:sc.scrollHeight, behavior:'smooth'}));
   }
@@ -2440,11 +2515,184 @@ function openMenu(items){
 function openPostMenu(pid){
   const p=S.posts.find(x=>x.id===pid); if(!p) return;
   haptic(6);
+  const u=S.users[p.u];
+  const items=[{t:'この投稿をシェア', fn:()=>toast('リンクをコピーしました')}];
+
+  if(p.u==='me'){
+    items.push(
+      {t:'投稿を編集', fn:()=>editPost(p.id)},
+      {t:p.arch?'アーカイブから戻す':'アーカイブする', fn:()=>toggleArchive(p.id)},
+      {t:'投稿を削除', danger:true, fn:()=>confirmDelete(p.id)}
+    );
+  }else{
+    items.push(
+      {t:S.muted.includes(p.u)?`${u.name}のミュートを解除`:`${u.name}をミュート`, fn:()=>toggleMute(p.u)},
+      {t:`${u.name}をブロック`, danger:true, fn:()=>confirmBlock(p.u)},
+      {t:'報告する', danger:true, fn:()=>toast('報告を受け付けました')}
+    );
+  }
+  openMenu(items);
+}
+
+/* ---------- my own posts ---------- */
+function toggleArchive(pid){
+  const p=S.posts.find(x=>x.id===pid); if(!p) return;
+  p.arch=!p.arch; haptic(10);
+  toast(p.arch?'アーカイブしました。自分だけに表示されます':'アーカイブから戻しました');
+  refreshInPlace('posts');
+}
+
+/* Re-render what changed, where the person already is, without replaying any
+   entry animation.  scope 'posts' leaves DMs and notifications untouched —
+   writing a post has nothing to do with them. */
+function refreshInPlace(scope){
+  quiet(()=>{
+    if($('#feed')) renderFeed(false);
+    if(S.tab==='me') renderMe();
+    if(scope==='posts') return;
+    if(S.tab==='chat') renderChatList();
+    if(S.tab==='bell') renderNotes();
+  });
+}
+/* close a post-detail screen (and anything stacked on it) for a given post */
+function closeDetailFor(pid){
+  for(let i=stackEls.length-1;i>=0;i--){
+    if(stackEls[i].dataset.post===pid){ while(stackEls.length>i) pop(); return; }
+  }
+}
+function confirmDelete(pid){
+  confirmSheet({
+    title:'投稿を削除しますか？',
+    lead:'削除すると元に戻せません。返信も一緒に見えなくなります。',
+    go:'削除する', danger:true,
+    fn:()=>{
+      const i=S.posts.findIndex(x=>x.id===pid);
+      if(i<0) return;
+      S.posts.splice(i,1); haptic(12);
+      closeDetailFor(pid);
+      refreshInPlace('posts');
+      toast('投稿を削除しました');
+    }
+  });
+}
+function editPost(pid){
+  const p=S.posts.find(x=>x.id===pid); if(!p) return;
+  const m=el(`<div class="modal" id="editPostM">
+    <header class="navbar">
+      <div class="side" style="justify-content:flex-start"><button class="txtbtn" id="epNo">キャンセル</button></div>
+      <div class="ttl">投稿を編集</div>
+      <div class="side" style="justify-content:flex-end"><button class="txtbtn accent" id="epGo">保存</button></div>
+    </header>
+    <div class="scroll js-scroll">
+      <div style="display:flex;gap:12px">
+        ${avatar(p.av,40,S.users.me.img)}
+        <textarea id="epText" maxlength="140" rows="4"
+          style="flex:1;font-size:17px;font-weight:600;line-height:1.7;resize:none;min-height:130px">${esc(p.t)}</textarea>
+      </div>
+      <div style="margin-top:6px;text-align:right;font-size:12px;color:var(--ink-3);font-weight:700" id="epCnt">${[...p.t].length}/140</div>
+      <h4 style="margin:18px 0 10px;font-size:13px;font-weight:800">話題のタグ</h4>
+      <div class="tagpick" id="epTags">
+        ${Object.entries(TAGS).map(([k,v])=>`<button class="tagopt${k===p.tag?' on':''}" data-t="${k}">${v.label}</button>`).join('')}
+      </div>
+    </div>
+  </div>`);
+  $('#overlays').appendChild(m);
+  fitBars(m);
+  raf(()=>m.classList.add('on'));
+
+  let tag=p.tag;
+  const ta=$('#epText',m);
+  ta.addEventListener('input',()=>$('#epCnt',m).textContent=[...ta.value].length+'/140');
+  $$('.tagopt',m).forEach(b=>b.addEventListener('click',()=>{
+    haptic(6); tag=b.dataset.t;
+    $$('.tagopt',m).forEach(x=>x.classList.toggle('on',x===b));
+  }));
+  $('#epNo',m).onclick=close;
+  $('#epGo',m).onclick=()=>{
+    const t=ta.value.trim();
+    if(!t){ toast('本文を入力してください'); return; }
+    p.t=t; p.tag=tag; p.edited=true; haptic(12);
+    close();
+    setTimeout(()=>{
+      /* if the post's detail screen is open, update it in place */
+      const d=stackEls.find(x=>x.dataset.post===p.id);
+      if(d){
+        d.querySelector('.pd-body').textContent=p.t;
+        const chip=d.querySelector('.pd-body + .tag');
+        if(chip && TAGS[p.tag]){ chip.className='tag '+TAGS[p.tag].cls; chip.textContent=TAGS[p.tag].label; }
+      }
+      refreshInPlace('posts');
+      toast('投稿を更新しました');
+    },240);
+  };
+  setTimeout(()=>ta.focus(),380);
+  function close(){ m.classList.remove('on'); setTimeout(()=>m.remove(),520); }
+}
+
+/* ---------- other people ---------- */
+function toggleMute(uid){
+  const i=S.muted.indexOf(uid), name=S.users[uid].name;
+  if(i<0){ S.muted.push(uid); toast(`${name}をミュートしました`); }
+  else{ S.muted.splice(i,1); toast(`${name}のミュートを解除しました`); }
+  haptic(9); refreshInPlace();
+}
+function confirmBlock(uid){
+  const u=S.users[uid];
+  confirmSheet({
+    title:`${u.name}をブロックしますか？`,
+    lead:'相手の投稿は表示されなくなり、会話もできなくなります。相手に通知は届きません。',
+    go:'ブロックする', danger:true,
+    fn:()=>{
+      if(!S.blocked.includes(uid)) S.blocked.push(uid);
+      const mi=S.muted.indexOf(uid); if(mi>=0) S.muted.splice(mi,1);
+      S.chats=S.chats.filter(c=>c.u!==uid);
+      ['like','reply'].forEach(k=>{ S.notes[k]=S.notes[k].filter(n=>n.u!==uid); });
+      haptic(12);
+      /* leave any screen that belongs to the blocked person */
+      for(let i=stackEls.length-1;i>=0;i--){
+        if(stackEls[i].dataset.user===uid){ while(stackEls.length>i) pop(); break; }
+      }
+      refreshInPlace(); syncNavBadges();
+      toast(`${u.name}をブロックしました`);
+    }
+  });
+}
+
+/* ---------- notification menu ---------- */
+function openNoteMenu(nid){
+  const n=[...S.notes.like,...S.notes.reply].find(x=>x.id===nid); if(!n) return;
+  haptic(6);
+  const u=S.users[n.u]||{name:'このユーザー'};
   openMenu([
-    {t:'この投稿をシェア', fn:()=>toast('リンクをコピーしました')},
-    {t:'この話題を減らす', fn:()=>toast('表示を減らします')},
+    {t:'この通知を削除', fn:()=>deleteNote(nid)},
+    {t:S.muted.includes(n.u)?`${u.name}のミュートを解除`:`${u.name}をミュート`, fn:()=>toggleMute(n.u)},
+    {t:`${u.name}をブロック`, danger:true, fn:()=>confirmBlock(n.u)},
     {t:'報告する', danger:true, fn:()=>toast('報告を受け付けました')}
   ]);
+}
+function deleteNote(nid){
+  ['like','reply'].forEach(k=>{
+    const i=S.notes[k].findIndex(x=>x.id===nid);
+    if(i>=0) S.notes[k].splice(i,1);
+  });
+  haptic(9); renderNotes(); syncNavBadges(); toast('通知を削除しました');
+}
+
+/* ---------- shared confirmation sheet ---------- */
+function confirmSheet({title, lead, go, danger, fn}){
+  const sheet=el(`<div class="sheet">
+    <div class="grab"></div>
+    <h3 style="margin-top:10px">${esc(title)}</h3>
+    <p class="lead">${esc(lead)}</p>
+    <button class="bigbtn${danger?' danger':''}" id="cfGo">${esc(go)}</button>
+    <button class="textlink" id="cfNo">キャンセル</button>
+  </div>`);
+  $('#overlays').appendChild(sheet);
+  showScrim(true, close);
+  raf(()=>sheet.classList.add('on'));
+  $('#cfNo',sheet).onclick=close;
+  $('#cfGo',sheet).onclick=()=>{ close(); setTimeout(fn,220); };
+  function close(){ sheet.classList.remove('on'); showScrim(false); setTimeout(()=>sheet.remove(),520); }
 }
 
 /* ---------- compose modal ---------- */
@@ -2489,18 +2737,19 @@ function openCompose(){
   $('#cmGo',m).onclick=()=>{
     const t=ta.value.trim(); if(!t) return;
     haptic(14);
-    S.posts.unshift({id:'p'+Date.now(), u:'me', av:S.users.me.av, t, tag, ts:Date.now(),
-      likes:0, replies:0, liked:false, req:false, rep:[]});
+    const newId='p'+Date.now();
+    S.posts.unshift({id:newId, u:'me', av:S.users.me.av, t, tag, ts:Date.now(),
+      likes:0, replies:0, liked:false, req:false, rep:[], arch:false});
     close();
     setTimeout(()=>{
-      if(S.tab!=='home'){ goTab('home'); }
-      if(S.filter!=='osusume'){
-        S.filter='osusume';
-        $$('#chips .chip').forEach(c=>c.classList.toggle('on',c.dataset.f==='osusume'));
+      /* stay exactly where the person was — posting never changes tabs,
+         and never disturbs DMs or notifications */
+      refreshInPlace('posts');
+      if(S.tab==='home'){
+        const sc=$('#feedScroll'); if(sc) sc.scrollTo({top:0,behavior:'smooth'});
       }
-      renderFeed(true);
-      const sc=$('#feedScroll'); if(sc) sc.scrollTo({top:0,behavior:'smooth'});
-      toast('投稿しました');
+      const hidden = S.tab==='home' && !visiblePosts().some(x=>x.id===newId);
+      toast(hidden ? '投稿しました。「おすすめ」で見られます' : '投稿しました');
     },260);
   };
   setTimeout(()=>ta.focus(),380);
