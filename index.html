@@ -1130,15 +1130,16 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.29.0';
+const APP_VER='2.29.1';
 
 
 /* =========================================================
    SUPABASE CONFIG
-   Project Settings → Data API で表示される値を貼り付ける。
+   Data API の API URL をそのまま貼っても動くよう、/rest/v1 を自動で除去します。
    Publishable Key はブラウザに置いてよい公開用キー。service_role は絶対に入れない。
    ========================================================= */
-const SUPABASE_URL='https://cwwvhzpcnrkmjbykgwcq.supabase.co';
+const SUPABASE_API_URL='https://cwwvhzpcnrkmjbykgwcq.supabase.co/rest/v1/';
+const SUPABASE_URL=SUPABASE_API_URL.replace(/\/rest\/v1\/?$/,'').replace(/\/+$/,'');
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_vYapd7Gg_rFLAFkO42BPUQ_GXLge49D';
 
 const CLOUD={
@@ -1265,6 +1266,8 @@ async function cloudReloadAll(initial=false){
 
     for(const id of CLOUD.remoteUserIds) if(id!=='me') delete S.users[id];
     CLOUD.remoteUserIds.clear();
+    /* Cloud接続時はローカル専用BOT/DEMOユーザーも除外する。 */
+    Object.keys(S.users).forEach(id=>{ if(id!=='me' && (S.users[id]?.demo || S.users[id]?.bot)) delete S.users[id]; });
     for(const u of profiles){
       const key=localKey(u.id);
       const target=key==='me'?S.users.me:(S.users[key]||{id:key});
@@ -1301,8 +1304,8 @@ async function cloudReloadAll(initial=false){
         req:false,rep,arch:!!p.archived,edited:!!p.edited,cloud:true};
       remotePosts.push(lp); if(S.users[lp.u]) S.users[lp.u].posts=(S.users[lp.u].posts||0)+1;
     }
-    const seeds=S.posts.filter(p=>p.u==='bot'||S.users[p.u]?.demo);
-    S.posts=[...remotePosts,...seeds].sort((a,b)=>b.ts-a.ts);
+    /* Cloud接続中はSupabaseを唯一の正本にする。端末ローカルのDEMO投稿は混ぜない。 */
+    S.posts=remotePosts.sort((a,b)=>b.ts-a.ts);
 
     const chatIds=chats.map(c=>c.id), stMap=new Map(states.map(x=>[x.chat_id,x]));
     const msgs=chatIds.length?await cloudRows(sb.from('messages').select('*').in('chat_id',chatIds).order('created_at',{ascending:true})):[];
@@ -1312,7 +1315,6 @@ async function cloudReloadAll(initial=false){
       if(m.system_text){ mm.t=m.system_text; mm.sys=true; }
       if(!msgsByChat.has(m.chat_id)) msgsByChat.set(m.chat_id,[]); msgsByChat.get(m.chat_id).push(mm);
     }
-    const demoChats=S.chats.filter(c=>S.users[c.u]?.demo||S.users[c.u]?.bot);
     const cloudChats=chats.map(c=>{
       const other=c.user_a===me?c.user_b:c.user_a, key=localKey(other), ms=msgsByChat.get(c.id)||[], st=stMap.get(c.id);
       const seen=st?.last_read_at?new Date(st.last_read_at).getTime():0;
@@ -1320,9 +1322,8 @@ async function cloudReloadAll(initial=false){
       if(S.users[key]) S.users[key].talks=(S.users[key].talks||0)+1;
       return {id:c.id,u:key,unread,ts:new Date(c.updated_at||c.created_at).getTime(),msgs:ms,pin:!!st?.pinned,hidden:!!st?.hidden,cloud:true};
     });
-    S.chats=[...cloudChats,...demoChats];
+    S.chats=cloudChats;
 
-    const localNotes=[...S.notes.like,...S.notes.reply].filter(n=>S.users[n.u]?.demo||S.users[n.u]?.bot);
     S.notes={like:[],reply:[]};
     for(const n of notes){
       const actor=localKey(n.actor_id), p=S.posts.find(x=>x.id===n.post_id), r=p?.rep?.find(x=>x.id===n.reply_id);
@@ -1332,7 +1333,6 @@ async function cloudReloadAll(initial=false){
       else if(n.kind==='reply'){ item.t=`${un.name}があなたの投稿に返信しました`; item.s=(r?.t||'').slice(0,80); S.notes.reply.push(item); }
       if(n.read_at) S.noteSeen.add(n.id);
     }
-    localNotes.forEach(n=>S.notes[n.kind||(/返信/.test(n.t)?'reply':'like')].push(n));
     if(!initial) cloudRefreshUI();
   }catch(e){ cloudErr('reload',e); }
   finally{
@@ -4048,30 +4048,45 @@ function attachPTR(scroller, root, onRefresh){
 }
 
 /* what each screen does when it is pulled */
-function refreshFeed(){
-  demoStep(true);
-  queueDemo(1+Math.floor(Math.random()*3));
-  syncNavBadges();
-  renderFeed(false);
+async function refreshFeed(){
+  if(CLOUD.enabled){
+    await cloudReloadAll(false);
+  }else{
+    demoStep(true);
+    queueDemo(1+Math.floor(Math.random()*3));
+    syncNavBadges();
+    renderFeed(false);
+  }
   const sc=$('#feedScroll'); if(sc) sc.scrollTop=0;
 }
-function refreshNotes(){
-  const who=activeDemos();
-  if(who.length && myPosts().length && Math.random()<0.7){
-    (Math.random()<0.5?demoLike:demoReply)(pick(who));
+async function refreshNotes(){
+  if(CLOUD.enabled){
+    await cloudReloadAll(false);
+  }else{
+    const who=activeDemos();
+    if(who.length && myPosts().length && Math.random()<0.7){
+      (Math.random()<0.5?demoLike:demoReply)(pick(who));
+    }
+    openNoteSegment(noteSeg); renderNotes();
   }
-  openNoteSegment(noteSeg); renderNotes();
 }
-function refreshChats(){
-  const who=activeDemos();
-  if(who.length && Math.random()<0.6){
-    const uid=pick(who);
-    if(!demoDM(uid)) demoRequest(uid);
+async function refreshChats(){
+  if(CLOUD.enabled){
+    await cloudReloadAll(false);
+  }else{
+    const who=activeDemos();
+    if(who.length && Math.random()<0.6){
+      const uid=pick(who);
+      if(!demoDM(uid)) demoRequest(uid);
+    }
+    queueDemo(1+Math.floor(Math.random()*2));
+    chatSig=null; renderChatList(); syncNavBadges();
   }
-  queueDemo(1+Math.floor(Math.random()*2));
-  chatSig=null; renderChatList(); syncNavBadges();
 }
-function refreshMe(){ quiet(()=>renderMe()); }
+async function refreshMe(){
+  if(CLOUD.enabled) await cloudReloadAll(false);
+  else quiet(()=>renderMe());
+}
 
 /* =========================================================
    DEMO PEOPLE  —  four accounts that act on their own:
@@ -4256,8 +4271,14 @@ async function boot(){
     syncNavBadges();
     navMorph.init();
   });
-  if(CLOUD.enabled) cloudStartRealtime();
-  setTimeout(demoTick, 6000);
+  if(CLOUD.enabled){
+    cloudStartRealtime();
+    /* Realtime設定に問題があっても別端末の投稿が反映される保険。 */
+    setInterval(()=>{ if(!document.hidden) cloudReloadAll(false); }, 5000);
+    setTimeout(()=>toast('Supabaseに接続しました'),650);
+  }else{
+    setTimeout(demoTick, 6000);
+  }
 }
 
 /* keyboard: escape closes topmost layer */
