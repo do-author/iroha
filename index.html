@@ -2,7 +2,7 @@
 <html lang="ja" data-theme="light">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#FAF8F4">
 <title>iroha</title>
 <style>
@@ -48,9 +48,6 @@
 
   --safe-t:env(safe-area-inset-top,0px);
   --safe-b:env(safe-area-inset-bottom,0px);
-  --vv-top:0px;
-  --vv-h:100dvh;
-  --input-safe-b:var(--safe-b);
 }
 [data-theme="dark"]{
   --accent:#FBD34D;
@@ -85,9 +82,8 @@
 }
 
 *,*::before,*::after{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;overflow:hidden}
+html,body{height:100%}
 body{
-  position:fixed; inset:0; width:100%;
   margin:0;
   background:var(--bg);
   color:var(--ink);
@@ -109,16 +105,10 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 .msgfield::-webkit-scrollbar,.replyfield::-webkit-scrollbar{display:none;width:0;height:0}
 .msgfield::-webkit-resizer,.replyfield::-webkit-resizer{display:none}
-/* iOS Safari auto-zooms focused form controls below 16px.
-   Keep chat/reply fields at 16px so focusing the keyboard does not pan/zoom the whole app. */
-@supports (-webkit-touch-callout:none){
-  .msgfield,.replyfield{font-size:16px !important}
-}
 
 /* ---------- app frame ---------- */
 #app{
-  position:fixed; left:0; right:0; top:var(--vv-top); bottom:auto;
-  height:var(--vv-h);
+  position:fixed; inset:0;
   display:flex; flex-direction:column;
   overflow:hidden;
   max-width:520px; margin:0 auto;
@@ -622,15 +612,14 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .composer-bar{
   position:absolute; left:0; right:0; bottom:0; z-index:6;
   display:flex; align-items:flex-end; gap:9px;
-  padding:10px 12px calc(var(--input-safe-b) + 10px);
-  will-change:bottom;
+  padding:10px 12px calc(var(--safe-b) + 10px);
   background:var(--bar); border-top:1px solid var(--glass-line);
   -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
   transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
 }
 .msgfield{
   flex:1; background:var(--field); border-radius:20px; padding:10px 15px;
-  font-size:16px; font-weight:600; resize:none; max-height:120px; line-height:1.5;
+  font-size:15px; font-weight:600; resize:none; max-height:120px; line-height:1.5;
   transition:background-color var(--dur-3) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
 }
 .msgfield:focus{box-shadow:inset 0 0 0 1.5px var(--accent)}
@@ -691,7 +680,6 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .reply-dock{
   position:absolute; left:0; right:0; bottom:0; z-index:6;
   background:var(--bar);
-  will-change:bottom;
   -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
   border-top:1px solid var(--glass-line);
   transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
@@ -700,7 +688,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .reply-dock .replying{margin:10px 14px 0; border-radius:14px}
 .reply-tools{
   display:flex; align-items:center; gap:4px;
-  padding:0 12px calc(var(--input-safe-b) + 10px);
+  padding:0 12px calc(var(--safe-b) + 10px);
   max-height:0; opacity:0; overflow:hidden; pointer-events:none;
   transition:max-height 300ms var(--ease-out), opacity 200ms var(--ease-out);
 }
@@ -727,7 +715,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .reply-bar{
   position:absolute; left:0; right:0; bottom:0; z-index:6;
   display:flex; align-items:flex-end; gap:10px;
-  padding:10px 14px calc(var(--input-safe-b) + 10px);
+  padding:10px 14px calc(var(--safe-b) + 10px);
   background:var(--bar); border-top:1px solid var(--glass-line);
   -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
   transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
@@ -735,7 +723,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .reply-bar .av{align-self:center}
 .replyfield{
   flex:1; background:var(--field); border:1px solid var(--line); border-radius:20px;
-  padding:10px 16px; font-size:16px; font-weight:600; resize:none; max-height:120px; line-height:1.55;
+  padding:10px 16px; font-size:15px; font-weight:600; resize:none; max-height:120px; line-height:1.55;
   transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
 }
 .replyfield::placeholder{color:var(--ink-3)}
@@ -1143,7 +1131,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.29.9';
+const APP_VER='2.29.6';
 
 
 /* =========================================================
@@ -4298,81 +4286,6 @@ async function boot(){
     setTimeout(demoTick, 6000);
   }
 }
-
-/* ---------- mobile keyboard / visual viewport ---------- */
-/*
-   Keep the app shell glued to the *visible* viewport while the software
-   keyboard animates. This avoids Safari panning the whole app upward.
-   The composer/reply dock stays at bottom:0 inside this resized shell,
-   so it naturally sits immediately above the keyboard.
-*/
-let VV_BASE_H = Math.round(window.visualViewport?.height || window.innerHeight || 0);
-let VV_RAF = 0;
-
-function isTextEntry(el){
-  return !!el && !!el.matches && el.matches('textarea,input:not([type="file"]):not([type="checkbox"]):not([type="radio"])');
-}
-
-function syncVisualViewport(){
-  cancelAnimationFrame(VV_RAF);
-  VV_RAF=requestAnimationFrame(()=>{
-    const vv=window.visualViewport;
-    const root=document.documentElement;
-    const active=document.activeElement;
-    const typing=isTextEntry(active);
-
-    let top=0;
-    let h=Math.round(window.innerHeight || document.documentElement.clientHeight || 0);
-    if(vv){
-      top=Math.max(0,Math.round(vv.offsetTop || 0));
-      h=Math.max(1,Math.round(vv.height));
-      /* Learn the full visible height only while no text field is focused. */
-      if(!typing && h>VV_BASE_H-40) VV_BASE_H=Math.max(VV_BASE_H,h);
-    }
-
-    const keyboardOpen=typing && VV_BASE_H>0 && h < VV_BASE_H-80;
-    root.style.setProperty('--vv-top',top+'px');
-    root.style.setProperty('--vv-h',h+'px');
-    root.style.setProperty('--input-safe-b',keyboardOpen ? '0px' : 'var(--safe-b)');
-    document.body.classList.toggle('keyboard-open',keyboardOpen);
-
-    /* Only scroll the conversation *inside* the app. Never scroll the page. */
-    if(keyboardOpen){
-      const screen=active?.closest?.('.screen');
-      if(screen && active?.id==='msgIn'){
-        const th=screen.querySelector('.thread');
-        if(th) th.scrollTop=th.scrollHeight;
-      }
-    }
-  });
-}
-
-if(window.visualViewport){
-  visualViewport.addEventListener('resize',syncVisualViewport,{passive:true});
-  visualViewport.addEventListener('scroll',syncVisualViewport,{passive:true});
-}else{
-  window.addEventListener('resize',syncVisualViewport,{passive:true});
-}
-window.addEventListener('orientationchange',()=>setTimeout(()=>{
-  VV_BASE_H=Math.round(window.visualViewport?.height || window.innerHeight || VV_BASE_H);
-  syncVisualViewport();
-},250),{passive:true});
-document.addEventListener('focusin',e=>{
-  if(isTextEntry(e.target)){
-    /* Keep the document itself at its origin; only the internal app scrollers move. */
-    if(window.scrollX||window.scrollY) window.scrollTo(0,0);
-    setTimeout(syncVisualViewport,0);
-    setTimeout(syncVisualViewport,80);
-    setTimeout(syncVisualViewport,260);
-  }
-});
-document.addEventListener('focusout',e=>{
-  if(isTextEntry(e.target)){
-    setTimeout(syncVisualViewport,40);
-    setTimeout(syncVisualViewport,260);
-  }
-});
-syncVisualViewport();
 
 /* keyboard: escape closes topmost layer */
 document.addEventListener('keydown',e=>{
