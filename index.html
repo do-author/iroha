@@ -2,7 +2,7 @@
 <html lang="ja" data-theme="light">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content">
 <meta name="theme-color" content="#FAF8F4">
 <title>iroha</title>
 <style>
@@ -48,7 +48,8 @@
 
   --safe-t:env(safe-area-inset-top,0px);
   --safe-b:env(safe-area-inset-bottom,0px);
-  --kb:0px;
+  --vv-top:0px;
+  --vv-h:100dvh;
   --input-safe-b:var(--safe-b);
 }
 [data-theme="dark"]{
@@ -84,8 +85,9 @@
 }
 
 *,*::before,*::after{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%}
+html,body{height:100%;overflow:hidden}
 body{
+  position:fixed; inset:0; width:100%;
   margin:0;
   background:var(--bg);
   color:var(--ink);
@@ -110,7 +112,8 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 
 /* ---------- app frame ---------- */
 #app{
-  position:fixed; inset:0;
+  position:fixed; left:0; right:0; top:var(--vv-top); bottom:auto;
+  height:var(--vv-h);
   display:flex; flex-direction:column;
   overflow:hidden;
   max-width:520px; margin:0 auto;
@@ -198,7 +201,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   padding:calc(var(--barH,124px) + 12px) 12px calc(var(--safe-b) + 116px);
   scrollbar-width:none;
 }
-.scroll.withbar{padding-bottom:calc(var(--barB,66px) + 16px + var(--kb))}
+.scroll.withbar{padding-bottom:calc(var(--barB,66px) + 16px)}
 .scroll::-webkit-scrollbar{display:none}
 .scroll.flush{padding-left:0;padding-right:0}
 
@@ -575,7 +578,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 
 /* ---------- chat thread ---------- */
 .thread{flex:1 1 auto; overflow-y:auto; scrollbar-width:none;
-  padding:calc(var(--barH,90px) + 14px) 14px calc(var(--barB,66px) + 16px + var(--kb));
+  padding:calc(var(--barH,90px) + 14px) 14px calc(var(--barB,66px) + 16px);
   display:flex; flex-direction:column; gap:4px; overscroll-behavior-y:contain}
 .thread::-webkit-scrollbar{display:none}
 .msgrow{display:flex; align-items:flex-end; gap:8px; margin-top:8px}
@@ -612,7 +615,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .typing i:nth-child(2){animation-delay:.16s} .typing i:nth-child(3){animation-delay:.32s}
 @keyframes blink{0%,60%,100%{opacity:.28;transform:translateY(0)}30%{opacity:1;transform:translateY(-4px)}}
 .composer-bar{
-  position:absolute; left:0; right:0; bottom:var(--kb); z-index:6;
+  position:absolute; left:0; right:0; bottom:0; z-index:6;
   display:flex; align-items:flex-end; gap:9px;
   padding:10px 12px calc(var(--input-safe-b) + 10px);
   will-change:bottom;
@@ -681,7 +684,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 
 /* ---------- reply composer (mirrors DM bar) ---------- */
 .reply-dock{
-  position:absolute; left:0; right:0; bottom:var(--kb); z-index:6;
+  position:absolute; left:0; right:0; bottom:0; z-index:6;
   background:var(--bar);
   will-change:bottom;
   -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
@@ -1135,7 +1138,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.29.7';
+const APP_VER='2.29.8';
 
 
 /* =========================================================
@@ -4293,51 +4296,78 @@ async function boot(){
 
 /* ---------- mobile keyboard / visual viewport ---------- */
 /*
-   Mobile browsers keep a separate visual viewport when the software keyboard
-   opens. Move the DM/reply dock above that covered area and give the scroller
-   matching bottom space, so the last message/reply never sits behind the keyboard.
+   Keep the app shell glued to the *visible* viewport while the software
+   keyboard animates. This avoids Safari panning the whole app upward.
+   The composer/reply dock stays at bottom:0 inside this resized shell,
+   so it naturally sits immediately above the keyboard.
 */
-function syncKeyboardInset(){
-  const vv=window.visualViewport;
-  let kb=0;
-  if(vv){
-    const layoutH=Math.max(window.innerHeight||0, document.documentElement.clientHeight||0);
-    kb=Math.max(0, Math.round(layoutH - vv.height - vv.offsetTop));
-    /* Tiny changes are browser chrome, not a software keyboard. */
-    if(kb<80) kb=0;
-  }
-  const root=document.documentElement;
-  root.style.setProperty('--kb', kb+'px');
-  root.style.setProperty('--input-safe-b', kb>0 ? '0px' : 'var(--safe-b)');
-  document.body.classList.toggle('keyboard-open', kb>0);
+let VV_BASE_H = Math.round(window.visualViewport?.height || window.innerHeight || 0);
+let VV_RAF = 0;
 
-  if(kb>0){
+function isTextEntry(el){
+  return !!el && !!el.matches && el.matches('textarea,input:not([type="file"]):not([type="checkbox"]):not([type="radio"])');
+}
+
+function syncVisualViewport(){
+  cancelAnimationFrame(VV_RAF);
+  VV_RAF=requestAnimationFrame(()=>{
+    const vv=window.visualViewport;
+    const root=document.documentElement;
     const active=document.activeElement;
-    const screen=active?.closest?.('.screen');
-    if(screen && active?.matches?.('#msgIn,#repIn')){
-      requestAnimationFrame(()=>{
-        const th=screen.querySelector('.thread');
-        if(th && active.id==='msgIn') th.scrollTop=th.scrollHeight;
-        const sc=screen.querySelector('.scroll.withbar');
-        if(sc && active.id==='repIn') active.scrollIntoView({block:'nearest'});
-      });
+    const typing=isTextEntry(active);
+
+    let top=0;
+    let h=Math.round(window.innerHeight || document.documentElement.clientHeight || 0);
+    if(vv){
+      top=Math.max(0,Math.round(vv.offsetTop || 0));
+      h=Math.max(1,Math.round(vv.height));
+      /* Learn the full visible height only while no text field is focused. */
+      if(!typing && h>VV_BASE_H-40) VV_BASE_H=Math.max(VV_BASE_H,h);
     }
-  }
+
+    const keyboardOpen=typing && VV_BASE_H>0 && h < VV_BASE_H-80;
+    root.style.setProperty('--vv-top',top+'px');
+    root.style.setProperty('--vv-h',h+'px');
+    root.style.setProperty('--input-safe-b',keyboardOpen ? '0px' : 'var(--safe-b)');
+    document.body.classList.toggle('keyboard-open',keyboardOpen);
+
+    /* Only scroll the conversation *inside* the app. Never scroll the page. */
+    if(keyboardOpen){
+      const screen=active?.closest?.('.screen');
+      if(screen && active?.id==='msgIn'){
+        const th=screen.querySelector('.thread');
+        if(th) th.scrollTop=th.scrollHeight;
+      }
+    }
+  });
 }
+
 if(window.visualViewport){
-  visualViewport.addEventListener('resize', syncKeyboardInset, {passive:true});
-  visualViewport.addEventListener('scroll', syncKeyboardInset, {passive:true});
+  visualViewport.addEventListener('resize',syncVisualViewport,{passive:true});
+  visualViewport.addEventListener('scroll',syncVisualViewport,{passive:true});
 }else{
-  window.addEventListener('resize', syncKeyboardInset, {passive:true});
+  window.addEventListener('resize',syncVisualViewport,{passive:true});
 }
-document.addEventListener('focusin', e=>{
-  if(e.target.matches?.('textarea,input')) setTimeout(syncKeyboardInset,40);
+window.addEventListener('orientationchange',()=>setTimeout(()=>{
+  VV_BASE_H=Math.round(window.visualViewport?.height || window.innerHeight || VV_BASE_H);
+  syncVisualViewport();
+},250),{passive:true});
+document.addEventListener('focusin',e=>{
+  if(isTextEntry(e.target)){
+    /* Keep the document itself at its origin; only the internal app scrollers move. */
+    if(window.scrollX||window.scrollY) window.scrollTo(0,0);
+    setTimeout(syncVisualViewport,0);
+    setTimeout(syncVisualViewport,80);
+    setTimeout(syncVisualViewport,260);
+  }
 });
-document.addEventListener('focusout', e=>{
-  if(e.target.matches?.('textarea,input')) setTimeout(syncKeyboardInset,80);
+document.addEventListener('focusout',e=>{
+  if(isTextEntry(e.target)){
+    setTimeout(syncVisualViewport,40);
+    setTimeout(syncVisualViewport,260);
+  }
 });
-window.addEventListener('orientationchange', ()=>setTimeout(syncKeyboardInset,120));
-syncKeyboardInset();
+syncVisualViewport();
 
 /* keyboard: escape closes topmost layer */
 document.addEventListener('keydown',e=>{
