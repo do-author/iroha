@@ -350,14 +350,14 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 /* ============ BOTTOM NAV ============ */
 .navwrap{
   position:absolute; left:0; right:0; bottom:0; z-index:40;
-  padding:0 26px calc(var(--safe-b) + 18px);
+  padding:0 16px calc(var(--safe-b) + 12px);
   pointer-events:none;
   transition:transform var(--dur-3) var(--ease-out), opacity var(--dur-2) var(--ease-out);
 }
 .navwrap.hide{transform:translate3d(0,120%,0); opacity:0}
 .nav{
   position:relative; pointer-events:auto;
-  height:63px; border-radius:999px;
+  height:70px; border-radius:999px;
   background:var(--nav);
   -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
   box-shadow:var(--shadow-nav), inset 0 1px 0 var(--glass-edge);
@@ -368,22 +368,21 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
 }
 .nav-ind{
-  position:absolute; top:6px; height:52px; width:54px; border-radius:18px;
+  position:absolute; top:11px; height:48px; width:48px; border-radius:17px;
   background:var(--nav-pill); left:0;
   transition:transform 520ms var(--spring), background-color var(--dur-3) var(--ease-out), width 380ms var(--ease-out);
   will-change:transform;
 }
 
 .navbtn{
-  position:relative; will-change:transform,opacity; height:100%; display:grid; place-items:center; color:var(--ink);
+  position:relative; will-change:transform,opacity; height:100%; display:grid; place-items:center; color:var(--ink-2);
   transition:color 300ms var(--ease-out), transform var(--dur-2) var(--spring);
 }
-.navbtn svg{width:30px;height:30px}
-.navbtn.on svg *{stroke-width:2.6}
+.navbtn svg{width:27px;height:27px}
 .navbtn:active{transform:scale(.86)}
 .navbtn.on{color:var(--nav-pill-ink)}
 .navbtn .bdg{
-  position:absolute; top:7px; right:calc(50% - 25px);
+  position:absolute; top:11px; right:calc(50% - 24px);
   min-width:18px;height:18px;padding:0 5px; border-radius:9px;
   background:#E0245E; color:#fff; font-size:10.5px; font-weight:800;
   display:grid;place-items:center; line-height:1;
@@ -392,14 +391,14 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 /* unread notifications keep the yellow language, but show how many */
 .navbtn .bdg.soft{
-  top:8px; right:calc(50% - 23px);
+  top:12px; right:calc(50% - 22px);
   background:var(--accent); color:var(--accent-ink);
   box-shadow:0 0 0 2.5px var(--nav-ring), 0 0 8px rgba(247,206,69,.5);
 }
 @keyframes bdgIn{from{transform:scale(0)}to{transform:none}}
 .fabslot{display:grid;place-items:center; position:relative; z-index:2}
 .fab{
-  position:absolute; top:-5px; left:0; width:62px;height:62px;
+  position:absolute; top:-8px; left:0; width:62px;height:62px;
   display:grid;place-items:center; pointer-events:auto; z-index:5;
   will-change:transform;
 }
@@ -1019,7 +1018,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.25.2';
+const APP_VER='2.24';
 
 const $  = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -1466,7 +1465,7 @@ function moveNavInd(animate=true){
   if(!btn||!ind) return;
   const nav=$('#nav').getBoundingClientRect(), b=btn.getBoundingClientRect();
   if(!animate) ind.style.transition='none';
-  const w=54;
+  const w=48;
   ind.style.width=w+'px';
   ind.style.transform=`translate3d(${b.left-nav.left+(b.width-w)/2}px,0,0)`;
   if(!animate) requestAnimationFrame(()=>ind.style.transition='');
