@@ -1103,7 +1103,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.26.4';
+const APP_VER='2.27.4';
 
 const $  = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -2360,8 +2360,9 @@ function pushPostDetail(pid){
     </div>
     <div class="reply-dock">
       <div id="replyTarget"></div>
+      <div id="repAtt"></div>
       <div class="reply-bar">
-        ${uav('me',34)}
+        <button class="iconbtn" id="repAdd" aria-label="添付">${I.plusS}</button>
         <textarea class="replyfield" id="repIn" rows="1" placeholder="やさしく返信する…"></textarea>
         <button class="replysend" id="repSend" aria-label="返信する">${I.send}</button>
       </div>
@@ -2394,8 +2395,23 @@ function pushPostDetail(pid){
   paintReplies();
 
   /* composer — same mechanics as the DM bar */
-  const inp=$('#repIn',s), send=$('#repSend',s), tgtBox=$('#replyTarget',s);
-  let replyTo=null;
+  const inp=$('#repIn',s), send=$('#repSend',s), tgtBox=$('#replyTarget',s), attBox=$('#repAtt',s);
+  let replyTo=null, repAtt=null;
+  function setRepAtt(v){
+    repAtt=v;
+    attBox.innerHTML = v ? `<div class="attpreview" style="margin:12px 14px 0">
+        <button class="x" id="repAttX" aria-label="取り消す">${I.close}</button>${mediaHTML(v)}</div>` : '';
+    if(v) $('#repAttX',attBox).onclick=()=>{ haptic(6); stopAudio(); setRepAtt(null); };
+    grow(); fitBars(s);
+  }
+  $('#repAdd',s).onclick=()=>{
+    haptic(7);
+    openMenu([
+      {t:'画像を選ぶ', fn:()=>pickMedia('image/*', setRepAtt)},
+      {t:'動画を選ぶ', fn:()=>pickMedia('video/*', setRepAtt)},
+      {t:'音声を録音する', fn:()=>openRecorder(setRepAtt)}
+    ]);
+  };
   function setTarget(uid){
     replyTo=uid;
     if(!uid){ tgtBox.innerHTML=''; inp.placeholder='やさしく返信する…'; return; }
@@ -2408,18 +2424,18 @@ function pushPostDetail(pid){
     setTimeout(()=>inp.focus(),60);
   }
   const grow=()=>{ inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,120)+'px';
-    send.classList.toggle('live', inp.value.trim().length>0); };
+    send.classList.toggle('live', inp.value.trim().length>0 || !!repAtt); };
   inp.addEventListener('input',grow);
   inp.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();fire();} });
   send.onclick=fire;
 
   function fire(){
-    const t=inp.value.trim(); if(!t) return;
+    const t=inp.value.trim(); if(!t && !repAtt) return;
     haptic(11);
     send.classList.remove('fly'); void send.offsetWidth; send.classList.add('fly');
     setTimeout(()=>send.classList.remove('fly'),540);
-    p.rep.push({u:'me', t, to:replyTo, ts:Date.now(), likes:0, liked:false});
-    setTarget(null);
+    p.rep.push({u:'me', t, to:replyTo, media:repAtt, ts:Date.now(), likes:0, liked:false});
+    setTarget(null); setRepAtt(null);
     p.replies=p.rep.length;
     inp.value=''; grow();
     paintReplies(true);
@@ -2443,8 +2459,8 @@ function pushPostDetail(pid){
           <div class="rep-line"><b>${esc(ru.name)}</b>${genderTag(ru)}
             <span>@${esc(ru.handle)}</span><span class="dot-sep"></span>
             <span data-ts="${r.ts}">${ago(r.ts)}</span></div>
+          ${r.t?`<p class="rep-body">${r.to&&S.users[r.to]?`<span class="mention">@${esc(S.users[r.to].handle)}</span> `:''}${esc(r.t)}</p>`:''}
           ${mediaHTML(r.media)}
-          <p class="rep-body">${r.to&&S.users[r.to]?`<span class="mention">@${esc(S.users[r.to].handle)}</span> `:''}${esc(r.t)}</p>
           <div class="rep-foot">
             <button class="act" data-repreply="${i}">${I.reply}<span class="num">返信</span></button>
             <button class="act${r.liked?' liked':''}" data-replike="${i}">
