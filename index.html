@@ -1130,7 +1130,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.29.1';
+const APP_VER='2.29.2';
 
 
 /* =========================================================
@@ -1248,10 +1248,31 @@ async function cloudInit(){
   }
 }
 async function cloudRows(promise){ const r=await promise; if(r.error) throw r.error; return r.data||[]; }
+
+/* Supabaseの定期確認で、実データが変わっていないならDOMを作り直さない。 */
+function cloudViewSignature(){
+  const users=Object.values(S.users)
+    .filter(u=>!u.demo&&!u.bot)
+    .map(u=>[u.id,u.name,u.handle,u.bio,u.av,u.gender,u.img||'',u.banner||'',!!u.fav,!!u.favMe,u.posts||0,u.replies||0,u.talks||0])
+    .sort((a,b)=>String(a[0]).localeCompare(String(b[0])));
+  const posts=S.posts.filter(p=>p.cloud).map(p=>[
+    p.id,p.u,p.t,p.tag,p.ts,p.likes,p.replies,!!p.liked,!!p.arch,!!p.edited,
+    (p.rep||[]).map(r=>[r.id,r.u,r.t,r.to||'',r.ts,r.likes,!!r.liked])
+  ]);
+  const chats=S.chats.filter(c=>c.cloud).map(c=>[
+    c.id,c.u,c.unread,c.ts,!!c.pin,!!c.hidden,
+    (c.msgs||[]).map(m=>[m.id,!!m.me,m.t||'',!!m.sys,m.ts])
+  ]);
+  const notes=[...S.notes.like,...S.notes.reply].filter(n=>n.cloud).map(n=>[n.id,n.u,n.p||'',n.t,n.s||'',n.ts]);
+  const seen=[...S.noteSeen].sort();
+  return JSON.stringify([users,posts,chats,notes,seen]);
+}
+
 async function cloudReloadAll(initial=false){
   if(!CLOUD.enabled) return;
   if(CLOUD.reloading){ CLOUD.reloadAgain=true; return; }
   CLOUD.reloading=true;
+  const beforeSig=initial ? '' : cloudViewSignature();
   try{
     const sb=CLOUD.client, me=CLOUD.userId;
     const [profiles,posts,favOut,favIn,chats,states,notes]=await Promise.all([
@@ -1333,7 +1354,7 @@ async function cloudReloadAll(initial=false){
       else if(n.kind==='reply'){ item.t=`${un.name}があなたの投稿に返信しました`; item.s=(r?.t||'').slice(0,80); S.notes.reply.push(item); }
       if(n.read_at) S.noteSeen.add(n.id);
     }
-    if(!initial) cloudRefreshUI();
+    if(!initial && beforeSig!==cloudViewSignature()) cloudRefreshUI();
   }catch(e){ cloudErr('reload',e); }
   finally{
     CLOUD.reloading=false;
@@ -2081,11 +2102,13 @@ function renderFeed(animate){
          <p>${S.filter==='fav'?'プロフィールからお気に入りに登録すると、ここに投稿がまとまります':'最初のひとことを置いてみませんか'}</p></div>`;
     wirePostActions(feed);
     revealAll(feed,0,q);
-    if(typeof navMorph!=='undefined') navMorph.refresh();
+    if(!q && typeof navMorph!=='undefined') navMorph.refresh();
   }
 }
 
 function wirePostActions(root){
+  if(root.dataset.postWired) return;
+  root.dataset.postWired='1';
   root.addEventListener('click', onPostClick);
 }
 function onPostClick(e){
@@ -4273,8 +4296,8 @@ async function boot(){
   });
   if(CLOUD.enabled){
     cloudStartRealtime();
-    /* Realtime設定に問題があっても別端末の投稿が反映される保険。 */
-    setInterval(()=>{ if(!document.hidden) cloudReloadAll(false); }, 5000);
+    /* Realtimeが取りこぼした場合だけ拾う保険。通常同期はRealtime、確認は30秒ごと。 */
+    setInterval(()=>{ if(!document.hidden) cloudReloadAll(false); }, 30000);
     setTimeout(()=>toast('Supabaseに接続しました'),650);
   }else{
     setTimeout(demoTick, 6000);
