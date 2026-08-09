@@ -1079,6 +1079,11 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .fadein{animation:fadeIn 420ms var(--ease-out) both}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
+/* iPhone: place the floating bottom nav at the same lower height as the reference. */
+@media (max-width: 600px){
+  .navwrap{bottom:min(0px, calc(10px - var(--safe-b)));}
+}
+
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important}
 }
@@ -1098,7 +1103,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.26.3';
+const APP_VER='2.26.4';
 
 const $  = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
