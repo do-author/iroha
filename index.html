@@ -685,6 +685,32 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 .reply-dock .reply-bar{position:static; background:none; border-top:0; -webkit-backdrop-filter:none; backdrop-filter:none}
 .reply-dock .replying{margin:10px 14px 0; border-radius:14px}
+.reply-tools{
+  display:flex; align-items:center; gap:4px;
+  padding:0 12px calc(var(--safe-b) + 10px);
+  max-height:0; opacity:0; overflow:hidden; pointer-events:none;
+  transition:max-height 300ms var(--ease-out), opacity 200ms var(--ease-out);
+}
+.reply-dock.open .reply-tools{max-height:70px; opacity:1; pointer-events:auto}
+.reply-dock.open .reply-bar{padding-bottom:6px}
+.toolbtn{
+  width:40px;height:40px;border-radius:50%; display:grid;place-items:center;
+  color:var(--accent-deep);
+  transition:transform var(--dur-2) var(--spring), background-color var(--dur-1) linear;
+}
+[data-theme="dark"] .toolbtn{color:var(--accent)}
+.toolbtn:active{transform:scale(.86); background:var(--field)}
+.toolbtn[disabled]{opacity:.35}
+.replybtn{
+  margin-left:auto; padding:9px 20px; border-radius:999px;
+  background:var(--accent); color:var(--accent-ink);
+  font-size:14px; font-weight:800;
+  transition:transform var(--dur-2) var(--spring), opacity var(--dur-2) linear;
+}
+.replybtn:active{transform:scale(.93)}
+.replybtn[disabled]{opacity:.42}
+.replysend.compact{width:34px;height:34px}
+.reply-dock.open .replysend.compact{display:none}
 .reply-bar{
   position:absolute; left:0; right:0; bottom:0; z-index:6;
   display:flex; align-items:flex-end; gap:10px;
@@ -977,14 +1003,14 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 
 /* ============ OVERLAYS ============ */
 .scrim{
-  position:absolute; inset:0; z-index:60; background:rgba(14,12,8,.42);
+  position:absolute; inset:0; z-index:88; background:rgba(14,12,8,.42);
   -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
   opacity:0; pointer-events:none;
   transition:opacity 340ms var(--ease-out);
 }
 .scrim.on{opacity:1; pointer-events:auto}
 .sheet{
-  position:absolute; left:0; right:0; bottom:0; z-index:70;
+  position:absolute; left:0; right:0; bottom:0; z-index:90;
   background:var(--bg-elev); border-radius:26px 26px 0 0;
   padding:10px 22px calc(var(--safe-b) + 20px);
   box-shadow:var(--shadow-pop);
@@ -1027,7 +1053,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 
 /* action menu */
 .menu{
-  position:absolute; left:14px; right:14px; bottom:calc(var(--safe-b) + 14px); z-index:70;
+  position:absolute; left:14px; right:14px; bottom:calc(var(--safe-b) + 14px); z-index:90;
   transform:translate3d(0,20px,0) scale(.97); opacity:0; pointer-events:none;
   transition:transform 460ms var(--spring-soft), opacity 260ms var(--ease-out);
 }
@@ -1042,7 +1068,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .menu .mcard.solo button{font-weight:800}
 
 /* toast */
-.toastwrap{position:absolute; left:0;right:0; bottom:calc(var(--safe-b) + 96px); z-index:90;
+.toastwrap{position:absolute; left:0;right:0; bottom:calc(var(--safe-b) + 96px); z-index:120;
   display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none}
 .toast{
   display:inline-flex; align-items:center; gap:9px;
@@ -1103,7 +1129,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.27.4';
+const APP_VER='2.28.4';
 
 const $  = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -2261,6 +2287,7 @@ function pushThread(cid){
   inp.addEventListener('input',autoGrow);
   inp.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();fire();} });
   send.onclick=fire;
+  { const mini=$('#repSendMini',s); if(mini) mini.onclick=fire; }
 
   function fire(){
     const t=inp.value.trim(); if(!t && !dmAtt) return;
@@ -2362,9 +2389,15 @@ function pushPostDetail(pid){
       <div id="replyTarget"></div>
       <div id="repAtt"></div>
       <div class="reply-bar">
-        <button class="iconbtn" id="repAdd" aria-label="添付">${I.plusS}</button>
+        ${uav('me',34)}
         <textarea class="replyfield" id="repIn" rows="1" placeholder="やさしく返信する…"></textarea>
-        <button class="replysend" id="repSend" aria-label="返信する">${I.send}</button>
+        <button class="replysend compact" id="repSendMini" aria-label="返信する">${I.send}</button>
+      </div>
+      <div class="reply-tools" id="repTools">
+        <button class="toolbtn" data-att="image" aria-label="画像">${I.camera}</button>
+        <button class="toolbtn" data-att="video" aria-label="動画">${I.film}</button>
+        <button class="toolbtn" data-att="audio" aria-label="音声">${I.mic}</button>
+        <button class="replybtn" id="repSend">返信</button>
       </div>
     </div>
   </section>`);
@@ -2396,22 +2429,31 @@ function pushPostDetail(pid){
 
   /* composer — same mechanics as the DM bar */
   const inp=$('#repIn',s), send=$('#repSend',s), tgtBox=$('#replyTarget',s), attBox=$('#repAtt',s);
+  send.disabled=true;
   let replyTo=null, repAtt=null;
   function setRepAtt(v){
     repAtt=v;
+    if(v) dock.classList.add('open');
     attBox.innerHTML = v ? `<div class="attpreview" style="margin:12px 14px 0">
         <button class="x" id="repAttX" aria-label="取り消す">${I.close}</button>${mediaHTML(v)}</div>` : '';
     if(v) $('#repAttX',attBox).onclick=()=>{ haptic(6); stopAudio(); setRepAtt(null); };
     grow(); fitBars(s);
   }
-  $('#repAdd',s).onclick=()=>{
+  const dock=s.querySelector('.reply-dock');
+  $$('.toolbtn',s).forEach(b=>b.addEventListener('click',()=>{
     haptic(7);
-    openMenu([
-      {t:'画像を選ぶ', fn:()=>pickMedia('image/*', setRepAtt)},
-      {t:'動画を選ぶ', fn:()=>pickMedia('video/*', setRepAtt)},
-      {t:'音声を録音する', fn:()=>openRecorder(setRepAtt)}
-    ]);
+    const k=b.dataset.att;
+    if(k==='audio') openRecorder(setRepAtt);
+    else pickMedia(k==='video'?'video/*':'image/*', setRepAtt);
+  }));
+  /* the tool row unfolds once the field is in use, as on X */
+  const openTools=()=>{ dock.classList.add('open'); grow(); fitBars(s); };
+  const maybeClose=()=>{
+    if(inp.value.trim() || repAtt || replyTo) return;
+    dock.classList.remove('open'); fitBars(s);
   };
+  inp.addEventListener('focus',openTools);
+  inp.addEventListener('blur',()=>setTimeout(maybeClose,180));
   function setTarget(uid){
     replyTo=uid;
     if(!uid){ tgtBox.innerHTML=''; inp.placeholder='やさしく返信する…'; return; }
@@ -2423,11 +2465,18 @@ function pushPostDetail(pid){
     fitBars(s);
     setTimeout(()=>inp.focus(),60);
   }
-  const grow=()=>{ inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,120)+'px';
-    send.classList.toggle('live', inp.value.trim().length>0 || !!repAtt); };
+  const grow=()=>{
+    inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,120)+'px';
+    const ready = inp.value.trim().length>0 || !!repAtt;
+    send.disabled=!ready;
+    const mini=$('#repSendMini',s);
+    if(mini) mini.classList.toggle('live', ready);
+    $$('.toolbtn',s).forEach(b=>b.disabled=!!repAtt);
+  };
   inp.addEventListener('input',grow);
   inp.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();fire();} });
   send.onclick=fire;
+  { const mini=$('#repSendMini',s); if(mini) mini.onclick=fire; }
 
   function fire(){
     const t=inp.value.trim(); if(!t && !repAtt) return;
@@ -2436,6 +2485,7 @@ function pushPostDetail(pid){
     setTimeout(()=>send.classList.remove('fly'),540);
     p.rep.push({u:'me', t, to:replyTo, media:repAtt, ts:Date.now(), likes:0, liked:false});
     setTarget(null); setRepAtt(null);
+    dock.classList.remove('open');
     p.replies=p.rep.length;
     inp.value=''; grow();
     paintReplies(true);
@@ -2874,6 +2924,7 @@ function pickImage(cb){
 
 /* aspect: 1 = square/avatar, 3 = wide banner.  out = exported width in px. */
 function openCropper(src, {aspect=1, round=false, out=512, title='切り抜き'}, done){
+  if($('.crop')) return;
   const vw=Math.min(window.innerWidth, 520);
   const fw=Math.min(vw-32, 340);
   const fh=Math.round(fw/aspect);
@@ -3081,6 +3132,7 @@ document.addEventListener('click',e=>{
    VOICE RECORDER  —  record, listen back, then send
    ========================================================= */
 function openRecorder(done){
+  if($('#recSheet')) return;          /* a second tap must not stack recorders */
   let rec=null, chunks=[], stream=null, t0=0, timer=null, blobURL=null, dur=0, raf0=0, analyser=null;
 
   const sheet=el(`<div class="sheet" id="recSheet">
@@ -3221,6 +3273,7 @@ function showScrim(on, onTap){
 
 /* ---------- request-to-talk sheet (drag dismissible) ---------- */
 function openRequest(postId, uidOverride){
+  if($('#reqSheet')) return;
   const p = postId ? S.posts.find(x=>x.id===postId) : null;
   const uid = uidOverride || (p && p.u); if(!uid) return;
   if(uid==='me'){ toast('自分自身とは会話できません'); return; }
@@ -3292,6 +3345,7 @@ function openRequest(postId, uidOverride){
 
 /* ---------- action menu ---------- */
 function openMenu(items){
+  if($('#actMenu')) return;
   const m=el(`<div class="menu" id="actMenu">
     <div class="mcard">${items.map((it,i)=>`<button data-i="${i}"${it.danger?' class="danger"':''}>${esc(it.t)}</button>`).join('')}</div>
     <div class="mcard solo"><button data-close="1">キャンセル</button></div>
@@ -3509,7 +3563,8 @@ function deleteNote(nid){
 
 /* ---------- shared confirmation sheet ---------- */
 function confirmSheet({title, lead, go, danger, fn}){
-  const sheet=el(`<div class="sheet">
+  if($('#cfSheet')) return;
+  const sheet=el(`<div class="sheet" id="cfSheet">
     <div class="grab"></div>
     <h3 style="margin-top:10px">${esc(title)}</h3>
     <p class="lead">${esc(lead)}</p>
