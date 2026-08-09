@@ -350,7 +350,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 /* ============ BOTTOM NAV ============ */
 .navwrap{
   position:absolute; left:0; right:0; bottom:0; z-index:40;
-  padding:0 34px calc(var(--safe-b) + 18px);
+  padding:0 26px calc(var(--safe-b) + 18px);
   pointer-events:none;
   transition:transform var(--dur-3) var(--ease-out), opacity var(--dur-2) var(--ease-out);
 }
@@ -1019,7 +1019,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.25';
+const APP_VER='2.25.2';
 
 const $  = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
