@@ -407,22 +407,25 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   background:radial-gradient(circle at 36% 30%,#FFE27E,var(--accent) 60%,var(--accent-deep));
   color:var(--accent-ink); display:grid;place-items:center;
   position:relative;
-  box-shadow:
-    0 6px 18px rgba(228,180,28,.42),
-    0 0 22px rgba(247,206,69,.30),
-    0 0 38px rgba(247,206,69,.14),
-    var(--glow);
+  box-shadow:0 6px 18px rgba(228,180,28,.42), var(--glow);
   transition:transform 320ms var(--spring);
   will-change:transform;
 }
+/* ライトテーマだけ、ダークテーマ本来の発光感に近い固定グローを追加。
+   ダーク側には追加しないので、元の強さを維持する。 */
+[data-theme="light"] .fab-core{
+  box-shadow:
+    0 6px 18px rgba(228,180,28,.42),
+    0 0 22px rgba(247,206,69,.34);
+}
 .fab-core::after{
   content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
-  box-shadow:0 14px 30px rgba(196,150,10,.22);
-  opacity:.28;
+  box-shadow:0 14px 30px rgba(196,150,10,.28);
+  opacity:0;
   transition:opacity 260ms var(--ease-out);
   will-change:opacity;
 }
-.fab.solo .fab-core::after{opacity:.72}
+.fab.solo .fab-core::after{opacity:1}
 .fab:active .fab-core{transform:scale(.86)}
 .fab svg{transition:transform 460ms var(--spring)}
 .fab.x svg{transform:rotate(135deg)}
