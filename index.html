@@ -48,6 +48,8 @@
 
   --safe-t:env(safe-area-inset-top,0px);
   --safe-b:env(safe-area-inset-bottom,0px);
+  --kb:0px;
+  --input-safe-b:var(--safe-b);
 }
 [data-theme="dark"]{
   --accent:#FBD34D;
@@ -196,7 +198,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   padding:calc(var(--barH,124px) + 12px) 12px calc(var(--safe-b) + 116px);
   scrollbar-width:none;
 }
-.scroll.withbar{padding-bottom:calc(var(--barB,66px) + 16px)}
+.scroll.withbar{padding-bottom:calc(var(--barB,66px) + 16px + var(--kb))}
 .scroll::-webkit-scrollbar{display:none}
 .scroll.flush{padding-left:0;padding-right:0}
 
@@ -279,12 +281,13 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   padding:3px 10px; border-radius:999px;
 }
 .badge-bot{background:#4A3D14;color:var(--accent)}
-.p-time{font-size:13px; white-space:nowrap; color:var(--ink-3); font-weight:500}
+.p-time{font-size:13px; white-space:nowrap; color:var(--ink-3); font-weight:500; margin-left:auto; text-align:right; flex:0 0 auto}
 .dot-sep{width:3.5px; height:3.5px; border-radius:50%; background:var(--ink-3);
   display:inline-block; margin:0 4px; flex:0 0 auto; align-self:center}
 .p-more{margin-left:auto; width:34px;height:22px; display:grid;place-items:center; color:var(--ink-3);
   transition:transform var(--dur-2) var(--spring), color var(--dur-2) linear}
 .p-more:active{transform:scale(.8); color:var(--ink)}
+.p-line .p-more{margin-left:4px}
 .p-body{margin:9px 0 0; font-size:16px; font-weight:600; line-height:1.64; letter-spacing:.005em; word-break:break-word; white-space:pre-wrap}
 .p-full .p-body{padding-left:0}
 .p-col{flex:1 1 auto; min-width:0}
@@ -453,9 +456,9 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 
 /* ---------- profile ---------- */
 .prof{padding:26px 20px 0; text-align:center}
-.prof .av{margin:0 auto 14px; box-shadow:0 6px 22px rgba(0,0,0,.08); animation:avIn 380ms var(--spring) both}
-.prof.noanim .av{animation:none}
-@keyframes avIn{from{transform:scale(.7);opacity:0}to{transform:none;opacity:1}}
+.prof .av{margin:0 auto 14px; box-shadow:0 6px 22px rgba(0,0,0,.08)}
+/* Profile contents should appear immediately. Keep only the tab/screen transition. */
+#meList .empty,#pfList .empty{animation:none}
 .prof h2{margin:0; font-size:23px; font-weight:800; letter-spacing:-.02em;
   display:flex; align-items:center; justify-content:center; gap:8px}
 .prof h2 .gtag{width:22px;height:22px;font-size:14px}
@@ -572,7 +575,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 
 /* ---------- chat thread ---------- */
 .thread{flex:1 1 auto; overflow-y:auto; scrollbar-width:none;
-  padding:calc(var(--barH,90px) + 14px) 14px calc(var(--barB,66px) + 16px);
+  padding:calc(var(--barH,90px) + 14px) 14px calc(var(--barB,66px) + 16px + var(--kb));
   display:flex; flex-direction:column; gap:4px; overscroll-behavior-y:contain}
 .thread::-webkit-scrollbar{display:none}
 .msgrow{display:flex; align-items:flex-end; gap:8px; margin-top:8px}
@@ -609,9 +612,10 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .typing i:nth-child(2){animation-delay:.16s} .typing i:nth-child(3){animation-delay:.32s}
 @keyframes blink{0%,60%,100%{opacity:.28;transform:translateY(0)}30%{opacity:1;transform:translateY(-4px)}}
 .composer-bar{
-  position:absolute; left:0; right:0; bottom:0; z-index:6;
+  position:absolute; left:0; right:0; bottom:var(--kb); z-index:6;
   display:flex; align-items:flex-end; gap:9px;
-  padding:10px 12px calc(var(--safe-b) + 10px);
+  padding:10px 12px calc(var(--input-safe-b) + 10px);
+  will-change:bottom;
   background:var(--bar); border-top:1px solid var(--glass-line);
   -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
   transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
@@ -677,8 +681,9 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 
 /* ---------- reply composer (mirrors DM bar) ---------- */
 .reply-dock{
-  position:absolute; left:0; right:0; bottom:0; z-index:6;
+  position:absolute; left:0; right:0; bottom:var(--kb); z-index:6;
   background:var(--bar);
+  will-change:bottom;
   -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
   border-top:1px solid var(--glass-line);
   transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
@@ -687,7 +692,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .reply-dock .replying{margin:10px 14px 0; border-radius:14px}
 .reply-tools{
   display:flex; align-items:center; gap:4px;
-  padding:0 12px calc(var(--safe-b) + 10px);
+  padding:0 12px calc(var(--input-safe-b) + 10px);
   max-height:0; opacity:0; overflow:hidden; pointer-events:none;
   transition:max-height 300ms var(--ease-out), opacity 200ms var(--ease-out);
 }
@@ -714,7 +719,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .reply-bar{
   position:absolute; left:0; right:0; bottom:0; z-index:6;
   display:flex; align-items:flex-end; gap:10px;
-  padding:10px 14px calc(var(--safe-b) + 10px);
+  padding:10px 14px calc(var(--input-safe-b) + 10px);
   background:var(--bar); border-top:1px solid var(--glass-line);
   -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
   transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
@@ -1130,7 +1135,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.29.2';
+const APP_VER='2.29.7';
 
 
 /* =========================================================
@@ -1144,7 +1149,7 @@ const SUPABASE_PUBLISHABLE_KEY='sb_publishable_vYapd7Gg_rFLAFkO42BPUQ_GXLge49D';
 
 const CLOUD={
   enabled:false, client:null, userId:null, channel:null,
-  reloading:false, reloadAgain:false, reloadTimer:null,
+  reloading:false, reloadAgain:false, reloadAgainApplyPosts:false, reloadTimer:null, feedDirty:false,
   remoteUserIds:new Set()
 };
 function cloudConfigured(){
@@ -1268,9 +1273,9 @@ function cloudViewSignature(){
   return JSON.stringify([users,posts,chats,notes,seen]);
 }
 
-async function cloudReloadAll(initial=false){
+async function cloudReloadAll(initial=false, applyPosts=true){
   if(!CLOUD.enabled) return;
-  if(CLOUD.reloading){ CLOUD.reloadAgain=true; return; }
+  if(CLOUD.reloading){ CLOUD.reloadAgain=true; if(applyPosts) CLOUD.reloadAgainApplyPosts=true; return; }
   CLOUD.reloading=true;
   const beforeSig=initial ? '' : cloudViewSignature();
   try{
@@ -1325,8 +1330,16 @@ async function cloudReloadAll(initial=false){
         req:false,rep,arch:!!p.archived,edited:!!p.edited,cloud:true};
       remotePosts.push(lp); if(S.users[lp.u]) S.users[lp.u].posts=(S.users[lp.u].posts||0)+1;
     }
-    /* Cloud接続中はSupabaseを唯一の正本にする。端末ローカルのDEMO投稿は混ぜない。 */
-    S.posts=remotePosts.sort((a,b)=>b.ts-a.ts);
+    /* Home timeline is X-like: background sync may learn that the server changed,
+       but the visible post snapshot only changes on initial load or manual refresh. */
+    if(initial || applyPosts){
+      S.posts=remotePosts.sort((a,b)=>b.ts-a.ts);
+      CLOUD.feedDirty=false;
+    }else{
+      const currentIds=new Set(S.posts.filter(p=>p.cloud).map(p=>p.id));
+      const remoteIds=new Set(remotePosts.map(p=>p.id));
+      if(currentIds.size!==remoteIds.size || [...remoteIds].some(id=>!currentIds.has(id))) CLOUD.feedDirty=true;
+    }
 
     const chatIds=chats.map(c=>c.id), stMap=new Map(states.map(x=>[x.chat_id,x]));
     const msgs=chatIds.length?await cloudRows(sb.from('messages').select('*').in('chat_id',chatIds).order('created_at',{ascending:true})):[];
@@ -1354,16 +1367,20 @@ async function cloudReloadAll(initial=false){
       else if(n.kind==='reply'){ item.t=`${un.name}があなたの投稿に返信しました`; item.s=(r?.t||'').slice(0,80); S.notes.reply.push(item); }
       if(n.read_at) S.noteSeen.add(n.id);
     }
-    if(!initial && beforeSig!==cloudViewSignature()) cloudRefreshUI();
+    if(!initial && beforeSig!==cloudViewSignature()) cloudRefreshUI(applyPosts);
   }catch(e){ cloudErr('reload',e); }
   finally{
     CLOUD.reloading=false;
-    if(CLOUD.reloadAgain){ CLOUD.reloadAgain=false; cloudReloadAll(false); }
+    if(CLOUD.reloadAgain){
+      const nextApplyPosts=CLOUD.reloadAgainApplyPosts;
+      CLOUD.reloadAgain=false; CLOUD.reloadAgainApplyPosts=false;
+      cloudReloadAll(false,nextApplyPosts);
+    }
   }
 }
-function cloudRefreshUI(){
+function cloudRefreshUI(refreshFeed=true){
   quiet(()=>{
-    if($('#feed')) renderFeed(false);
+    if(refreshFeed && $('#feed')) renderFeed(false);
     if(S.tab==='bell') renderNotes();
     if(S.tab==='chat'){ chatSig=null; renderChatList(); }
     if(S.tab==='me') renderMe();
@@ -1374,7 +1391,9 @@ function cloudRefreshUI(){
   });
 }
 function cloudScheduleReload(){
-  clearTimeout(CLOUD.reloadTimer); CLOUD.reloadTimer=setTimeout(()=>cloudReloadAll(false),260);
+  clearTimeout(CLOUD.reloadTimer);
+  /* Realtime keeps DMs/notifications/profile state live, but does not inject new posts into Home. */
+  CLOUD.reloadTimer=setTimeout(()=>cloudReloadAll(false,false),260);
 }
 function cloudStartRealtime(){
   if(!CLOUD.enabled||CLOUD.channel) return;
@@ -1970,9 +1989,12 @@ function goTab(id){
   S.tab=id;
   if(prev){ prev.classList.add('leaving'); prev.classList.remove('on');
     setTimeout(()=>prev.classList.remove('leaving'),180); }
+  const existed=!!PANES[id];
   const pane=PANES[id]||buildPane(id);
   raf(()=>pane.classList.add('on'));
-  refreshPane(id);
+  /* A newly-built pane already rendered itself. Rendering it again here
+     restarted profile/content entrance animations and made the profile tab feel late. */
+  if(existed) refreshPane(id);
   moveNavInd(true);
   syncNavBadges();
   $('#navwrap').classList.remove('hide');
@@ -2058,8 +2080,7 @@ function postCard(p, opts={}){
         <div class="p-line">
           <button class="p-name" data-user="${u.id}">${esc(u.name)}</button>
           ${genderTag(u)}${accountTag(u)}
-          <span class="dot-sep"></span>
-          <span class="p-time" data-ts="${p.ts}">${p.edited?'編集済み・':''}${ago(p.ts)}</span>
+          <span class="p-time" data-ts="${p.ts}">${p.edited?'編集済み ':''}${ago(p.ts)}</span>
           <button class="p-more" data-more="${p.id}" aria-label="その他">${I.dots}</button>
         </div>
       <p class="p-body">${esc(p.t)}</p>
@@ -2339,7 +2360,7 @@ function renderMe(){
       <button class="utab${meTab==='replies'?' on':''}" data-ut="replies">返信 <small>${u.replies}</small></button>
       <div class="uind" id="meInd"></div>
     </div>
-    <div style="padding:6px 16px 0" id="meList"></div>`;
+    <div style="padding:6px 12px 0" id="meList"></div>`;
   $('#editProf').onclick=()=>pushEdit();
   $$('#meTabs .utab').forEach(b=>b.addEventListener('click',()=>{
     if(meTab===b.dataset.ut) return;
@@ -2351,21 +2372,15 @@ function renderMe(){
   paintMeList();
   raf(()=>moveU($('#meTabs'),$('#meInd'),false));
 
-  function paintMeList(fromTap){
+  function paintMeList(){
     const box=$('#meList');
     const arr = meTab==='posts' ? mine : [];
-    const still = q && !fromTap;                 /* data refresh → no fade */
-    const fill=()=>{
-      box.innerHTML = arr.length ? arr.map(p=>miniPost(p)).join('')
-        : `<div class="empty"><h3>${meTab==='posts'?'公開中の投稿はありません':'公開中の返信はありません'}</h3><p>${meTab==='posts'?'「＋」から、いまの気持ちを置いてみましょう':'返信すると、ここにまとまります'}</p></div>`;
-      revealAll(box,0,still);
-      box.style.opacity='1'; box.style.transform='none';
-      box.onclick=onMiniClick;
-    };
-    if(still){ box.style.transition='none'; fill(); return; }
-    box.style.transition='opacity 80ms ease, transform 110ms ease';
-    box.style.opacity='0'; box.style.transform='translate3d(0,8px,0)';
-    setTimeout(fill,85);
+    box.style.transition='none';
+    box.style.opacity='1';
+    box.style.transform='none';
+    box.innerHTML = arr.length ? arr.map(p=>miniPost(p)).join('')
+      : `<div class="empty"><h3>${meTab==='posts'?'公開中の投稿はありません':'公開中の返信はありません'}</h3><p>${meTab==='posts'?'「＋」から、いまの気持ちを置いてみましょう':'返信すると、ここにまとまります'}</p></div>`;
+    box.onclick=onPostClick;
   }
 }
 function moveU(tabs, ind, animate=true){
@@ -2378,30 +2393,9 @@ function moveU(tabs, ind, animate=true){
   if(!animate) requestAnimationFrame(()=>ind.style.transition='');
 }
 function miniPost(p){
-  const tag=TAGS[p.tag];
-  return `<article class="card stagger" data-mini="${p.id}">
-    <div style="display:flex;align-items:center;gap:10px">
-      ${tag?`<span class="tag ${tag.cls}" style="margin-top:0">${tag.label}</span>`:''}
-      ${p.arch?`<span class="tag tag-arch" style="margin-top:0">アーカイブ</span>`:''}
-      <span class="p-time" data-ts="${p.ts}" style="margin-left:auto">${p.edited?'編集済み・':''}${ago(p.ts)}</span>
-      <button class="p-more" data-more="${p.id}" aria-label="その他">${I.dots}</button>
-    </div>
-    <p class="p-body">${esc(p.t)}</p>
-    ${mediaHTML(p.media)}
-    <div class="p-foot">
-      <button class="act" data-reply="${p.id}">${I.reply}<span class="num">${p.replies}件の返信</span></button>
-      <button class="act${p.liked?' liked':''}" data-like="${p.id}">
-        <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span><span class="num">${p.likes}</span></button>
-    </div>
-  </article>`;
-}
-function onMiniClick(e){
-  const more=e.target.closest('[data-more]');
-  if(more){ e.stopPropagation(); openPostMenu(more.dataset.more); return; }
-  const like=e.target.closest('[data-like]');
-  if(like){ toggleLike(like.dataset.like, like); return; }
-  const rep=e.target.closest('[data-reply]');
-  if(rep){ openThreadForPost(rep.dataset.reply); }
+  /* Profile posts use the exact same card markup as the home feed.
+     Only remove the entrance stagger so profile contents appear immediately. */
+  return postCard(p).replace('class="card tap stagger"','class="card tap"');
 }
 
 /* =========================================================
@@ -2506,7 +2500,7 @@ function pushProfile(uid){
         <button class="utab${profTab==='replies'?' on':''}" data-ut="replies">返信 <small>${u.replies}</small></button>
         <div class="uind" id="pfInd"></div>
       </div>
-      <div style="padding:6px 16px 40px" id="pfList"></div>`;
+      <div style="padding:6px 12px 40px" id="pfList"></div>`;
 
     $('#favBtn',body).onclick=()=>{
       u.fav=!u.fav; haptic(10);
@@ -2542,14 +2536,12 @@ function pushProfile(uid){
     function paintList(){
       const box=$('#pfList',body);
       const arr = profTab==='posts' ? mine : [];
-      box.style.transition='opacity 80ms ease, transform 110ms ease';
-      box.style.opacity='0'; box.style.transform='translate3d(0,8px,0)';
-      setTimeout(()=>{
-        box.innerHTML = arr.length ? arr.map(p=>miniPost(p)).join('')
-          : `<div class="empty"><h3>${profTab==='posts'?'公開中の投稿はありません':'公開中の返信はありません'}</h3><p>公開されると、ここに並びます</p></div>`;
-        revealAll(box); box.style.opacity='1'; box.style.transform='none';
-        box.onclick=onMiniClick;
-      },85);
+      box.style.transition='none';
+      box.style.opacity='1';
+      box.style.transform='none';
+      box.innerHTML = arr.length ? arr.map(p=>miniPost(p)).join('')
+        : `<div class="empty"><h3>${profTab==='posts'?'公開中の投稿はありません':'公開中の返信はありません'}</h3><p>公開されると、ここに並びます</p></div>`;
+      box.onclick=onPostClick;
     }
   };
   paint();
@@ -2607,10 +2599,8 @@ function pushThread(cid){
     haptic(7);
     const ok=mutualFav(c.u);
     openMenu([
-      {t:ok?'画像を送る':'画像を送る（お気に入り相互のみ）',
-       fn:()=> ok ? pickMedia('image/*', setDmAtt) : explainFav(c.u)},
-      {t:ok?'動画を送る':'動画を送る（お気に入り相互のみ）',
-       fn:()=> ok ? pickMedia('video/*', setDmAtt) : explainFav(c.u)},
+      {t:ok?'画像・動画を送る':'画像・動画を送る（お気に入り相互のみ）',
+       fn:()=> ok ? pickMedia('image/*,video/*', setDmAtt) : explainFav(c.u)},
       {t:'音声を録音して送る', fn:()=>openRecorder(setDmAtt)}
     ]);
   };
@@ -2726,8 +2716,7 @@ function pushPostDetail(pid){
         <button class="replysend compact" id="repSendMini" aria-label="返信する">${I.send}</button>
       </div>
       <div class="reply-tools" id="repTools">
-        <button class="toolbtn" data-att="image" aria-label="画像">${I.camera}</button>
-        <button class="toolbtn" data-att="video" aria-label="動画">${I.film}</button>
+        <button class="toolbtn" data-att="media" aria-label="画像・動画">${I.camera}</button>
         <button class="toolbtn" data-att="audio" aria-label="音声">${I.mic}</button>
         <button class="replybtn" id="repSend">返信</button>
       </div>
@@ -2777,7 +2766,7 @@ function pushPostDetail(pid){
     haptic(7);
     const k=b.dataset.att;
     if(k==='audio') openRecorder(setRepAtt);
-    else pickMedia(k==='video'?'video/*':'image/*', setRepAtt);
+    else pickMedia('image/*,video/*', setRepAtt);
   }));
   /* the tool row unfolds once the field is in use, as on X */
   const openTools=()=>{ dock.classList.add('open'); grow(); fitBars(s); };
@@ -3776,8 +3765,7 @@ function editPost(pid){
       </div>
       <div style="margin-top:6px;text-align:right;font-size:12px;color:var(--ink-3);font-weight:700" id="epCnt">${[...p.t].length}/140</div>
       <div class="attachrow">
-        <button class="attbtn" data-att="image">${I.camera}画像</button>
-        <button class="attbtn" data-att="video">${I.film}動画</button>
+        <button class="attbtn" data-att="media">${I.camera}画像・動画</button>
         <button class="attbtn" data-att="audio">${I.mic}音声</button>
       </div>
       <div id="cmAtt"></div>
@@ -3936,8 +3924,7 @@ function openCompose(){
       </div>
       <div style="margin-top:6px;text-align:right;font-size:12px;color:var(--ink-3);font-weight:700" id="cmCnt">0/140</div>
       <div class="attachrow">
-        <button class="attbtn" data-att="image">${I.camera}画像</button>
-        <button class="attbtn" data-att="video">${I.film}動画</button>
+        <button class="attbtn" data-att="media">${I.camera}画像・動画</button>
         <button class="attbtn" data-att="audio">${I.mic}音声</button>
       </div>
       <div id="cmAtt"></div>
@@ -3972,7 +3959,7 @@ function openCompose(){
     haptic(7);
     const k=b.dataset.att;
     if(k==='audio') openRecorder(setAtt);
-    else pickMedia(k==='video'?'video/*':'image/*', setAtt);
+    else pickMedia('image/*,video/*', setAtt);
   }));
   $$('.tagopt',m).forEach(b=>b.addEventListener('click',()=>{
     haptic(6); tag=b.dataset.t;
@@ -4073,7 +4060,7 @@ function attachPTR(scroller, root, onRefresh){
 /* what each screen does when it is pulled */
 async function refreshFeed(){
   if(CLOUD.enabled){
-    await cloudReloadAll(false);
+    await cloudReloadAll(false,true);
   }else{
     demoStep(true);
     queueDemo(1+Math.floor(Math.random()*3));
@@ -4084,7 +4071,7 @@ async function refreshFeed(){
 }
 async function refreshNotes(){
   if(CLOUD.enabled){
-    await cloudReloadAll(false);
+    await cloudReloadAll(false,false);
   }else{
     const who=activeDemos();
     if(who.length && myPosts().length && Math.random()<0.7){
@@ -4095,7 +4082,7 @@ async function refreshNotes(){
 }
 async function refreshChats(){
   if(CLOUD.enabled){
-    await cloudReloadAll(false);
+    await cloudReloadAll(false,false);
   }else{
     const who=activeDemos();
     if(who.length && Math.random()<0.6){
@@ -4107,7 +4094,7 @@ async function refreshChats(){
   }
 }
 async function refreshMe(){
-  if(CLOUD.enabled) await cloudReloadAll(false);
+  if(CLOUD.enabled) await cloudReloadAll(false,false);
   else quiet(()=>renderMe());
 }
 
@@ -4297,12 +4284,60 @@ async function boot(){
   if(CLOUD.enabled){
     cloudStartRealtime();
     /* Realtimeが取りこぼした場合だけ拾う保険。通常同期はRealtime、確認は30秒ごと。 */
-    setInterval(()=>{ if(!document.hidden) cloudReloadAll(false); }, 30000);
+    setInterval(()=>{ if(!document.hidden) cloudReloadAll(false,false); }, 30000);
     setTimeout(()=>toast('Supabaseに接続しました'),650);
   }else{
     setTimeout(demoTick, 6000);
   }
 }
+
+/* ---------- mobile keyboard / visual viewport ---------- */
+/*
+   Mobile browsers keep a separate visual viewport when the software keyboard
+   opens. Move the DM/reply dock above that covered area and give the scroller
+   matching bottom space, so the last message/reply never sits behind the keyboard.
+*/
+function syncKeyboardInset(){
+  const vv=window.visualViewport;
+  let kb=0;
+  if(vv){
+    const layoutH=Math.max(window.innerHeight||0, document.documentElement.clientHeight||0);
+    kb=Math.max(0, Math.round(layoutH - vv.height - vv.offsetTop));
+    /* Tiny changes are browser chrome, not a software keyboard. */
+    if(kb<80) kb=0;
+  }
+  const root=document.documentElement;
+  root.style.setProperty('--kb', kb+'px');
+  root.style.setProperty('--input-safe-b', kb>0 ? '0px' : 'var(--safe-b)');
+  document.body.classList.toggle('keyboard-open', kb>0);
+
+  if(kb>0){
+    const active=document.activeElement;
+    const screen=active?.closest?.('.screen');
+    if(screen && active?.matches?.('#msgIn,#repIn')){
+      requestAnimationFrame(()=>{
+        const th=screen.querySelector('.thread');
+        if(th && active.id==='msgIn') th.scrollTop=th.scrollHeight;
+        const sc=screen.querySelector('.scroll.withbar');
+        if(sc && active.id==='repIn') active.scrollIntoView({block:'nearest'});
+      });
+    }
+  }
+}
+if(window.visualViewport){
+  visualViewport.addEventListener('resize', syncKeyboardInset, {passive:true});
+  visualViewport.addEventListener('scroll', syncKeyboardInset, {passive:true});
+}else{
+  window.addEventListener('resize', syncKeyboardInset, {passive:true});
+}
+document.addEventListener('focusin', e=>{
+  if(e.target.matches?.('textarea,input')) setTimeout(syncKeyboardInset,40);
+});
+document.addEventListener('focusout', e=>{
+  if(e.target.matches?.('textarea,input')) setTimeout(syncKeyboardInset,80);
+});
+window.addEventListener('orientationchange', ()=>setTimeout(syncKeyboardInset,120));
+syncKeyboardInset();
 
 /* keyboard: escape closes topmost layer */
 document.addEventListener('keydown',e=>{
