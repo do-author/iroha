@@ -716,6 +716,82 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   100%{transform:translate3d(26px,-22px,0) scale(.5); opacity:0}
 }
 
+/* ---------- attachments ---------- */
+.media{
+  position:relative; margin-top:11px; border-radius:16px; overflow:hidden;
+  background:var(--card-2); border:1px solid var(--line-soft);
+}
+.media img,.media video{display:block; width:100%; max-height:340px; object-fit:cover; background:#000}
+.media.blurred img,.media.blurred video{filter:blur(26px) saturate(.7); transform:scale(1.08)}
+.media .veil{
+  position:absolute; inset:0; display:grid; place-items:center; gap:8px;
+  background:rgba(12,11,9,.34); color:#fff; font-size:13px; font-weight:800;
+  align-content:center; text-align:center; padding:16px;
+}
+.media .veil small{display:block; font-weight:600; opacity:.8; font-size:11.5px; margin-top:4px}
+.media-off{
+  margin-top:11px; display:flex; align-items:center; gap:9px;
+  padding:13px 15px; border-radius:14px;
+  background:var(--field); color:var(--ink-3); font-size:13px; font-weight:700;
+}
+.bub .media,.bub .media-off,.bub .aplayer{margin-top:0}
+.msgrow .bub.has-media{padding:6px; background:var(--card-2)}
+.msgrow.me .bub.has-media{background:var(--accent)}
+.bub .media{max-width:230px}
+
+/* voice note */
+.aplayer{
+  display:flex; align-items:center; gap:12px; margin-top:11px;
+  padding:11px 14px; border-radius:16px;
+  background:var(--field); border:1px solid var(--line-soft);
+  min-width:190px;
+}
+.apbtn{
+  width:36px;height:36px;border-radius:50%; flex:0 0 auto; display:grid;place-items:center;
+  background:var(--accent); color:var(--accent-ink);
+  transition:transform var(--dur-2) var(--spring);
+}
+.apbtn:active{transform:scale(.88)}
+.apwave{flex:1 1 auto; display:flex; align-items:center; gap:2.5px; height:26px; overflow:hidden}
+.apwave i{flex:1 1 auto; min-width:2px; border-radius:2px; background:var(--ink-3); opacity:.42}
+.apwave i.on{background:var(--accent-deep); opacity:1}
+[data-theme="dark"] .apwave i.on{background:var(--accent)}
+.aptime{flex:0 0 auto; font-size:12px; font-weight:700; color:var(--ink-3); font-variant-numeric:tabular-nums}
+
+/* composer attachment strip */
+.attachrow{display:flex; gap:10px; margin-top:16px; flex-wrap:wrap}
+.attbtn{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:11px 16px; border-radius:999px; border:1.5px solid var(--line);
+  font-size:13.5px; font-weight:700; color:var(--ink-2);
+  transition:transform var(--dur-2) var(--spring), border-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
+}
+.attbtn:active{transform:scale(.93)}
+.attbtn[disabled]{opacity:.4}
+.attpreview{position:relative; margin-top:14px}
+.attpreview .x{
+  position:absolute; top:10px; right:10px; width:30px;height:30px;border-radius:50%;
+  background:rgba(12,11,9,.62); color:#fff; display:grid;place-items:center; z-index:2;
+  transition:transform var(--dur-2) var(--spring);
+}
+.attpreview .x:active{transform:scale(.86)}
+
+/* recorder sheet */
+.rec-face{display:grid; place-items:center; gap:6px; padding:14px 0 4px}
+.rec-dot{
+  width:76px;height:76px;border-radius:50%;
+  background:#E0245E; display:grid;place-items:center; color:#fff;
+  box-shadow:0 8px 26px rgba(224,36,94,.4);
+  transition:transform 420ms var(--spring), background-color var(--dur-2) linear;
+}
+.rec-dot.on{animation:recPulse 1.5s ease-in-out infinite}
+.rec-dot:active{transform:scale(.9)}
+@keyframes recPulse{0%,100%{box-shadow:0 8px 26px rgba(224,36,94,.4)}50%{box-shadow:0 8px 26px rgba(224,36,94,.4),0 0 0 16px rgba(224,36,94,.10)}}
+.rec-time{font-size:30px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:.02em}
+.rec-hint{font-size:12.5px; color:var(--ink-3); font-weight:600}
+.rec-bars{display:flex; align-items:center; justify-content:center; gap:3px; height:34px; width:100%; padding:0 20px}
+.rec-bars i{flex:1 1 auto; background:var(--accent); border-radius:2px; height:4px; transition:height 90ms linear}
+
 /* ---------- settings ---------- */
 .group{margin:18px 16px 0}
 .group>h4{margin:0 0 8px 6px; font-size:12px; font-weight:800; color:var(--ink-3); letter-spacing:.04em}
@@ -893,6 +969,10 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .field .at{font-size:17px; font-weight:700; color:var(--ink-3)}
 .field .cnt{display:block; text-align:right; font-size:11px; color:var(--ink-3); font-weight:700; margin-top:2px}
 .field .sub{display:block; text-align:right; font-size:11px; color:var(--ink-3); font-weight:600}
+.doc{padding:18px 20px 50px}
+.doc section{margin-bottom:26px}
+.doc h3{margin:0 0 8px; font-size:15.5px; font-weight:800}
+.doc p{margin:0; font-size:14.5px; font-weight:500; line-height:1.85; color:var(--ink-2)}
 .safety{display:flex; align-items:center; gap:9px; margin-top:20px; font-size:12px; color:var(--ink-3); font-weight:600}
 
 /* ============ OVERLAYS ============ */
@@ -1018,7 +1098,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.24';
+const APP_VER='2.26.3';
 
 const $  = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -1060,6 +1140,14 @@ const I = {
   close:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   pin:'<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M14.5 2.5l7 7-2.1 2.1-1.4-.5-3.2 3.2.6 3.6-1.8 1.8-4-4L4 21l-.8-.8 5.3-5.6-4-4L6.3 8.8l3.6.6L13.1 6l-.5-1.4z"/></svg>',
   lockS:'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"><rect x="4.6" y="10.4" width="14.8" height="10" rx="2.8"/><path d="M8.2 10.2V7.8a3.8 3.8 0 017.6 0v2.4"/></svg>',
+  camera:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M3.5 8.5h3.2l1.4-2.3h7.8l1.4 2.3h3.2v10a1 1 0 01-1 1H4.5a1 1 0 01-1-1z"/><circle cx="12" cy="13.3" r="3.4"/></svg>',
+  film:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.2l5 2.8-5 2.8z"/></svg>',
+  mic:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3"/></svg>',
+  micBig:'<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3"/></svg>',
+  stopBig:'<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="3"/></svg>',
+  play:'<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.2l11 6.8-11 6.8z"/></svg>',
+  pause:'<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="5" width="4" height="14" rx="1.4"/><rect x="13.5" y="5" width="4" height="14" rx="1.4"/></svg>',
+  eye:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 5.6c5 0 8.4 6.4 8.4 6.4S17 18.4 12 18.4 3.6 12 3.6 12 7 5.6 12 5.6z"/><circle cx="12" cy="12" r="2.9"/></svg>',
   plusS:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
 };
 
@@ -1160,6 +1248,7 @@ const S = {
   filter:'osusume',
   media:'safety',
   quiet:false,
+  who:'replied',      /* who may start a conversation with me */
   noteSeen:new Set(),   /* notification ids already looked at */
   blocked:[],          /* user ids — their posts vanish entirely */
   muted:[],            /* user ids — quieter, but still reachable */
@@ -1167,9 +1256,9 @@ const S = {
     me  :{id:'me', name:'妖精さん', handle:FRESH_HANDLE, bio:'', av:FRESH_AV, gender:'secret', posts:0, replies:0, talks:0},
     bot :{id:'bot', name:'iroha Bot', handle:'iroha_official', bio:'irohaの公式Botです。\n会話のきっかけになる話題を届けます。', av:'stone', bot:true, official:true, posts:31, replies:0, talks:1, fav:false},
     nagi:{id:'nagi', gender:'secret', name:'なぎ', handle:'nagi_0000', bio:'夜のほうが言葉が出てくる。', av:'slate', demo:true, posts:12, replies:8, talks:0, fav:false},
-    koto:{id:'koto', gender:'female', name:'ことは', handle:'kotoha_pon', bio:'たのしいことを集めています。', av:'amber', demo:true, posts:24, replies:19, talks:0, fav:false},
+    koto:{id:'koto', gender:'female', favMe:true, name:'ことは', handle:'kotoha_pon', bio:'たのしいことを集めています。', av:'amber', demo:true, posts:24, replies:19, talks:0, fav:false},
     rui :{id:'rui', gender:'male', name:'るい', handle:'rui_room', bio:'気になったことはだいたい聞きます。', av:'moss', demo:true, posts:17, replies:22, talks:0, fav:false},
-    mio :{id:'mio', gender:'female', name:'みお', handle:'mio_note', bio:'music / coffee / 散歩', av:'clay', demo:true, posts:9, replies:6, talks:0, fav:false}
+    mio :{id:'mio', gender:'female', favMe:true, name:'みお', handle:'mio_note', bio:'music / coffee / 散歩', av:'clay', demo:true, posts:9, replies:6, talks:0, fav:false}
   },
   DEMOS:['nagi','koto','rui','mio'],
   posts:[
@@ -1349,19 +1438,24 @@ const navMorph=(()=>{
   function measure(){
     const wrap=$('#navwrap'), nav=$('#nav'), slot=nav&&nav.querySelector('.fabslot'), fab=$('#fab');
     if(!wrap||!nav||!slot||!fab) return false;
+    /* a re-measure can land while the bar is scaled mid-flight; reading those
+       rects would fold the current scale into the geometry, so undo it first */
+    const navT=nav.style.transform, fabT=fab.style.transform;
+    nav.style.transform='none'; fab.style.transform='none';
     const w=wrap.getBoundingClientRect(), n=nav.getBoundingClientRect(), r=slot.getBoundingClientRect();
-    if(!w.width || !n.width) return false;
+    const restore=()=>{ nav.style.transform=navT; fab.style.transform=fabT; };
+    if(!w.width || !n.width){ restore(); return false; }
     baseX = r.left - w.left + r.width/2 - FAB_R;
     /* measured off the reference photo: the "+" settles with its right edge
        8px inside the card's right edge */
-    /* derive the card's right edge from the scroller's padding — reading a
-       card directly can catch it mid entry-animation, where scale() lies */
+    /* Keep this geometry independent from #feedScroll's current transform.
+       While a post-detail screen is open, tabsRoot is shifted left; replies
+       repaint the feed in the background, and measuring that shifted rect used
+       to poison the FAB's collapsed landing position.  Only the feed's fixed
+       right padding matters here, so derive the card edge from navwrap itself. */
     const sc=document.querySelector('#feedScroll');
-    let cardR = w.width - 12;
-    if(sc){
-      const sb=sc.getBoundingClientRect();
-      cardR = (sb.right - w.left) - parseFloat(getComputedStyle(sc).paddingRight || 12);
-    }
+    const feedPadR=sc ? (parseFloat(getComputedStyle(sc).paddingRight) || 12) : 12;
+    const cardR = w.width - feedPadR;
     dx = (cardR - 8 - FAB_D) - baseX;
     /* the damped overshoot still has to stay on screen */
     dx = Math.min(dx, (w.width - 6 - FAB_D - baseX)/PEAK_TX);
@@ -1371,6 +1465,7 @@ const navMorph=(()=>{
       const b=elm.getBoundingClientRect();
       return {el:elm, off:(b.left+b.width/2)-(n.left+slotCx)};
     });
+    restore();
     return true;
   }
 
@@ -1611,6 +1706,7 @@ function postCard(p, opts={}){
           <button class="p-more" data-more="${p.id}" aria-label="その他">${I.dots}</button>
         </div>
       <p class="p-body">${esc(p.t)}</p>
+      ${mediaHTML(p.media)}
       ${tag?`<span class="tag ${tag.cls}">${tag.label}</span>`:''}
       <div class="p-foot">
         <button class="act" data-reply="${p.id}">${I.reply}<span class="num">${p.replies}</span></button>
@@ -1692,14 +1788,19 @@ setInterval(()=>{
 let noteSeg='like';
 function paneBell(p){
   p.innerHTML=`
-    <header class="appbar" id="bellBar" style="padding-bottom:0">
-      <div class="seg" id="noteSeg" style="margin:2px 0 12px">
+    <header class="appbar" id="bellBar">
+      <div class="appbar-row">
+        <div class="brand"><span class="brand-dot"></span><span class="brand-name">iroha</span><span class="brand-ver">v${APP_VER}</span></div>
+        <button class="iconbtn js-settings" aria-label="設定">${I.gear}</button>
+      </div>
+      <div class="seg" id="noteSeg" style="margin:13px 0 12px">
         <div class="segind" id="noteInd"></div>
         <button class="segbtn on" data-seg="like">いいね <small>${S.notes.like.length}</small></button>
         <button class="segbtn" data-seg="reply">返信 <small>${S.notes.reply.length}</small></button>
       </div>
     </header>
     <div class="scroll flush" id="noteScroll"><div id="noteList"></div></div>`;
+  $('.js-settings',p).onclick=()=>pushSettings();
   $$('.segbtn',p).forEach(b=>b.addEventListener('click',()=>{
     if(noteSeg===b.dataset.seg) return;
     haptic(6); noteSeg=b.dataset.seg; openNoteSegment(noteSeg);
@@ -1707,7 +1808,7 @@ function paneBell(p){
     moveSeg($('#noteSeg',p),$('#noteInd',p));
     renderNotes(true);
   }));
-  wireScroll($('#noteScroll',p), null);
+  wireScroll($('#noteScroll',p), $('#bellBar',p));
   attachPTR($('#noteScroll',p), p, refreshNotes);
   renderNotes();
   raf(()=>moveSeg($('#noteSeg',p),$('#noteInd',p),false));
@@ -1781,9 +1882,14 @@ function renderNotes(animate){
 function paneChat(p){
   p.innerHTML=`
     <header class="appbar" id="chatBar" style="padding-bottom:12px">
-      <div class="appbar-row"><div class="searchbar">${I.search}<input id="chatQ" placeholder="チャットを検索"></div></div>
+      <div class="appbar-row">
+        <div class="brand"><span class="brand-dot"></span><span class="brand-name">iroha</span><span class="brand-ver">v${APP_VER}</span></div>
+        <button class="iconbtn js-settings" aria-label="設定">${I.gear}</button>
+      </div>
+      <div class="appbar-row" style="margin-top:13px"><div class="searchbar">${I.search}<input id="chatQ" placeholder="チャットを検索"></div></div>
     </header>
     <div class="scroll flush" id="chatScroll"><div id="chatList"></div></div>`;
+  $('.js-settings',p).onclick=()=>pushSettings();
   $('#chatQ',p).addEventListener('input',()=>renderChatList());
   wireScroll($('#chatScroll',p), $('#chatBar',p));
   attachPTR($('#chatScroll',p), p, refreshChats);
@@ -1805,7 +1911,7 @@ function renderChatList(){
   chatSig=sig;
   host.innerHTML = list.length ? list.map(c=>{
     const u=S.users[c.u], last=c.msgs[c.msgs.length-1];
-    const preview = last ? (last.sys?last.t:last.t) : '';
+    const preview = last ? (last.media && !last.t ? MEDIA_LABEL[last.media.kind]+'を送信しました' : last.t) : '';
     return `<div class="row stagger" data-chat="${c.id}">
       <button class="avhit" data-user="${c.u}" aria-label="${esc(u.name)}のプロフィール">${uav(c.u,52)}</button>
       <div class="row-main">
@@ -1921,6 +2027,7 @@ function miniPost(p){
       <button class="p-more" data-more="${p.id}" aria-label="その他">${I.dots}</button>
     </div>
     <p class="p-body">${esc(p.t)}</p>
+    ${mediaHTML(p.media)}
     <div class="p-foot">
       <button class="act" data-reply="${p.id}">${I.reply}<span class="num">${p.replies}件の返信</span></button>
       <button class="act${p.liked?' liked':''}" data-like="${p.id}">
@@ -1957,7 +2064,8 @@ function pop(){
   if(!stackEls.length){
     $('#tabsRoot').classList.remove('pushed');
     $('#navwrap').classList.remove('hide');
-    }
+    navMorph.expand();          /* the bar is back, so the "+" rejoins it */
+  }
   setTimeout(()=>node.remove(),430);
   refreshPane(S.tab); syncNavBadges();
 }
@@ -2046,6 +2154,15 @@ function pushProfile(uid){
       const b=$('#favBtn',body);
       b.classList.toggle('on',u.fav);
       b.innerHTML=I.star+(u.fav?'お気に入り中':'お気に入り');
+      /* demo people notice, and most of them favourite back */
+      if(u.fav && u.demo && !u.favMe){
+        setTimeout(()=>{
+          if(!u.fav || S.blocked.includes(uid)) return;
+          u.favMe=true;
+          toast(`${u.name}もあなたをお気に入りにしました`);
+          $$('.screen').forEach(sc=>{ if(sc.dataset.owner===uid) refreshDmPerm(sc); });
+        }, 3000+Math.random()*4000);
+      }
     };
     $('#dmBtn',body).onclick=()=>{
       if(uid==='me'){ goTab('me'); return; }
@@ -2095,8 +2212,9 @@ function pushThread(cid){
       <div class="side"><button class="iconbtn" id="thMore" aria-label="その他">${I.dots}</button></div>
     </header>
     <div class="thread" id="thread"></div>
+    <div id="dmAtt"></div>
     <div class="composer-bar">
-      <button class="iconbtn" aria-label="追加">${I.plusS}</button>
+      <button class="iconbtn" id="dmAdd" aria-label="添付">${I.plusS}</button>
       <textarea class="msgfield" id="msgIn" rows="1" placeholder="メッセージ…"></textarea>
       <button class="sendbtn" id="sendBtn" aria-label="送信">${I.send}</button>
     </div>
@@ -2113,20 +2231,43 @@ function pushThread(cid){
   const th=$('#thread',s);
   paintThread(th,c);
 
-  const inp=$('#msgIn',s), send=$('#sendBtn',s);
+  const inp=$('#msgIn',s), send=$('#sendBtn',s), dmAttBox=$('#dmAtt',s);
+  let dmAtt=null;
   const autoGrow=()=>{ inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,120)+'px';
-    send.classList.toggle('live', inp.value.trim().length>0); };
+    send.classList.toggle('live', inp.value.trim().length>0 || !!dmAtt); };
+  function setDmAtt(v){
+    dmAtt=v;
+    dmAttBox.innerHTML = v ? `<div class="attpreview" style="margin:12px 14px 0">
+        <button class="x" id="dmAttX" aria-label="取り消す">${I.close}</button>${mediaHTML(v)}</div>` : '';
+    if(v) $('#dmAttX',dmAttBox).onclick=()=>{ haptic(6); stopAudio(); setDmAtt(null); };
+    autoGrow(); fitBars(s);
+  }
+  $('#dmAdd',s).onclick=()=>{
+    haptic(7);
+    const ok=mutualFav(c.u);
+    openMenu([
+      {t:ok?'画像を送る':'画像を送る（お気に入り相互のみ）',
+       fn:()=> ok ? pickMedia('image/*', setDmAtt) : explainFav(c.u)},
+      {t:ok?'動画を送る':'動画を送る（お気に入り相互のみ）',
+       fn:()=> ok ? pickMedia('video/*', setDmAtt) : explainFav(c.u)},
+      {t:'音声を録音して送る', fn:()=>openRecorder(setDmAtt)}
+    ]);
+  };
   inp.addEventListener('input',autoGrow);
   inp.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();fire();} });
   send.onclick=fire;
 
   function fire(){
-    const t=inp.value.trim(); if(!t) return;
+    const t=inp.value.trim(); if(!t && !dmAtt) return;
+    if(dmAtt && (dmAtt.kind==='image'||dmAtt.kind==='video') && !mutualFav(c.u)){
+      explainFav(c.u); return;
+    }
     haptic(9);
-    c.msgs.push({me:true,t,ts:Date.now()}); c.ts=Date.now();
-    inp.value=''; autoGrow();
+    c.msgs.push({me:true,t,media:dmAtt,ts:Date.now()}); c.ts=Date.now();
+    inp.value=''; setDmAtt(null); autoGrow();
     appendMsg(th,c,c.msgs[c.msgs.length-1],true);
     scrollThread(th);
+    quiet(()=>{ chatSig=null; if(S.tab==='chat') renderChatList(); });
     // bot typing → reply
     setTimeout(()=>{
       const dots=el(`<div class="msgrow" id="typingRow">${uav(c.u,30)}<div class="bub"><span class="typing"><i></i><i></i><i></i></span></div></div>`);
@@ -2165,7 +2306,7 @@ function appendMsg(th,c,m,animate,i=0){
   }
   const row=el(`<div class="msgrow${m.me?' me':''}">
     ${m.me?uav('me',30):uav(c.u,30)}
-    <div class="bub">${esc(m.t)}</div>
+    <div class="bub${m.media?' has-media':''}">${m.media?mediaHTML(m.media):''}${m.t?esc(m.t):''}</div>
     <span class="mtime" data-ts="${m.ts}">${ago(m.ts)}</span>
   </div>`);
   const bub=row.querySelector('.bub');
@@ -2199,6 +2340,7 @@ function pushPostDetail(pid){
           ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>`}
         </div>
         <p class="pd-body">${esc(p.t)}</p>
+        ${mediaHTML(p.media)}
         ${TAGS[p.tag]?`<span class="tag ${TAGS[p.tag].cls}">${TAGS[p.tag].label}</span>`:''}
         <div class="pd-stats">
           <span class="pd-stat" id="pdRepCount">${I.reply}<span class="num">${p.replies}件の返信</span></span>
@@ -2296,6 +2438,7 @@ function pushPostDetail(pid){
           <div class="rep-line"><b>${esc(ru.name)}</b>${genderTag(ru)}
             <span>@${esc(ru.handle)}</span><span class="dot-sep"></span>
             <span data-ts="${r.ts}">${ago(r.ts)}</span></div>
+          ${mediaHTML(r.media)}
           <p class="rep-body">${r.to&&S.users[r.to]?`<span class="mention">@${esc(S.users[r.to].handle)}</span> `:''}${esc(r.t)}</p>
           <div class="rep-foot">
             <button class="act" data-repreply="${i}">${I.reply}<span class="num">返信</span></button>
@@ -2376,9 +2519,9 @@ function pushSettings(){
     <div class="group"><h4>安心・安全</h4>
       <div class="gcard">
         <button class="gitem" id="stBlock"><span class="gi">${I.ban}</span>
-          <div class="gt"><b>ブロックしたユーザー</b><span>表示と会話を制限します</span></div><span class="chev">${I.chev}</span></button>
+          <div class="gt"><b>ブロックしたユーザー</b><span>${S.blocked.length?S.blocked.length+'人をブロック中':'表示と会話を制限します'}</span></div><span class="chev">${I.chev}</span></button>
         <button class="gitem" id="stWho"><span class="gi">${I.lock}</span>
-          <div class="gt"><b>会話できる相手</b><span>返信した相手のみ</span></div><span class="chev">${I.chev}</span></button>
+          <div class="gt"><b>会話できる相手</b><span id="whoNow">${WHO_OPTS[S.who].label}</span></div><span class="chev">${I.chev}</span></button>
         <button class="gitem" id="stQuiet"><span class="gi">${I.belloff}</span>
           <div class="gt"><b>おやすみモード</b><span>通知を一時停止します</span></div>
           <span class="sw${S.quiet?' on':''}" id="quietSw"></span></button>
@@ -2410,15 +2553,133 @@ function pushSettings(){
     haptic(6); S.media=b.dataset.media;
     $$('[data-media] .radio',body).forEach(r=>r.classList.remove('on'));
     b.querySelector('.radio').classList.add('on');
+    stopAudio();
+    quiet(()=>{ if($('#feed')) renderFeed(false); refreshPane(S.tab); });
+    $$('.screen').forEach(sc=>{                 /* open threads and details too */
+      const th=sc.querySelector('.thread');
+      if(th){ const c=S.chats.find(x=>x.id===sc.dataset.chat); if(c) paintThread(th,c); }
+      const rl=sc.querySelector('#repList');
+      if(rl && sc.dataset.post){
+        const p=S.posts.find(x=>x.id===sc.dataset.post);
+        const pm=sc.querySelector('.pd-body');
+        if(p && pm){
+          const old=pm.nextElementSibling;
+          if(old && (old.classList.contains('media')||old.classList.contains('media-off')||old.classList.contains('aplayer'))) old.remove();
+          if(p.media) pm.insertAdjacentHTML('afterend', mediaHTML(p.media));
+        }
+      }
+    });
+    toast(b.querySelector('b').textContent+'に変更しました');
   }));
   $('#stQuiet',body).onclick=()=>{
     haptic(8); S.quiet=!S.quiet;
     $('#quietSw',body).classList.toggle('on',S.quiet);
     toast(S.quiet?'おやすみモードをオンにしました':'おやすみモードをオフにしました');
   };
-  ['stBlock','stWho','stGuide','stAbout'].forEach(id=>{
-    const n=$('#'+id,body); if(n) n.onclick=()=>toast('準備中です');
-  });
+  $('#stBlock',body).onclick=()=>pushBlockList();
+  $('#stWho',body).onclick=()=>pushWhoCanTalk();
+  $('#stGuide',body).onclick=()=>pushDoc('コミュニティガイドライン', GUIDE_TEXT);
+  $('#stAbout',body).onclick=()=>pushDoc('irohaについて', ABOUT_TEXT());
+  push(s);
+}
+
+
+/* =========================================================
+   SETTINGS SUB-SCREENS
+   ========================================================= */
+const WHO_OPTS={
+  all    :{label:'すべての人',     sub:'誰でも会話を申請できます'},
+  replied:{label:'返信した相手のみ', sub:'あなたが返信した人だけが申請できます'},
+  fav    :{label:'お気に入りのみ',   sub:'お気に入りにした人だけが申請できます'}
+};
+
+function pushWhoCanTalk(){
+  const s=screenShell('会話できる相手');
+  const body=s.querySelector('.js-scroll');
+  const paint=()=>{
+    body.innerHTML=`<div class="group" style="margin-top:14px"><div class="gcard">
+      ${Object.entries(WHO_OPTS).map(([k,v])=>`<button class="gitem" data-who="${k}">
+        <div class="gt"><b>${v.label}</b><span>${v.sub}</span></div>
+        <span class="radio${S.who===k?' on':''}"></span></button>`).join('')}
+    </div><p class="note" style="text-align:left;margin:12px 6px">
+      設定にかかわらず、ブロックした相手からは申請できません。</p></div>`;
+    $$('[data-who]',body).forEach(b=>b.addEventListener('click',()=>{
+      haptic(8); S.who=b.dataset.who;
+      $$('[data-who] .radio',body).forEach(r=>r.classList.remove('on'));
+      b.querySelector('.radio').classList.add('on');
+      const now=$('#whoNow'); if(now) now.textContent=WHO_OPTS[S.who].label;
+      toast('会話できる相手を変更しました');
+    }));
+    $$('.gitem',body).forEach(g=>g.addEventListener('pointerdown',e=>rippleAt(g,e)));
+  };
+  paint(); push(s);
+}
+
+function pushBlockList(){
+  const s=screenShell('ブロックしたユーザー');
+  const body=s.querySelector('.js-scroll');
+  const paint=()=>{
+    if(!S.blocked.length){
+      body.innerHTML=`<div class="empty"><h3>ブロック中のユーザーはいません</h3>
+        <p>投稿の「…」からブロックすると、ここにまとまります</p></div>`;
+      return;
+    }
+    body.innerHTML=S.blocked.map(uid=>{
+      const u=S.users[uid]; if(!u) return '';
+      return `<div class="row">
+        ${uav(uid,48)}
+        <div class="row-main">
+          <div class="row-t">${esc(u.name)}${genderTag(u)}${accountTag(u)}</div>
+          <div class="row-s">@${esc(u.handle)}</div>
+        </div>
+        <button class="obtn" data-unblock="${uid}" style="padding:9px 16px;font-size:13px">解除</button>
+      </div>`;
+    }).join('');
+    $$('[data-unblock]',body).forEach(b=>b.addEventListener('click',()=>{
+      const uid=b.dataset.unblock, u=S.users[uid];
+      confirmSheet({
+        title:`${u.name}のブロックを解除しますか？`,
+        lead:'相手の投稿がふたたび表示され、会話の申請も届くようになります。',
+        go:'解除する',
+        fn:()=>{
+          S.blocked=S.blocked.filter(x=>x!==uid);
+          haptic(10); paint(); refreshInPlace();
+          toast('ブロックを解除しました');
+        }
+      });
+    }));
+    $$('.row',body).forEach(r=>r.addEventListener('pointerdown',e=>rippleAt(r,e)));
+  };
+  paint(); push(s);
+}
+
+const GUIDE_TEXT=[
+  ['ここは、話しはじめる場所です',
+   'irohaは、まとまっていない気持ちをそのまま置いていける場所として作られています。うまく言えなくても大丈夫です。'],
+  ['DMは会話から生まれます',
+   'いきなりメッセージを送ることはできません。投稿への返信や「話す」の申請を通じて、お互いが望んだときだけ会話が始まります。'],
+  ['写真と動画はお気に入り相互のみ',
+   'DMで画像や動画を送れるのは、お互いをお気に入りにしている相手だけです。音声はいつでも送れます。'],
+  ['見たくないものは遠ざけられます',
+   'ミュートは静かに距離を置く方法、ブロックは完全に断つ方法です。どちらも相手には通知されません。'],
+  ['やめてほしいこと',
+   '個人を特定できる情報の投稿、他の人を傷つける言葉、宣伝目的の連投はお控えください。報告は「…」から行えます。']
+];
+const ABOUT_TEXT=()=>[
+  ['iroha '+APP_VER, 'まとまらない気持ちを、そのまま置いていけるSNS。'],
+  ['このビルドについて',
+   'すべてのデータは端末のメモリ上にだけあります。ページを閉じると投稿もメッセージも消えます。サーバーへの送信は行いません。'],
+  ['デモアカウント',
+   'DEMOと表示される4人は自動で動くアカウントです。いいね・返信・会話の申請を自分から行います。'],
+  ['音声について',
+   '録音はブラウザのマイク機能を使います。安全な接続（https）でのみ動作し、録音した音声も端末の外には出ません。']
+];
+
+function pushDoc(title, blocks){
+  const s=screenShell(title);
+  const body=s.querySelector('.js-scroll');
+  body.innerHTML=`<div class="doc">${blocks.map(([h,t])=>`
+    <section><h3>${esc(h)}</h3><p>${esc(t)}</p></section>`).join('')}</div>`;
   push(s);
 }
 
@@ -2694,6 +2955,240 @@ function openCropper(src, {aspect=1, round=false, out=512, title='切り抜き'}
   function close(){ m.classList.remove('on'); setTimeout(()=>m.remove(),500); }
 }
 
+
+/* =========================================================
+   ATTACHMENTS  —  photo, video and voice notes
+   ========================================================= */
+const MEDIA_LABEL={image:'画像', video:'動画', audio:'音声'};
+
+/* pick a file and hand back {kind, src, name} */
+function pickMedia(accept, cb){
+  const inp=el(`<input type="file" accept="${accept}" style="position:absolute;left:-9999px">`);
+  document.body.appendChild(inp);
+  inp.addEventListener('change',()=>{
+    const f=inp.files && inp.files[0];
+    inp.remove();
+    if(!f) return;
+    const kind = /^video\//.test(f.type) ? 'video' : /^audio\//.test(f.type) ? 'audio' : 'image';
+    /* object URLs keep big videos out of memory as base64 */
+    cb({kind, src:URL.createObjectURL(f), name:f.name});
+  });
+  inp.click();
+}
+
+/* how the viewer's own setting says this should be shown */
+function mediaMode(m){
+  if(!m) return 'none';
+  if(m.kind==='audio') return 'show';        /* the setting covers stills and video */
+  if(S.media==='hide') return 'off';
+  if(S.media==='safety') return 'blur';
+  return 'show';
+}
+
+function mediaHTML(m){
+  if(!m) return '';
+  if(m.kind==='audio') return audioHTML(m);
+  const mode=mediaMode(m);
+  if(mode==='off')
+    return `<div class="media-off">${I.eyeoff}<span>${MEDIA_LABEL[m.kind]}は非表示に設定されています</span></div>`;
+  const inner = m.kind==='video'
+    ? `<video src="${m.src}" playsinline ${mode==='blur'?'':'controls'} preload="metadata"></video>`
+    : `<img src="${m.src}" alt="">`;
+  if(mode==='blur')
+    return `<div class="media blurred" data-reveal>${inner}
+      <div class="veil">${I.eye}<span>タップして表示<small>セーフティ表示がオンです</small></span></div></div>`;
+  return `<div class="media">${inner}</div>`;
+}
+
+function audioHTML(m){
+  const bars=Array.from({length:26},()=>{
+    const h=6+Math.round(Math.random()*16);
+    return `<i style="height:${h}px"></i>`;
+  }).join('');
+  return `<div class="aplayer" data-audio="${m.src}">
+    <button class="apbtn">${I.play}</button>
+    <div class="apwave">${bars}</div>
+    <span class="aptime">${fmtDur(m.dur||0)}</span>
+  </div>`;
+}
+function fmtDur(sec){
+  sec=Math.max(0,Math.round(sec));
+  return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');
+}
+
+/* the attach menu reads the favourite state live, so nothing to redraw
+   beyond the toast; kept as a hook for screens that show the state */
+function refreshDmPerm(){}
+
+/* one player at a time, wherever the note happens to live */
+let AP=null, APnode=null;
+function stopAudio(){
+  if(AP){ AP.pause(); AP=null; }
+  if(APnode){
+    APnode.querySelector('.apbtn').innerHTML=I.play;
+    $$('.apwave i',APnode).forEach(b=>b.classList.remove('on'));
+    APnode=null;
+  }
+}
+document.addEventListener('click',e=>{
+  const rev=e.target.closest('[data-reveal]');
+  if(rev){ rev.classList.remove('blurred'); rev.removeAttribute('data-reveal');
+    const v=rev.querySelector('video'); if(v) v.controls=true;
+    const veil=rev.querySelector('.veil'); if(veil) veil.remove(); return; }
+
+  const btn=e.target.closest('.apbtn');
+  if(!btn) return;
+  const node=btn.closest('[data-audio]'); if(!node) return;
+  if(APnode===node){ stopAudio(); return; }
+  stopAudio();
+  APnode=node;
+  AP=new Audio(node.dataset.audio);
+  const bars=$$('.apwave i',node);
+  btn.innerHTML=I.pause;
+  const time=node.querySelector('.aptime');
+  AP.addEventListener('timeupdate',()=>{
+    if(!AP||!AP.duration) return;
+    const p=AP.currentTime/AP.duration;
+    bars.forEach((b,i)=>b.classList.toggle('on', i/bars.length<=p));
+    if(time) time.textContent=fmtDur(AP.duration-AP.currentTime);
+  });
+  AP.addEventListener('ended',()=>{ if(time) time.textContent=fmtDur(AP.duration); stopAudio(); });
+  AP.play().catch(()=>{ toast('音声を再生できませんでした'); stopAudio(); });
+});
+
+/* =========================================================
+   VOICE RECORDER  —  record, listen back, then send
+   ========================================================= */
+function openRecorder(done){
+  let rec=null, chunks=[], stream=null, t0=0, timer=null, blobURL=null, dur=0, raf0=0, analyser=null;
+
+  const sheet=el(`<div class="sheet" id="recSheet">
+    <div class="grab"></div>
+    <div class="rec-face">
+      <div class="rec-time" id="recTime">0:00</div>
+      <div class="rec-bars" id="recBars">${Array.from({length:22},()=>'<i></i>').join('')}</div>
+      <button class="rec-dot" id="recDot">${I.micBig}</button>
+      <p class="rec-hint" id="recHint">タップして録音を始めます</p>
+    </div>
+    <div id="recPreview"></div>
+    <button class="bigbtn" id="recSend" style="opacity:.4;pointer-events:none">送信する</button>
+    <button class="textlink" id="recNo">キャンセル</button>
+  </div>`);
+  $('#overlays').appendChild(sheet);
+  showScrim(true, close);
+  raf(()=>sheet.classList.add('on'));
+
+  const dot=$('#recDot',sheet), hint=$('#recHint',sheet), tEl=$('#recTime',sheet),
+        prev=$('#recPreview',sheet), send=$('#recSend',sheet), bars=$$('#recBars i',sheet);
+
+  dot.onclick=()=>{ rec && rec.state==='recording' ? stop() : start(); };
+  $('#recNo',sheet).onclick=close;
+  send.onclick=()=>{
+    if(!blobURL) return;
+    haptic(12);
+    const m={kind:'audio', src:blobURL, dur};
+    blobURL=null;                     /* handed over, don't revoke on close */
+    close(); setTimeout(()=>done(m),200);
+  };
+
+  async function start(){
+    if(!navigator.mediaDevices || !window.MediaRecorder){
+      toast('この環境では録音できません'); return;
+    }
+    try{ stream=await navigator.mediaDevices.getUserMedia({audio:true}); }
+    catch(err){ toast('マイクの使用が許可されませんでした'); return; }
+    chunks=[]; rec=new MediaRecorder(stream);
+    rec.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+    rec.onstop=()=>{
+      const blob=new Blob(chunks,{type:rec.mimeType||'audio/webm'});
+      blobURL=URL.createObjectURL(blob);
+      prev.innerHTML=audioHTML({kind:'audio', src:blobURL, dur});
+      send.style.opacity=''; send.style.pointerEvents='';
+      hint.textContent='聞き返してから送信できます';
+      dot.innerHTML=I.micBig; dot.classList.remove('on');
+      dot.style.background='';
+    };
+    rec.start();
+    t0=Date.now(); dur=0;
+    dot.innerHTML=I.stopBig; dot.classList.add('on');
+    hint.textContent='タップで録音を止めます';
+    prev.innerHTML=''; send.style.opacity='.4'; send.style.pointerEvents='none';
+    timer=setInterval(()=>{
+      dur=(Date.now()-t0)/1000;
+      tEl.textContent=fmtDur(dur);
+      if(dur>=180) stop();              /* three minutes is plenty */
+    },200);
+    meter();
+    haptic(12);
+  }
+  function meter(){
+    try{
+      const ctx=new (window.AudioContext||window.webkitAudioContext)();
+      const srcNode=ctx.createMediaStreamSource(stream);
+      analyser=ctx.createAnalyser(); analyser.fftSize=64;
+      srcNode.connect(analyser);
+      const data=new Uint8Array(analyser.frequencyBinCount);
+      const tick=()=>{
+        if(!analyser) return;
+        analyser.getByteFrequencyData(data);
+        bars.forEach((b,i)=>{
+          const v=data[i%data.length]/255;
+          b.style.height=(4+v*30).toFixed(0)+'px';
+        });
+        raf0=requestAnimationFrame(tick);
+      };
+      tick();
+    }catch(e){/* metering is decoration; recording still works */}
+  }
+  function stop(){
+    if(rec && rec.state==='recording') rec.stop();
+    clearInterval(timer); timer=null;
+    cancelAnimationFrame(raf0); analyser=null;
+    bars.forEach(b=>b.style.height='4px');
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+    haptic(9);
+  }
+  function close(){
+    stop(); stopAudio();
+    if(blobURL) URL.revokeObjectURL(blobURL);
+    sheet.classList.remove('on'); showScrim(false);
+    setTimeout(()=>sheet.remove(),520);
+  }
+}
+
+function explainFav(uid){
+  const u=S.users[uid];
+  confirmSheet({
+    title:'画像と動画はお気に入り相互のみ',
+    lead:`${u.name}さんと相互にお気に入りになると、写真や動画を送れるようになります。音声はいつでも送れます。`,
+    go: u.fav?'プロフィールを見る':'お気に入りに追加',
+    fn:()=>{
+      if(!u.fav){
+        u.fav=true; toast('お気に入りに追加しました');
+        if(u.demo) setTimeout(()=>{
+          if(!u.fav||S.blocked.includes(uid)) return;
+          u.favMe=true; toast(`${u.name}もあなたをお気に入りにしました`);
+        }, 3000+Math.random()*4000);
+      } else pushProfile(uid);
+    }
+  });
+}
+
+/* the "会話できる相手" setting, applied to incoming requests */
+function canRequestMe(uid){
+  if(S.blocked.includes(uid)) return false;
+  if(S.who==='all') return true;
+  if(S.who==='fav') return !!(S.users[uid] && S.users[uid].fav);
+  /* 'replied' — only people whose posts I have replied to */
+  return S.posts.some(p=>p.u===uid && (p.rep||[]).some(r=>r.u==='me'));
+}
+
+/* image and video in a DM need favourites in both directions */
+function mutualFav(uid){
+  const u=S.users[uid];
+  return !!(u && u.fav && u.favMe);
+}
+
 /* =========================================================
    OVERLAYS
    ========================================================= */
@@ -2868,6 +3363,12 @@ function editPost(pid){
           style="flex:1;font-size:17px;font-weight:600;line-height:1.7;resize:none;min-height:130px">${esc(p.t)}</textarea>
       </div>
       <div style="margin-top:6px;text-align:right;font-size:12px;color:var(--ink-3);font-weight:700" id="epCnt">${[...p.t].length}/140</div>
+      <div class="attachrow">
+        <button class="attbtn" data-att="image">${I.camera}画像</button>
+        <button class="attbtn" data-att="video">${I.film}動画</button>
+        <button class="attbtn" data-att="audio">${I.mic}音声</button>
+      </div>
+      <div id="cmAtt"></div>
       <h4 style="margin:18px 0 10px;font-size:13px;font-weight:800">話題のタグ</h4>
       <div class="tagpick" id="epTags">
         ${Object.entries(TAGS).map(([k,v])=>`<button class="tagopt${k===p.tag?' on':''}" data-t="${k}">${v.label}</button>`).join('')}
@@ -3018,6 +3519,12 @@ function openCompose(){
           style="flex:1;font-size:17px;font-weight:600;line-height:1.7;resize:none;min-height:130px"></textarea>
       </div>
       <div style="margin-top:6px;text-align:right;font-size:12px;color:var(--ink-3);font-weight:700" id="cmCnt">0/140</div>
+      <div class="attachrow">
+        <button class="attbtn" data-att="image">${I.camera}画像</button>
+        <button class="attbtn" data-att="video">${I.film}動画</button>
+        <button class="attbtn" data-att="audio">${I.mic}音声</button>
+      </div>
+      <div id="cmAtt"></div>
       <h4 style="margin:18px 0 10px;font-size:13px;font-weight:800">話題のタグ</h4>
       <div class="tagpick" id="cmTags">
         ${Object.entries(TAGS).map(([k,v],i)=>`<button class="tagopt${i===0?' on':''}" data-t="${k}">${v.label}</button>`).join('')}
@@ -3029,23 +3536,38 @@ function openCompose(){
   fitBars(m);
   raf(()=>m.classList.add('on'));
 
-  let tag='hitorigoto';
-  const ta=$('#cmText',m), go=$('#cmGo',m);
+  let tag='hitorigoto', att=null;
+  const ta=$('#cmText',m), go=$('#cmGo',m), attBox=$('#cmAtt',m);
+  const sync=()=>{ go.disabled = ta.value.trim().length===0 && !att; };
   ta.addEventListener('input',()=>{
     const n=[...ta.value].length;
     $('#cmCnt',m).textContent=n+'/140';
-    go.disabled = ta.value.trim().length===0;
+    sync();
   });
+  function setAtt(v){
+    att=v;
+    attBox.innerHTML = v ? `<div class="attpreview">
+        <button class="x" id="attX" aria-label="取り消す">${I.close}</button>${mediaHTML(v)}</div>` : '';
+    if(v) $('#attX',attBox).onclick=()=>{ haptic(6); stopAudio(); setAtt(null); };
+    $$('.attbtn',m).forEach(b=>b.disabled=!!v);
+    sync(); fitBars(m);
+  }
+  $$('.attbtn',m).forEach(b=>b.addEventListener('click',()=>{
+    haptic(7);
+    const k=b.dataset.att;
+    if(k==='audio') openRecorder(setAtt);
+    else pickMedia(k==='video'?'video/*':'image/*', setAtt);
+  }));
   $$('.tagopt',m).forEach(b=>b.addEventListener('click',()=>{
     haptic(6); tag=b.dataset.t;
     $$('.tagopt',m).forEach(x=>x.classList.toggle('on',x===b));
   }));
   $('#cmNo',m).onclick=close;
   $('#cmGo',m).onclick=()=>{
-    const t=ta.value.trim(); if(!t) return;
+    const t=ta.value.trim(); if(!t && !att) return;
     haptic(14);
     const newId='p'+Date.now();
-    S.posts.unshift({id:newId, u:'me', t, tag, ts:Date.now(),
+    S.posts.unshift({id:newId, u:'me', t, tag, media:att, ts:Date.now(),
       likes:0, replies:0, liked:false, req:false, rep:[], arch:false});
     close();
     setTimeout(()=>{
@@ -3196,6 +3718,7 @@ function activeDemos(){
   return S.DEMOS.filter(id => !S.blocked.includes(id));
 }
 function pushNote(kind, uid, t, sub, postId){
+  if(S.quiet) return;                    /* おやすみモード: no new notifications */
   S.notes[kind].unshift({id:'n'+uid4(), u:uid, p:postId, t, s:sub, ts:Date.now()});
   if(S.notes[kind].length>40) S.notes[kind].length=40;
 }
@@ -3313,7 +3836,7 @@ function queueDemo(n){
 }
 
 function demoTick(){
-  if(demoStep()){
+  if(!S.quiet && demoStep()){
     syncNavBadges();
     quiet(()=>{
       if($('#feed')) renderFeed(false);
