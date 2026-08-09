@@ -1124,12 +1124,315 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   <div id="overlays"></div>
   <div class="toastwrap" id="toasts"></div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* =========================================================
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.28.4';
+const APP_VER='2.29.0';
+
+
+/* =========================================================
+   SUPABASE CONFIG
+   Project Settings → Data API で表示される値を貼り付ける。
+   Publishable Key はブラウザに置いてよい公開用キー。service_role は絶対に入れない。
+   ========================================================= */
+const SUPABASE_URL='https://cwwvhzpcnrkmjbykgwcq.supabase.co/rest/v1/';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_vYapd7Gg_rFLAFkO42BPUQ_GXLge49D';
+
+const CLOUD={
+  enabled:false, client:null, userId:null, channel:null,
+  reloading:false, reloadAgain:false, reloadTimer:null,
+  remoteUserIds:new Set()
+};
+function cloudConfigured(){
+  return /^https:\/\/.+\.supabase\.co\/?$/.test(SUPABASE_URL)
+    && SUPABASE_PUBLISHABLE_KEY
+    && !SUPABASE_PUBLISHABLE_KEY.startsWith('PASTE_');
+}
+function cloudKey(uid){ return uid==='me' ? CLOUD.userId : uid; }
+function localKey(uid){ return uid===CLOUD.userId ? 'me' : uid; }
+function cloudUserKeyIsReal(uid){
+  const k=cloudKey(uid);
+  return !!(k && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(k));
+}
+function cloudErr(where,err){
+  console.error('[iroha cloud]',where,err);
+  if(document.getElementById('app')) toast('通信に失敗しました。あとでもう一度お試しください');
+}
+function must(data){
+  if(data && data.error) throw data.error;
+  return data && data.data!==undefined ? data.data : data;
+}
+function extFor(blob,name,kind){
+  const m=(name||'').match(/\.([a-z0-9]{1,8})$/i); if(m) return m[1].toLowerCase();
+  const mime=(blob&&blob.type)||'';
+  if(mime.includes('jpeg')) return 'jpg'; if(mime.includes('png')) return 'png'; if(mime.includes('webp')) return 'webp';
+  if(mime.includes('mp4')) return 'mp4'; if(mime.includes('quicktime')) return 'mov';
+  if(mime.includes('ogg')) return 'ogg'; if(mime.includes('mpeg')) return 'mp3'; if(mime.includes('wav')) return 'wav';
+  if(kind==='video') return 'mp4'; if(kind==='audio') return 'webm'; return 'bin';
+}
+async function cloudUploadMedia(m,{scope='post',chatId=null}={}){
+  if(!CLOUD.enabled || !m) return m;
+  if(m.bucket&&m.path) return {kind:m.kind,bucket:m.bucket,path:m.path,name:m.name||'',dur:m.dur||0};
+  if(!m.src || (!m.src.startsWith('blob:')&&!m.src.startsWith('data:'))) return m;
+  const blob=await fetch(m.src).then(r=>r.blob());
+  const ext=extFor(blob,m.name,m.kind);
+  const id=(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2));
+  const isDm=scope==='dm';
+  const bucket=isDm?'iroha-dm':'iroha-public';
+  const folder=isDm ? `${chatId}/${CLOUD.userId}` : `${CLOUD.userId}/${scope}`;
+  const path=`${folder}/${id}.${ext}`;
+  must(await CLOUD.client.storage.from(bucket).upload(path,blob,{contentType:blob.type||undefined,upsert:false}));
+  return {kind:m.kind,bucket,path,name:m.name||'',dur:m.dur||0};
+}
+async function cloudHydrateMedia(m){
+  if(!m) return null;
+  if(!m.bucket||!m.path) return m;
+  if(m.bucket==='iroha-public'){
+    const {data}=CLOUD.client.storage.from(m.bucket).getPublicUrl(m.path);
+    return {...m,src:data.publicUrl};
+  }
+  const {data,error}=await CLOUD.client.storage.from(m.bucket).createSignedUrl(m.path,3600);
+  if(error){ console.warn('[iroha cloud] signed url',error); return {...m,src:''}; }
+  return {...m,src:data.signedUrl};
+}
+async function cloudUploadProfileAsset(src,slot){
+  if(!CLOUD.enabled || !src) return src||null;
+  if(/^https?:/.test(src)) return src;
+  if(!src.startsWith('blob:')&&!src.startsWith('data:')) return src;
+  const blob=await fetch(src).then(r=>r.blob());
+  const ext=extFor(blob,'',slot==='avatar'?'image':'image');
+  const path=`${CLOUD.userId}/profile/${slot}-${Date.now()}.${ext}`;
+  must(await CLOUD.client.storage.from('iroha-public').upload(path,blob,{contentType:blob.type||undefined,upsert:true}));
+  const {data}=CLOUD.client.storage.from('iroha-public').getPublicUrl(path);
+  return data.publicUrl;
+}
+async function cloudEnsureProfile(){
+  const me=S.users.me;
+  let r=await CLOUD.client.from('profiles').select('*').eq('id',CLOUD.userId).maybeSingle();
+  if(r.error) throw r.error;
+  if(r.data){
+    Object.assign(me,{name:r.data.name,handle:r.data.handle,bio:r.data.bio||'',av:r.data.av||me.av,
+      gender:r.data.gender||'secret',img:r.data.avatar_url||null,banner:r.data.banner_url||null,cloudId:r.data.id});
+    return;
+  }
+  let handle=me.handle;
+  for(let n=0;n<4;n++){
+    const ins=await CLOUD.client.from('profiles').insert({
+      id:CLOUD.userId,name:me.name,handle,bio:me.bio||'',av:me.av,gender:me.gender||'secret'
+    }).select().single();
+    if(!ins.error){ me.handle=handle; me.cloudId=CLOUD.userId; return; }
+    if(ins.error.code!=='23505') throw ins.error;
+    handle='u'+Math.random().toString(36).slice(2,11);
+  }
+  throw new Error('プロフィールIDを作成できませんでした');
+}
+async function cloudInit(){
+  if(!cloudConfigured()) return false;
+  if(!window.supabase?.createClient){ console.error('supabase-js failed to load'); return false; }
+  try{
+    CLOUD.client=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+    let {data:{session},error}=await CLOUD.client.auth.getSession(); if(error) throw error;
+    if(!session){ const r=await CLOUD.client.auth.signInAnonymously(); if(r.error) throw r.error; session=r.data.session; }
+    CLOUD.userId=session.user.id; CLOUD.enabled=true;
+    await cloudEnsureProfile();
+    await cloudReloadAll(true);
+    return true;
+  }catch(e){
+    CLOUD.enabled=false; console.error('[iroha cloud] init',e);
+    setTimeout(()=>toast('Supabaseに接続できません。設定を確認してください'),700);
+    return false;
+  }
+}
+async function cloudRows(promise){ const r=await promise; if(r.error) throw r.error; return r.data||[]; }
+async function cloudReloadAll(initial=false){
+  if(!CLOUD.enabled) return;
+  if(CLOUD.reloading){ CLOUD.reloadAgain=true; return; }
+  CLOUD.reloading=true;
+  try{
+    const sb=CLOUD.client, me=CLOUD.userId;
+    const [profiles,posts,favOut,favIn,chats,states,notes]=await Promise.all([
+      cloudRows(sb.from('profiles').select('*')),
+      cloudRows(sb.from('posts').select('*').order('created_at',{ascending:false}).limit(250)),
+      cloudRows(sb.from('favorites').select('target_id').eq('owner_id',me)),
+      cloudRows(sb.from('favorites').select('owner_id').eq('target_id',me)),
+      cloudRows(sb.from('direct_chats').select('*').or(`user_a.eq.${me},user_b.eq.${me}`).order('updated_at',{ascending:false})),
+      cloudRows(sb.from('direct_chat_state').select('*').eq('user_id',me)),
+      cloudRows(sb.from('notifications').select('*').eq('recipient_id',me).order('created_at',{ascending:false}).limit(100))
+    ]);
+
+    for(const id of CLOUD.remoteUserIds) if(id!=='me') delete S.users[id];
+    CLOUD.remoteUserIds.clear();
+    for(const u of profiles){
+      const key=localKey(u.id);
+      const target=key==='me'?S.users.me:(S.users[key]||{id:key});
+      Object.assign(target,{id:key,cloudId:u.id,name:u.name,handle:u.handle,bio:u.bio||'',av:u.av||'stone',gender:u.gender||'secret',
+        img:u.avatar_url||null,banner:u.banner_url||null,posts:0,replies:0,talks:0,fav:false,favMe:false});
+      S.users[key]=target; if(key!=='me') CLOUD.remoteUserIds.add(key);
+    }
+    const outSet=new Set(favOut.map(x=>x.target_id)), inSet=new Set(favIn.map(x=>x.owner_id));
+    Object.values(S.users).forEach(u=>{ const id=cloudKey(u.id); if(!id) return; u.fav=outSet.has(id); u.favMe=inSet.has(id); });
+
+    const postIds=posts.map(p=>p.id);
+    const [postLikes,replies]=postIds.length?await Promise.all([
+      cloudRows(sb.from('post_likes').select('*').in('post_id',postIds)),
+      cloudRows(sb.from('replies').select('*').in('post_id',postIds).order('created_at',{ascending:true}))
+    ]):[[],[]];
+    const replyIds=replies.map(r=>r.id);
+    const replyLikes=replyIds.length?await cloudRows(sb.from('reply_likes').select('*').in('reply_id',replyIds)):[];
+    const likesByPost=new Map(), myPostLikes=new Set();
+    postLikes.forEach(x=>{ likesByPost.set(x.post_id,(likesByPost.get(x.post_id)||0)+1); if(x.user_id===me) myPostLikes.add(x.post_id); });
+    const likesByReply=new Map(), myReplyLikes=new Set();
+    replyLikes.forEach(x=>{ likesByReply.set(x.reply_id,(likesByReply.get(x.reply_id)||0)+1); if(x.user_id===me) myReplyLikes.add(x.reply_id); });
+    const repsByPost=new Map();
+    for(const r of replies){
+      const rr={id:r.id,u:localKey(r.author_id),t:r.body||'',to:r.reply_to?localKey(r.reply_to):null,
+        media:await cloudHydrateMedia(r.media),ts:new Date(r.created_at).getTime(),likes:likesByReply.get(r.id)||0,liked:myReplyLikes.has(r.id)};
+      if(!repsByPost.has(r.post_id)) repsByPost.set(r.post_id,[]); repsByPost.get(r.post_id).push(rr);
+      if(S.users[rr.u]) S.users[rr.u].replies=(S.users[rr.u].replies||0)+1;
+    }
+    const remotePosts=[];
+    for(const p of posts){
+      const rep=repsByPost.get(p.id)||[];
+      const lp={id:p.id,u:localKey(p.author_id),t:p.body||'',tag:p.tag||'hitorigoto',media:await cloudHydrateMedia(p.media),
+        ts:new Date(p.created_at).getTime(),likes:likesByPost.get(p.id)||0,replies:rep.length,liked:myPostLikes.has(p.id),
+        req:false,rep,arch:!!p.archived,edited:!!p.edited,cloud:true};
+      remotePosts.push(lp); if(S.users[lp.u]) S.users[lp.u].posts=(S.users[lp.u].posts||0)+1;
+    }
+    const seeds=S.posts.filter(p=>p.u==='bot'||S.users[p.u]?.demo);
+    S.posts=[...remotePosts,...seeds].sort((a,b)=>b.ts-a.ts);
+
+    const chatIds=chats.map(c=>c.id), stMap=new Map(states.map(x=>[x.chat_id,x]));
+    const msgs=chatIds.length?await cloudRows(sb.from('messages').select('*').in('chat_id',chatIds).order('created_at',{ascending:true})):[];
+    const msgsByChat=new Map();
+    for(const m of msgs){
+      const mm={id:m.id,me:m.sender_id===me,t:m.body||'',sys:!!m.system_text,media:await cloudHydrateMedia(m.media),ts:new Date(m.created_at).getTime()};
+      if(m.system_text){ mm.t=m.system_text; mm.sys=true; }
+      if(!msgsByChat.has(m.chat_id)) msgsByChat.set(m.chat_id,[]); msgsByChat.get(m.chat_id).push(mm);
+    }
+    const demoChats=S.chats.filter(c=>S.users[c.u]?.demo||S.users[c.u]?.bot);
+    const cloudChats=chats.map(c=>{
+      const other=c.user_a===me?c.user_b:c.user_a, key=localKey(other), ms=msgsByChat.get(c.id)||[], st=stMap.get(c.id);
+      const seen=st?.last_read_at?new Date(st.last_read_at).getTime():0;
+      const unread=ms.filter(m=>!m.me&&!m.sys&&m.ts>seen).length;
+      if(S.users[key]) S.users[key].talks=(S.users[key].talks||0)+1;
+      return {id:c.id,u:key,unread,ts:new Date(c.updated_at||c.created_at).getTime(),msgs:ms,pin:!!st?.pinned,hidden:!!st?.hidden,cloud:true};
+    });
+    S.chats=[...cloudChats,...demoChats];
+
+    const localNotes=[...S.notes.like,...S.notes.reply].filter(n=>S.users[n.u]?.demo||S.users[n.u]?.bot);
+    S.notes={like:[],reply:[]};
+    for(const n of notes){
+      const actor=localKey(n.actor_id), p=S.posts.find(x=>x.id===n.post_id), r=p?.rep?.find(x=>x.id===n.reply_id);
+      const un=S.users[actor]||{name:'ユーザー'};
+      const item={id:n.id,u:actor,p:n.post_id,ts:new Date(n.created_at).getTime(),cloud:true};
+      if(n.kind==='like'){ item.t=`${un.name}があなたの投稿にいいねしました`; item.s=p?`「${(p.t||'').slice(0,18)}」`:''; S.notes.like.push(item); }
+      else if(n.kind==='reply'){ item.t=`${un.name}があなたの投稿に返信しました`; item.s=(r?.t||'').slice(0,80); S.notes.reply.push(item); }
+      if(n.read_at) S.noteSeen.add(n.id);
+    }
+    localNotes.forEach(n=>S.notes[n.kind||(/返信/.test(n.t)?'reply':'like')].push(n));
+    if(!initial) cloudRefreshUI();
+  }catch(e){ cloudErr('reload',e); }
+  finally{
+    CLOUD.reloading=false;
+    if(CLOUD.reloadAgain){ CLOUD.reloadAgain=false; cloudReloadAll(false); }
+  }
+}
+function cloudRefreshUI(){
+  quiet(()=>{
+    if($('#feed')) renderFeed(false);
+    if(S.tab==='bell') renderNotes();
+    if(S.tab==='chat'){ chatSig=null; renderChatList(); }
+    if(S.tab==='me') renderMe();
+    $$('.screen[data-chat]').forEach(sc=>{
+      const c=S.chats.find(x=>x.id===sc.dataset.chat), th=$('#thread',sc); if(c&&th){ const near=th.scrollHeight-th.scrollTop-th.clientHeight<100; paintThread(th,c); if(near) raf(()=>scrollThread(th)); }
+    });
+    syncNavBadges();
+  });
+}
+function cloudScheduleReload(){
+  clearTimeout(CLOUD.reloadTimer); CLOUD.reloadTimer=setTimeout(()=>cloudReloadAll(false),260);
+}
+function cloudStartRealtime(){
+  if(!CLOUD.enabled||CLOUD.channel) return;
+  let ch=CLOUD.client.channel('iroha-live');
+  ['profiles','posts','post_likes','replies','reply_likes','favorites','direct_chats','direct_chat_state','messages','notifications'].forEach(table=>{
+    ch=ch.on('postgres_changes',{event:'*',schema:'public',table},cloudScheduleReload);
+  });
+  CLOUD.channel=ch.subscribe();
+}
+async function cloudCreatePost(p){
+  if(!CLOUD.enabled) return p;
+  const media=await cloudUploadMedia(p.media,{scope:'post'});
+  const r=await CLOUD.client.from('posts').insert({author_id:CLOUD.userId,body:p.t||'',tag:p.tag,media:media||null,archived:false}).select().single();
+  if(r.error) throw r.error; p.id=r.data.id; p.media=await cloudHydrateMedia(media); p.cloud=true; return p;
+}
+async function cloudUpdatePost(p){
+  if(!CLOUD.enabled||!p.cloud) return;
+  const r=await CLOUD.client.from('posts').update({body:p.t||'',tag:p.tag,archived:!!p.arch,edited:!!p.edited}).eq('id',p.id); if(r.error) throw r.error;
+}
+async function cloudDeletePost(pid){ if(!CLOUD.enabled) return; const r=await CLOUD.client.from('posts').delete().eq('id',pid); if(r.error) throw r.error; }
+async function cloudSetPostLike(p){
+  if(!CLOUD.enabled||!p.cloud) return;
+  const q=p.liked?CLOUD.client.from('post_likes').upsert({post_id:p.id,user_id:CLOUD.userId},{onConflict:'post_id,user_id'}):CLOUD.client.from('post_likes').delete().eq('post_id',p.id).eq('user_id',CLOUD.userId);
+  const r=await q; if(r.error) throw r.error;
+}
+async function cloudCreateReply(p,r){
+  if(!CLOUD.enabled||!p.cloud) return r;
+  const media=await cloudUploadMedia(r.media,{scope:'reply'});
+  const q=await CLOUD.client.from('replies').insert({post_id:p.id,author_id:CLOUD.userId,body:r.t||'',reply_to:cloudKey(r.to)||null,media:media||null}).select().single();
+  if(q.error) throw q.error; r.id=q.data.id; r.media=await cloudHydrateMedia(media); r.cloud=true; return r;
+}
+async function cloudSetReplyLike(r){
+  if(!CLOUD.enabled||!r.id) return;
+  const q=r.liked?CLOUD.client.from('reply_likes').upsert({reply_id:r.id,user_id:CLOUD.userId},{onConflict:'reply_id,user_id'}):CLOUD.client.from('reply_likes').delete().eq('reply_id',r.id).eq('user_id',CLOUD.userId);
+  const z=await q; if(z.error) throw z.error;
+}
+async function cloudSaveProfile(u){
+  if(!CLOUD.enabled) return;
+  const avatar=await cloudUploadProfileAsset(u.img,'avatar'), banner=await cloudUploadProfileAsset(u.banner,'banner');
+  const r=await CLOUD.client.from('profiles').update({name:u.name,handle:u.handle,bio:u.bio||'',av:u.av,gender:u.gender||'secret',avatar_url:avatar,banner_url:banner,updated_at:new Date().toISOString()}).eq('id',CLOUD.userId);
+  if(r.error) throw r.error; u.img=avatar; u.banner=banner;
+}
+async function cloudSetFavorite(uid,on){
+  if(!CLOUD.enabled||!cloudUserKeyIsReal(uid)) return;
+  const id=cloudKey(uid); const q=on?CLOUD.client.from('favorites').upsert({owner_id:CLOUD.userId,target_id:id},{onConflict:'owner_id,target_id'}):CLOUD.client.from('favorites').delete().eq('owner_id',CLOUD.userId).eq('target_id',id);
+  const r=await q; if(r.error) throw r.error;
+}
+async function cloudGetOrCreateChat(uid){
+  if(!CLOUD.enabled||!cloudUserKeyIsReal(uid)) return null;
+  const other=cloudKey(uid), [a,b]=[CLOUD.userId,other].sort();
+  let q=await CLOUD.client.from('direct_chats').select('*').eq('user_a',a).eq('user_b',b).maybeSingle(); if(q.error) throw q.error;
+  if(!q.data){ q=await CLOUD.client.from('direct_chats').insert({user_a:a,user_b:b}).select().single(); if(q.error&&q.error.code==='23505') q=await CLOUD.client.from('direct_chats').select('*').eq('user_a',a).eq('user_b',b).single(); if(q.error) throw q.error; }
+  let c=S.chats.find(x=>x.id===q.data.id); if(!c){ c={id:q.data.id,u:uid,unread:0,ts:Date.now(),msgs:[],cloud:true}; S.chats.push(c); }
+  await CLOUD.client.from('direct_chat_state').upsert({chat_id:c.id,user_id:CLOUD.userId},{onConflict:'chat_id,user_id'});
+  return c;
+}
+async function cloudSendMessage(c,m){
+  if(!CLOUD.enabled||!c.cloud) return m;
+  const media=await cloudUploadMedia(m.media,{scope:'dm',chatId:c.id});
+  const q=await CLOUD.client.from('messages').insert({chat_id:c.id,sender_id:CLOUD.userId,body:m.sys?'':(m.t||''),system_text:m.sys?(m.t||''):null,media:media||null}).select().single();
+  if(q.error) throw q.error; m.id=q.data.id; m.media=await cloudHydrateMedia(media); return m;
+}
+async function cloudMarkChatRead(cid){
+  if(!CLOUD.enabled) return;
+  const r=await CLOUD.client.from('direct_chat_state').upsert({chat_id:cid,user_id:CLOUD.userId,last_read_at:new Date().toISOString(),hidden:false},{onConflict:'chat_id,user_id'}); if(r.error) console.warn(r.error);
+}
+async function cloudSetChatState(c,patch){
+  if(!CLOUD.enabled||!c.cloud) return;
+  const row={chat_id:c.id,user_id:CLOUD.userId}; if('pin' in patch) row.pinned=patch.pin; if('hidden' in patch) row.hidden=patch.hidden;
+  const r=await CLOUD.client.from('direct_chat_state').upsert(row,{onConflict:'chat_id,user_id'}); if(r.error) cloudErr('chat state',r.error);
+}
+async function cloudMarkNotesRead(ids){
+  if(!CLOUD.enabled) return; const real=ids.filter(x=>/^[0-9a-f-]{30,}$/i.test(x)); if(!real.length) return;
+  const r=await CLOUD.client.from('notifications').update({read_at:new Date().toISOString()}).in('id',real).eq('recipient_id',CLOUD.userId); if(r.error) console.warn(r.error);
+}
+async function cloudDeleteNote(id){
+  if(!CLOUD.enabled||!/^[0-9a-f-]{30,}$/i.test(id)) return;
+  const r=await CLOUD.client.from('notifications').delete().eq('id',id).eq('recipient_id',CLOUD.userId); if(r.error) cloudErr('delete notification',r.error);
+}
 
 const $  = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -1308,6 +1611,7 @@ const S = {
   notes:{ like:[], reply:[] },
   chats:[]
 };
+/* cloud data layer is declared above; S remains the UI cache. */
 const REPLIES = [
   'いいですね。似た気持ちの人もいそうです。',
   'そう感じたきっかけって、何かありましたか？',
@@ -1600,7 +1904,7 @@ function moveNavInd(animate=true){
 function allNotes(){ return [...S.notes.like, ...S.notes.reply]; }
 function unseenIn(kind){ return S.notes[kind].filter(n=>!S.noteSeen.has(n.id)).length; }
 function unseenNotes(){ return unseenIn('like')+unseenIn('reply'); }
-function markNotesSeen(){ allNotes().forEach(n=>S.noteSeen.add(n.id)); }
+function markNotesSeen(){ const list=allNotes(); list.forEach(n=>S.noteSeen.add(n.id)); cloudMarkNotesRead(list.map(n=>n.id)); }
 
 /* ids highlighted for this visit — captured before the tab is marked read,
    so the new arrivals stay visible while the counter already drops */
@@ -1610,6 +1914,7 @@ function openNoteSegment(kind){
   const list=S.notes[kind]||[];
   noteFresh=new Set(list.filter(n=>!S.noteSeen.has(n.id)).map(n=>n.id));
   list.forEach(n=>S.noteSeen.add(n.id));
+  cloudMarkNotesRead(list.map(n=>n.id));
   syncNavBadges();
 }
 
@@ -1801,6 +2106,7 @@ function onPostClick(e){
 function toggleLike(id, btn){
   const p=S.posts.find(x=>x.id===id); if(!p) return;
   p.liked=!p.liked; p.likes+=p.liked?1:-1;
+  cloudSetPostLike(p).catch(e=>{ p.liked=!p.liked; p.likes+=p.liked?1:-1; syncCard(p); cloudErr('like',e); });
   haptic(p.liked?12:5);
   btn.classList.toggle('liked',p.liked);
   const n=btn.querySelector('.num'); if(n) n.textContent=p.likes;
@@ -2181,6 +2487,7 @@ function pushProfile(uid){
 
     $('#favBtn',body).onclick=()=>{
       u.fav=!u.fav; haptic(10);
+      cloudSetFavorite(uid,u.fav).catch(e=>cloudErr('favorite',e));
       toast(u.fav?'お気に入りに追加しました':'お気に入りを解除しました');
       const b=$('#favBtn',body);
       b.classList.toggle('on',u.fav);
@@ -2231,7 +2538,7 @@ function pushProfile(uid){
    ========================================================= */
 function pushThread(cid){
   const c=S.chats.find(x=>x.id===cid); if(!c) return;
-  c.unread=0;
+  c.unread=0; cloudMarkChatRead(c.id);
   const u=S.users[c.u];
   const s=el(`<section class="screen" data-chat="${c.id}" data-owner="${c.u}">
     <header class="navbar">
@@ -2289,19 +2596,21 @@ function pushThread(cid){
   send.onclick=fire;
   { const mini=$('#repSendMini',s); if(mini) mini.onclick=fire; }
 
-  function fire(){
+  async function fire(){
     const t=inp.value.trim(); if(!t && !dmAtt) return;
     if(dmAtt && (dmAtt.kind==='image'||dmAtt.kind==='video') && !mutualFav(c.u)){
       explainFav(c.u); return;
     }
     haptic(9);
-    c.msgs.push({me:true,t,media:dmAtt,ts:Date.now()}); c.ts=Date.now();
+    const m={me:true,t,media:dmAtt,ts:Date.now()};
+    try{ await cloudSendMessage(c,m); }catch(e){ cloudErr('message',e); return; }
+    c.msgs.push(m); c.ts=Date.now();
     inp.value=''; setDmAtt(null); autoGrow();
-    appendMsg(th,c,c.msgs[c.msgs.length-1],true);
+    appendMsg(th,c,m,true);
     scrollThread(th);
     quiet(()=>{ chatSig=null; if(S.tab==='chat') renderChatList(); });
-    // bot typing → reply
-    setTimeout(()=>{
+    // demo/botだけは従来どおり自動返信。本物のユーザーには勝手に返さない。
+    if(u.demo||u.bot) setTimeout(()=>{
       const dots=el(`<div class="msgrow" id="typingRow">${uav(c.u,30)}<div class="bub"><span class="typing"><i></i><i></i><i></i></span></div></div>`);
       th.appendChild(dots); scrollThread(th);
       setTimeout(()=>{
@@ -2416,6 +2725,7 @@ function pushPostDetail(pid){
   const likeBtn=$('#pdLike',s);
   likeBtn.onclick=()=>{
     p.liked=!p.liked; p.likes+=p.liked?1:-1;
+    cloudSetPostLike(p).catch(e=>cloudErr('like',e));
     haptic(p.liked?12:5);
     likeBtn.classList.toggle('liked',p.liked);
     likeBtn.querySelector('.num').textContent=p.likes+'件のいいね';
@@ -2478,12 +2788,14 @@ function pushPostDetail(pid){
   send.onclick=fire;
   { const mini=$('#repSendMini',s); if(mini) mini.onclick=fire; }
 
-  function fire(){
+  async function fire(){
     const t=inp.value.trim(); if(!t && !repAtt) return;
     haptic(11);
     send.classList.remove('fly'); void send.offsetWidth; send.classList.add('fly');
     setTimeout(()=>send.classList.remove('fly'),540);
-    p.rep.push({u:'me', t, to:replyTo, media:repAtt, ts:Date.now(), likes:0, liked:false});
+    const r={u:'me', t, to:replyTo, media:repAtt, ts:Date.now(), likes:0, liked:false};
+    try{ await cloudCreateReply(p,r); }catch(e){ cloudErr('reply',e); return; }
+    p.rep.push(r);
     setTarget(null); setRepAtt(null);
     dock.classList.remove('open');
     p.replies=p.rep.length;
@@ -2526,6 +2838,7 @@ function pushPostDetail(pid){
       const lk=e.target.closest('[data-replike]'); if(!lk) return;
       const r=p.rep[+lk.dataset.replike];
       r.liked=!r.liked; r.likes+=r.liked?1:-1;
+      cloudSetReplyLike(r).catch(e=>cloudErr('reply like',e));
       haptic(r.liked?11:5);
       lk.classList.toggle('liked',r.liked);
       lk.querySelector('.num').textContent=r.likes;
@@ -2739,11 +3052,11 @@ const GUIDE_TEXT=[
 const ABOUT_TEXT=()=>[
   ['iroha '+APP_VER, 'まとまらない気持ちを、そのまま置いていけるSNS。'],
   ['このビルドについて',
-   'すべてのデータは端末のメモリ上にだけあります。ページを閉じると投稿もメッセージも消えます。サーバーへの送信は行いません。'],
+   CLOUD.enabled?'Supabaseに接続中です。投稿・返信・いいね・プロフィール・DMはクラウドに保存され、別端末にも反映されます。':'Supabase未設定のためオフラインデモとして動作しています。Project URLとPublishable Keyを設定するとクラウド保存が有効になります。'],
   ['デモアカウント',
    'DEMOと表示される4人は自動で動くアカウントです。いいね・返信・会話の申請を自分から行います。'],
   ['音声について',
-   '録音はブラウザのマイク機能を使います。安全な接続（https）でのみ動作し、録音した音声も端末の外には出ません。']
+   CLOUD.enabled?'録音はブラウザのマイク機能を使います。送信した音声はSupabase Storageに保存されます。DM音声は非公開バケットで扱います。':'録音はブラウザのマイク機能を使います。Supabase未設定時は端末内のデモとして扱われます。']
 ];
 
 function pushDoc(title, blocks){
@@ -2856,12 +3169,13 @@ function pushEdit(){
   });
   hd.addEventListener('input',()=>{ hd.value=hd.value.replace(/[^a-zA-Z0-9_]/g,'').toLowerCase(); });
 
-  $('#edSave',s).onclick=()=>{
+  $('#edSave',s).onclick=async()=>{
     const h=hd.value.trim();
     if(!nm.value.trim()){ toast('表示名を入力してください'); return; }
     if(h.length<3){ toast('ユーザーIDは3文字以上にしてください'); return; }
     u.name=nm.value.trim(); u.handle=h; u.bio=bio.value; u.av=draft.av;
     u.img=draft.img; u.banner=draft.banner; u.gender=draft.gender;
+    try{ await cloudSaveProfile(u); }catch(e){ cloudErr('profile',e); return; }
     haptic(12); pop(); toast('プロフィールを更新しました');
   };
   push(s);
@@ -3301,18 +3615,17 @@ function openRequest(postId, uidOverride){
     ta.style.height='auto'; ta.style.height=Math.max(62,ta.scrollHeight)+'px';
   });
   $('#reqNo',sheet).onclick=close;
-  $('#reqGo',sheet).onclick=()=>{
+  $('#reqGo',sheet).onclick=async()=>{
     haptic(14);
     let c=S.chats.find(x=>x.u===uid);
     const text=ta.value.trim();
-    if(!c){
-      c={id:'c'+Date.now(), u:uid, unread:0, ts:Date.now(), msgs:[]};
-      S.chats.push(c);
-    }
-    if(text) c.msgs.push({me:true, t:text, ts:Date.now()});
-    else     c.msgs.push({sys:true, t:'会話申請を送信しました', ts:Date.now()});
-    c.ts=Date.now();
-    scheduleReplyTo(c, text);      /* they answer in their own time */
+    try{
+      if(!c && cloudUserKeyIsReal(uid)) c=await cloudGetOrCreateChat(uid);
+      if(!c){ c={id:'c'+Date.now(), u:uid, unread:0, ts:Date.now(), msgs:[]}; S.chats.push(c); }
+      const m=text?{me:true,t:text,ts:Date.now()}:{sys:true,t:'会話申請を送信しました',ts:Date.now()};
+      await cloudSendMessage(c,m); c.msgs.push(m); c.ts=Date.now();
+    }catch(e){ cloudErr('conversation request',e); return; }
+    if(S.users[uid]?.demo||S.users[uid]?.bot) scheduleReplyTo(c, text);
     if(p){ p.req=true;
       const btn=document.querySelector(`[data-talk="${p.id}"]`);
       if(btn){ btn.classList.add('done'); btn.innerHTML=I.reply+'申請済み'; }
@@ -3385,7 +3698,7 @@ function openPostMenu(pid){
 /* ---------- my own posts ---------- */
 function toggleArchive(pid){
   const p=S.posts.find(x=>x.id===pid); if(!p) return;
-  p.arch=!p.arch; haptic(10);
+  p.arch=!p.arch; haptic(10); cloudUpdatePost(p).catch(e=>cloudErr('archive',e));
   toast(p.arch?'アーカイブしました。自分だけに表示されます':'アーカイブから戻しました');
   refreshInPlace('posts');
 }
@@ -3416,7 +3729,8 @@ function confirmDelete(pid){
     fn:()=>{
       const i=S.posts.findIndex(x=>x.id===pid);
       if(i<0) return;
-      S.posts.splice(i,1); haptic(12);
+      const doomed=S.posts[i]; S.posts.splice(i,1); haptic(12);
+      if(doomed?.cloud) cloudDeletePost(pid).catch(e=>cloudErr('delete post',e));
       closeDetailFor(pid);
       refreshInPlace('posts');
       toast('投稿を削除しました');
@@ -3466,6 +3780,7 @@ function editPost(pid){
     const t=ta.value.trim();
     if(!t){ toast('本文を入力してください'); return; }
     p.t=t; p.tag=tag; p.edited=true; haptic(12);
+    cloudUpdatePost(p).catch(e=>cloudErr('edit post',e));
     close();
     setTimeout(()=>{
       /* if the post's detail screen is open, update it in place */
@@ -3518,11 +3833,11 @@ function openChatMenu(cid){
   const u=S.users[c.u];
   openMenu([
     {t:c.pin?'固定を解除':'チャットを固定', fn:()=>{
-      c.pin=!c.pin; haptic(10); chatSig=null; renderChatList();
+      c.pin=!c.pin; haptic(10); cloudSetChatState(c,{pin:c.pin}); chatSig=null; renderChatList();
       toast(c.pin?'チャットを固定しました':'固定を解除しました');
     }},
     {t:'チャットを非表示', fn:()=>{
-      c.hidden=true; c.unread=0; haptic(10);
+      c.hidden=true; c.unread=0; haptic(10); cloudSetChatState(c,{hidden:true});
       chatSig=null; renderChatList(); syncNavBadges();
       toast('非表示にしました。新しいメッセージで戻ります');
     }},
@@ -3531,6 +3846,7 @@ function openChatMenu(cid){
       lead:'メッセージの履歴が消えます。相手に通知は届きません。',
       go:'削除する', danger:true,
       fn:()=>{
+        if(c.cloud) cloudSetChatState(c,{hidden:true});
         S.chats=S.chats.filter(x=>x.id!==cid);
         for(let i=stackEls.length-1;i>=0;i--)
           if(stackEls[i].dataset.chat===cid){ while(stackEls.length>i) pop(); break; }
@@ -3554,6 +3870,7 @@ function openNoteMenu(nid){
   ]);
 }
 function deleteNote(nid){
+  cloudDeleteNote(nid);
   ['like','reply'].forEach(k=>{
     const i=S.notes[k].findIndex(x=>x.id===nid);
     if(i>=0) S.notes[k].splice(i,1);
@@ -3639,12 +3956,13 @@ function openCompose(){
     $$('.tagopt',m).forEach(x=>x.classList.toggle('on',x===b));
   }));
   $('#cmNo',m).onclick=close;
-  $('#cmGo',m).onclick=()=>{
+  $('#cmGo',m).onclick=async()=>{
     const t=ta.value.trim(); if(!t && !att) return;
     haptic(14);
-    const newId='p'+Date.now();
-    S.posts.unshift({id:newId, u:'me', t, tag, media:att, ts:Date.now(),
-      likes:0, replies:0, liked:false, req:false, rep:[], arch:false});
+    const post={id:'p'+Date.now(), u:'me', t, tag, media:att, ts:Date.now(),
+      likes:0, replies:0, liked:false, req:false, rep:[], arch:false};
+    try{ await cloudCreatePost(post); }catch(e){ cloudErr('post',e); return; }
+    S.posts.unshift(post); const newId=post.id;
     close();
     setTimeout(()=>{
       /* stay exactly where the person was — posting never changes tabs,
@@ -3927,8 +4245,9 @@ function demoTick(){
 /* =========================================================
    BOOT
    ========================================================= */
-function boot(){
+async function boot(){
   setTheme('light',false);
+  await cloudInit();
   buildNav();
   buildPane('home');
   raf(()=>{
@@ -3937,6 +4256,7 @@ function boot(){
     syncNavBadges();
     navMorph.init();
   });
+  if(CLOUD.enabled) cloudStartRealtime();
   setTimeout(demoTick, 6000);
 }
 
