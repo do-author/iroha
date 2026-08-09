@@ -37,6 +37,7 @@
   --glass:saturate(200%) blur(38px);
   --glass-edge:rgba(255,255,255,.72);
   --glass-line:rgba(120,110,90,.14);
+  --fresh-wash:rgba(247,206,69,.10);
   --toast-bg:#1A1917; --toast-ink:#fff;
 
   --ease-out:cubic-bezier(.22,1,.36,1);
@@ -76,6 +77,7 @@
   --glass:saturate(190%) blur(38px);
   --glass-edge:rgba(255,255,255,.10);
   --glass-line:rgba(255,255,255,.10);
+  --fresh-wash:rgba(251,211,77,.07);
   --toast-bg:#F3EFE6; --toast-ink:#171614;
 }
 
@@ -348,14 +350,14 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 /* ============ BOTTOM NAV ============ */
 .navwrap{
   position:absolute; left:0; right:0; bottom:0; z-index:40;
-  padding:0 16px calc(var(--safe-b) + 12px);
+  padding:0 34px calc(var(--safe-b) + 18px);
   pointer-events:none;
   transition:transform var(--dur-3) var(--ease-out), opacity var(--dur-2) var(--ease-out);
 }
 .navwrap.hide{transform:translate3d(0,120%,0); opacity:0}
 .nav{
   position:relative; pointer-events:auto;
-  height:70px; border-radius:999px;
+  height:63px; border-radius:999px;
   background:var(--nav);
   -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
   box-shadow:var(--shadow-nav), inset 0 1px 0 var(--glass-edge);
@@ -366,37 +368,38 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
 }
 .nav-ind{
-  position:absolute; top:11px; height:48px; width:48px; border-radius:17px;
+  position:absolute; top:6px; height:52px; width:54px; border-radius:18px;
   background:var(--nav-pill); left:0;
   transition:transform 520ms var(--spring), background-color var(--dur-3) var(--ease-out), width 380ms var(--ease-out);
   will-change:transform;
 }
 
 .navbtn{
-  position:relative; will-change:transform,opacity; height:100%; display:grid; place-items:center; color:var(--ink-2);
+  position:relative; will-change:transform,opacity; height:100%; display:grid; place-items:center; color:var(--ink);
   transition:color 300ms var(--ease-out), transform var(--dur-2) var(--spring);
 }
-.navbtn svg{width:27px;height:27px}
+.navbtn svg{width:30px;height:30px}
+.navbtn.on svg *{stroke-width:2.6}
 .navbtn:active{transform:scale(.86)}
 .navbtn.on{color:var(--nav-pill-ink)}
 .navbtn .bdg{
-  position:absolute; top:11px; right:calc(50% - 24px);
+  position:absolute; top:7px; right:calc(50% - 25px);
   min-width:18px;height:18px;padding:0 5px; border-radius:9px;
   background:#E0245E; color:#fff; font-size:10.5px; font-weight:800;
   display:grid;place-items:center; line-height:1;
   box-shadow:0 0 0 2px rgba(255,255,255,.55);
   animation:bdgIn 520ms var(--spring) both;
 }
-/* unread notifications read as a plain dot, not a count */
-.navbtn .bdg.dot{
-  top:18px; right:calc(50% - 16px);
-  min-width:0; width:11px; height:11px; padding:0; border-radius:50%;
-  background:var(--accent); box-shadow:0 0 0 2.5px var(--nav-ring), 0 0 8px rgba(247,206,69,.55);
+/* unread notifications keep the yellow language, but show how many */
+.navbtn .bdg.soft{
+  top:8px; right:calc(50% - 23px);
+  background:var(--accent); color:var(--accent-ink);
+  box-shadow:0 0 0 2.5px var(--nav-ring), 0 0 8px rgba(247,206,69,.5);
 }
 @keyframes bdgIn{from{transform:scale(0)}to{transform:none}}
 .fabslot{display:grid;place-items:center; position:relative; z-index:2}
 .fab{
-  position:absolute; top:-8px; left:0; width:62px;height:62px;
+  position:absolute; top:-5px; left:0; width:62px;height:62px;
   display:grid;place-items:center; pointer-events:auto; z-index:5;
   will-change:transform;
 }
@@ -547,6 +550,25 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .searchbar input:focus-visible{outline:none}
 .searchbar input{flex:1; font-size:14.5px; font-weight:600; min-width:0}
 .searchbar input::placeholder{color:var(--ink-3)}
+.row.fresh{background:var(--fresh-wash)}
+.row.fresh::before{
+  content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
+  background:var(--accent);
+}
+.newchip{
+  display:inline-block; margin-right:7px; vertical-align:1px;
+  background:var(--accent); color:var(--accent-ink);
+  font-size:10.5px; font-weight:800; letter-spacing:.04em;
+  padding:2px 8px; border-radius:999px;
+}
+.segdot{
+  display:inline-block; margin-left:6px; vertical-align:2px;
+  width:7px; height:7px; border-radius:50%; background:var(--accent);
+  box-shadow:0 0 6px rgba(247,206,69,.6);
+}
+.segbtn{position:relative}
+.segbtn small.has-new{color:var(--accent-deep); font-weight:800}
+[data-theme="dark"] .segbtn small.has-new{color:var(--accent)}
 .sec-h{padding:16px 18px 8px; font-size:12px; font-weight:800; color:var(--ink-3); letter-spacing:.04em}
 
 /* ---------- chat thread ---------- */
@@ -997,7 +1019,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.23.1';
+const APP_VER='2.25';
 
 const $  = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
@@ -1444,15 +1466,27 @@ function moveNavInd(animate=true){
   if(!btn||!ind) return;
   const nav=$('#nav').getBoundingClientRect(), b=btn.getBoundingClientRect();
   if(!animate) ind.style.transition='none';
-  const w=48;
+  const w=54;
   ind.style.width=w+'px';
   ind.style.transform=`translate3d(${b.left-nav.left+(b.width-w)/2}px,0,0)`;
   if(!animate) requestAnimationFrame(()=>ind.style.transition='');
 }
 
 function allNotes(){ return [...S.notes.like, ...S.notes.reply]; }
-function unseenNotes(){ return allNotes().filter(n=>!S.noteSeen.has(n.id)).length; }
+function unseenIn(kind){ return S.notes[kind].filter(n=>!S.noteSeen.has(n.id)).length; }
+function unseenNotes(){ return unseenIn('like')+unseenIn('reply'); }
 function markNotesSeen(){ allNotes().forEach(n=>S.noteSeen.add(n.id)); }
+
+/* ids highlighted for this visit — captured before the tab is marked read,
+   so the new arrivals stay visible while the counter already drops */
+let noteFresh=new Set();
+/* opening a tab clears only that tab: likes and replies count separately */
+function openNoteSegment(kind){
+  const list=S.notes[kind]||[];
+  noteFresh=new Set(list.filter(n=>!S.noteSeen.has(n.id)).map(n=>n.id));
+  list.forEach(n=>S.noteSeen.add(n.id));
+  syncNavBadges();
+}
 
 function syncNavBadges(){
   $$('#nav .navbtn').forEach(b=>{
@@ -1464,9 +1498,9 @@ function syncNavBadges(){
     let bdg=b.querySelector('.bdg');
     if(n>0){
       if(!bdg){
-        bdg=el(`<span class="bdg${dotTab?' dot':''}">${dotTab?'':n}</span>`);
+        bdg=el(`<span class="bdg${dotTab?' soft':''}">${n}</span>`);
         b.appendChild(bdg);                                   /* animates in once */
-      }else if(!dotTab && bdg.textContent!==String(n)) bdg.textContent=n;  /* silent update */
+      }else if(bdg.textContent!==String(n)) bdg.textContent=n;  /* silent update */
     }else if(bdg) bdg.remove();
   });
 }
@@ -1503,7 +1537,7 @@ function buildPane(id){
 }
 function refreshPane(id){
   const p=PANES[id]; if(!p) return;
-  if(id==='bell'){ markNotesSeen(); renderNotes(); syncNavBadges(); }
+  if(id==='bell'){ openNoteSegment(noteSeg); renderNotes(); }
   if(id==='chat') renderChatList();
   if(id==='me')   renderMe();
   if(id==='home') { /* live */ }
@@ -1669,7 +1703,7 @@ function paneBell(p){
     <div class="scroll flush" id="noteScroll"><div id="noteList"></div></div>`;
   $$('.segbtn',p).forEach(b=>b.addEventListener('click',()=>{
     if(noteSeg===b.dataset.seg) return;
-    haptic(6); noteSeg=b.dataset.seg;
+    haptic(6); noteSeg=b.dataset.seg; openNoteSegment(noteSeg);
     $$('.segbtn',p).forEach(x=>x.classList.toggle('on',x===b));
     moveSeg($('#noteSeg',p),$('#noteInd',p));
     renderNotes(true);
@@ -1693,26 +1727,39 @@ function renderNotes(animate){
   const list=S.notes[noteSeg];
   const seg=$('#noteSeg');
   if(seg){
-    const l=seg.querySelector('[data-seg="like"] small'),
-          r=seg.querySelector('[data-seg="reply"] small');
-    if(l) l.textContent=S.notes.like.length;
-    if(r) r.textContent=S.notes.reply.length;
+    ['like','reply'].forEach(k=>{
+      const t=seg.querySelector(`[data-seg="${k}"] small`);
+      if(!t) return;
+      const unread=unseenIn(k);
+      t.textContent=S.notes[k].length;
+      t.classList.toggle('has-new', unread>0);
+      const btn=seg.querySelector(`[data-seg="${k}"]`);
+      let n=btn.querySelector('.segdot');
+      if(unread>0){ if(!n) btn.appendChild(el('<span class="segdot"></span>')); }
+      else if(n) n.remove();
+    });
     raf(()=>moveSeg(seg,$('#noteInd')));   /* widths change with the numbers */
   }
+  let firstFresh=true;
   const paint=()=>{
-    host.innerHTML = list.length ? list.map(n=>`
-      <div class="row stagger${n.p?' tapable':''}"${n.p?` data-open="${n.p}"`:''}>
-        ${uav(n.u,48)}
+    host.innerHTML = list.length ? list.map(n=>{
+      const fresh=noteFresh.has(n.id);
+      const newest=fresh&&firstFresh; if(fresh) firstFresh=false;
+      return `
+      <div class="row stagger${n.p?' tapable':''}${fresh?' fresh':''}"${n.p?` data-open="${n.p}"`:''}>
+        <button class="av-tap" data-user="${n.u}" style="display:contents">${uav(n.u,48)}</button>
         <div class="row-main">
-          <div class="row-t">${esc(n.t)}</div>
+          <div class="row-t">${newest?'<span class="newchip">新着</span>':''}${esc(n.t)}</div>
           <div class="row-s">${esc(n.s)}・${ago(n.ts)}</div>
         </div>
         <button class="p-more" data-note="${n.id}" aria-label="その他">${I.dots}</button>
-      </div>`).join('')
+      </div>`;}).join('')
       : `<div class="empty"><h3>お知らせはまだありません</h3><p>いいねや返信が届くと、ここに表示されます</p></div>`;
     revealAll(host,0,q);
     $$('.row',host).forEach(r=>r.addEventListener('pointerdown',e=>rippleAt(r,e)));
     host.onclick=e=>{
+      const av=e.target.closest('[data-user]');
+      if(av){ e.stopPropagation(); pushProfile(av.dataset.user); return; }
       const b=e.target.closest('[data-note]');
       if(b){ e.stopPropagation(); openNoteMenu(b.dataset.note); return; }
       const row=e.target.closest('[data-open]');
@@ -3098,7 +3145,7 @@ function refreshNotes(){
   if(who.length && myPosts().length && Math.random()<0.7){
     (Math.random()<0.5?demoLike:demoReply)(pick(who));
   }
-  markNotesSeen(); renderNotes(); syncNavBadges();
+  openNoteSegment(noteSeg); renderNotes();
 }
 function refreshChats(){
   const who=activeDemos();
