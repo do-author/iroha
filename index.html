@@ -626,30 +626,34 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
   transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
 }
-/* DM attachment buttons: direct camera / microphone actions */
-.dm-att-actions{display:flex;align-items:center;gap:7px;flex:0 0 auto}
-.dm-attbtn{
-  width:38px;height:38px;border-radius:50%;flex:0 0 38px;
-  display:grid;place-items:center;
-  background:var(--field);border:1px solid var(--line);color:var(--ink-2);
-  transition:transform var(--dur-2) var(--spring), background-color var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out);
+/* DM compose bar: + = image/video, mic beside send */
+.dm-compose-shell{
+  width:100%; display:flex; align-items:flex-end; gap:6px;
+  padding:5px 6px 5px 9px;
+  background:var(--field); border:1px solid var(--line); border-radius:999px;
 }
-.dm-attbtn svg{width:20px;height:20px}
-.dm-attbtn:active{transform:scale(.88);background:var(--line-soft)}
+.dm-media-btn,.dm-mic-btn{
+  width:38px;height:38px;flex:0 0 38px;
+  display:grid;place-items:center; color:var(--ink-2); border-radius:50%;
+  transition:transform var(--dur-2) var(--spring), background-color var(--dur-2) var(--ease-out);
+}
+.dm-media-btn svg,.dm-mic-btn svg{width:22px;height:22px}
+.dm-media-btn:active,.dm-mic-btn:active{transform:scale(.88);background:var(--line-soft)}
 
 .msgfield{
-  flex:1; background:var(--field); border-radius:20px; padding:10px 15px;
+  flex:1; min-width:0; background:transparent; border-radius:0; padding:8px 6px;
   font-size:15px; font-weight:600; resize:none; max-height:120px; line-height:1.5;
-  transition:background-color var(--dur-3) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+  transition:none;
 }
-.msgfield:focus{box-shadow:inset 0 0 0 1.5px var(--accent)}
+.msgfield:focus{box-shadow:none}
 .sendbtn{
-  width:38px;height:38px;border-radius:50%; display:grid;place-items:center; flex:0 0 auto;
+  width:48px;height:40px;border-radius:999px; display:grid;place-items:center; flex:0 0 48px;
   color:var(--ink-3);
   transition:transform 420ms var(--spring), color var(--dur-2) linear, background-color var(--dur-2) linear;
 }
+.sendbtn svg{width:22px;height:22px}
 .sendbtn.live{color:var(--accent-ink); background:var(--accent); box-shadow:var(--glow)}
-.sendbtn:active{transform:scale(.84)}
+.sendbtn:active{transform:scale(.86)}
 
 /* ---------- post detail (X-style) ---------- */
 .pd-card{background:var(--bg-elev); padding:16px 18px 0;
@@ -1232,7 +1236,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.8';
+const APP_VER='2.40.9';
 
 
 /* =========================================================
@@ -2848,12 +2852,12 @@ function pushThread(cid){
     <div class="thread" id="thread"></div>
     <div id="dmAtt"></div>
     <div class="composer-bar">
-      <div class="dm-att-actions">
-        <button class="dm-attbtn" id="dmMedia" aria-label="画像・動画を追加" title="画像・動画">${I.camera}</button>
-        <button class="dm-attbtn" id="dmAudio" aria-label="音声を追加" title="音声">${I.mic}</button>
+      <div class="dm-compose-shell">
+        <button class="dm-media-btn" id="dmMedia" aria-label="画像・動画を追加" title="画像・動画">${I.plusS}</button>
+        <textarea class="msgfield" id="msgIn" rows="1" placeholder="メッセージ…"></textarea>
+        <button class="dm-mic-btn" id="dmAudio" aria-label="音声を追加" title="音声">${I.mic}</button>
+        <button class="sendbtn" id="sendBtn" aria-label="送信">${I.send}</button>
       </div>
-      <textarea class="msgfield" id="msgIn" rows="1" placeholder="メッセージ…"></textarea>
-      <button class="sendbtn" id="sendBtn" aria-label="送信">${I.send}</button>
     </div>
   </section>`);
   s.querySelector('.js-back').onclick=()=>{haptic(5);pop();};
