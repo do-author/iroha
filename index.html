@@ -1137,7 +1137,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.33.7';
+const APP_VER='2.33.9';
 
 
 /* =========================================================
@@ -1152,7 +1152,7 @@ const SUPABASE_PUBLISHABLE_KEY='sb_publishable_vYapd7Gg_rFLAFkO42BPUQ_GXLge49D';
 const CLOUD={
   enabled:false, client:null, userId:null, channel:null,
   reloading:false, reloadAgain:false, reloadAgainApplyPosts:false, reloadTimer:null, feedDirty:false,
-  remoteUserIds:new Set()
+  remoteUserIds:new Set(), profileReplyLoads:new Map()
 };
 function cloudConfigured(){
   return /^https:\/\/.+\.supabase\.co\/?$/.test(SUPABASE_URL)
@@ -1255,6 +1255,73 @@ async function cloudInit(){
   }
 }
 async function cloudRows(promise){ const r=await promise; if(r.error) throw r.error; return r.data||[]; }
+
+
+/* Load a profile's replies by author, not by the Home timeline window.
+   replies already has author_id + an author index in Supabase, so no schema change is needed. */
+async function cloudFetchProfileReplies(uid){
+  if(!CLOUD.enabled || !cloudUserKeyIsReal(uid)) return profileReplies(uid);
+  const authorId=cloudKey(uid), sb=CLOUD.client, me=CLOUD.userId;
+  const token=(CLOUD.profileReplyLoads.get(uid)||0)+1;
+  CLOUD.profileReplyLoads.set(uid,token);
+
+  const rq=await sb.from('replies').select('*',{count:'exact'}).eq('author_id',authorId)
+    .order('created_at',{ascending:false}).limit(200);
+  if(rq.error) throw rq.error;
+  if(CLOUD.profileReplyLoads.get(uid)!==token) return profileReplies(uid);
+
+  const authored=rq.data||[];
+  if(S.users[uid]) S.users[uid].replies=typeof rq.count==='number'?rq.count:authored.length;
+  const postIds=[...new Set(authored.map(r=>r.post_id).filter(Boolean))];
+  if(!postIds.length) return [];
+
+  const [parents,allReps,postLikes]=await Promise.all([
+    cloudRows(sb.from('posts').select('*').in('id',postIds)),
+    cloudRows(sb.from('replies').select('*').in('post_id',postIds).order('created_at',{ascending:true}).limit(1000)),
+    cloudRows(sb.from('post_likes').select('*').in('post_id',postIds))
+  ]);
+  const allReplyIds=allReps.map(r=>r.id);
+  const replyLikes=allReplyIds.length
+    ? await cloudRows(sb.from('reply_likes').select('*').in('reply_id',allReplyIds)) : [];
+
+  const likesByPost=new Map(), myPostLikes=new Set();
+  postLikes.forEach(x=>{
+    likesByPost.set(x.post_id,(likesByPost.get(x.post_id)||0)+1);
+    if(x.user_id===me) myPostLikes.add(x.post_id);
+  });
+  const likesByReply=new Map(), myReplyLikes=new Set();
+  replyLikes.forEach(x=>{
+    likesByReply.set(x.reply_id,(likesByReply.get(x.reply_id)||0)+1);
+    if(x.user_id===me) myReplyLikes.add(x.reply_id);
+  });
+
+  const repsByPost=new Map();
+  for(const row of allReps){
+    const rr={id:row.id,u:localKey(row.author_id),t:row.body||'',to:row.reply_to?localKey(row.reply_to):null,
+      media:await cloudHydrateMedia(row.media),ts:new Date(row.created_at).getTime(),
+      likes:likesByReply.get(row.id)||0,liked:myReplyLikes.has(row.id),cloud:true};
+    if(!repsByPost.has(row.post_id)) repsByPost.set(row.post_id,[]);
+    repsByPost.get(row.post_id).push(rr);
+  }
+
+  for(const row of parents){
+    const rep=repsByPost.get(row.id)||[];
+    const fresh={id:row.id,u:localKey(row.author_id),t:row.body||'',tag:row.tag||'hitorigoto',
+      media:await cloudHydrateMedia(row.media),ts:new Date(row.created_at).getTime(),
+      likes:likesByPost.get(row.id)||0,replies:rep.length,liked:myPostLikes.has(row.id),
+      req:false,rep,arch:!!row.archived,cloud:true};
+    const existing=S.posts.find(p=>p.id===row.id);
+    if(existing){
+      const profileOnly=!!existing.profileOnly;
+      Object.assign(existing,fresh);
+      if(profileOnly) existing.profileOnly=true;
+    }else{
+      fresh.profileOnly=true;   /* usable in profile/detail, but never injected into Home */
+      S.posts.push(fresh);
+    }
+  }
+  return profileReplies(uid);
+}
 
 /* Supabaseの定期確認で、実データが変わっていないならDOMを作り直さない。 */
 function cloudViewSignature(){
@@ -2104,6 +2171,7 @@ function paneHome(p){
 
 function visiblePosts(){
   let list=S.posts.filter(p=>
+    !p.profileOnly &&
     !S.blocked.includes(p.u) &&
     !(p.arch && p.u!=='me')          /* archived posts stay visible only to me */
   );
@@ -2199,7 +2267,11 @@ function onPostClick(e){
   const more=e.target.closest('[data-more]');
   if(more){ openPostMenu(more.dataset.more); return; }
   const rep=e.target.closest('[data-reply]');
-  if(rep){ openThreadForPost(rep.dataset.reply); return; }
+  if(rep){
+    if(rep.closest('#meList,#pfList')) openReplyFromProfilePost(rep.dataset.reply);
+    else openThreadForPost(rep.dataset.reply);
+    return;
+  }
   const us=e.target.closest('[data-user]');
   if(us){ pushProfile(us.dataset.user); return; }
   const card=e.target.closest('[data-post]');
@@ -2423,6 +2495,10 @@ function renderMe(){
     $$('#meTabs .utab').forEach(x=>x.classList.toggle('on',x===b));
     moveU($('#meTabs'),$('#meInd'));
     paintMeList(true);
+    if(meTab==='replies' && CLOUD.enabled){
+      cloudFetchProfileReplies('me').then(()=>{ if(meTab==='replies' && $('#meBody')) renderMe(); })
+        .catch(e=>cloudErr('profile replies',e));
+    }
   }));
   paintMeList();
   raf(()=>moveU($('#meTabs'),$('#meInd'),false));
@@ -2437,7 +2513,7 @@ function renderMe(){
         : `<div class="empty"><h3>公開中の投稿はありません</h3><p>「＋」から、いまの気持ちを置いてみましょう</p></div>`;
     }else{
       const reps=myReplies();
-      box.innerHTML = reps.length ? reps.map(replyCard).join('')
+      box.innerHTML = reps.length ? reps.map(x=>replyCard(x,'me')).join('')
         : `<div class="empty"><h3>公開中の返信はありません</h3><p>返信すると、ここにまとまります</p></div>`;
     }
     box.onclick=onPostClick;
@@ -2459,26 +2535,28 @@ function miniPost(p){
 }
 
 
-/* every reply I have written, newest first, with the post it belongs to */
-function myReplies(){
+/* every reply written by a profile, newest first, with the parent post */
+function profileReplies(uid){
   const out=[];
   S.posts.forEach(p=>{
     (p.rep||[]).forEach((r,i)=>{
-      if(r.u!=='me') return;
+      if(r.u!==uid) return;
       out.push({r, i, post:p});
     });
   });
   return out.sort((a,b)=>b.r.ts-a.r.ts);
 }
+function myReplies(){ return profileReplies('me'); }
 
-/* a reply rendered as a card on the profile */
-function replyCard(entry){
+/* a reply rendered as a card on any profile */
+function replyCard(entry,uid='me'){
   const {r, post}=entry;
+  const author=S.users[uid]||{id:uid,name:'退会したユーザー',gender:'secret'};
   const pu=S.users[post.u]||{name:'退会したユーザー'};
-  return `<article class="card tap stagger" data-openpost="${post.id}">
+  return `<article class="card tap" data-openpost="${post.id}">
     <div class="mini-head">
-      <button data-user="me" style="display:contents">${uav('me',40)}</button>
-      <div class="mini-who"><b>${esc(S.users.me.name)}</b>${genderTag(S.users.me)}</div>
+      <button data-user="${uid}" style="display:contents">${uav(uid,40)}</button>
+      <div class="mini-who"><b>${esc(author.name)}</b>${genderTag(author)}</div>
       <span class="p-time" data-ts="${r.ts}">${ago(r.ts)}</span>
       <button class="p-more" data-repmore="${post.id}:${entry.i}" aria-label="その他">${I.dots}</button>
     </div>
@@ -2620,29 +2698,39 @@ function pushProfile(uid){
       if(c) pushThread(c.id); else openRequest(null,uid);
     };
     }
+    const loadReplies=async()=>{
+      if(!CLOUD.enabled || profTab!=='replies') return;
+      try{
+        await cloudFetchProfileReplies(uid);
+        if(!body.isConnected || profTab!=='replies') return;
+        const small=$('#pfTabs [data-ut="replies"] small',body);
+        if(small && S.users[uid]) small.textContent=S.users[uid].replies||0;
+        paintList();
+      }catch(e){ cloudErr('profile replies',e); }
+    };
     $$('#pfTabs .utab',body).forEach(b=>b.addEventListener('click',()=>{
       if(profTab===b.dataset.ut) return;
       haptic(6); profTab=b.dataset.ut;
       $$('#pfTabs .utab',body).forEach(x=>x.classList.toggle('on',x===b));
       moveU($('#pfTabs',body),$('#pfInd',body)); paintList();
+      if(profTab==='replies') loadReplies();
     }));
     paintList();
     raf(()=>moveU($('#pfTabs',body),$('#pfInd',body),false));
 
     function paintList(){
       const box=$('#pfList',body);
-      const arr = profTab==='posts' ? mine : [];
-      if(profTab==='replies' && isMe){
-        const reps=myReplies();
-        box.innerHTML = reps.length ? reps.map(replyCard).join('')
-          : `<div class="empty"><h3>公開中の返信はありません</h3><p>返信すると、ここにまとまります</p></div>`;
-        box.onclick=onPostClick; return;
-      }
       box.style.transition='none';
       box.style.opacity='1';
       box.style.transform='none';
-      box.innerHTML = arr.length ? arr.map(p=>miniPost(p)).join('')
-        : `<div class="empty"><h3>${profTab==='posts'?'公開中の投稿はありません':'公開中の返信はありません'}</h3><p>公開されると、ここに並びます</p></div>`;
+      if(profTab==='replies'){
+        const reps=profileReplies(uid);
+        box.innerHTML = reps.length ? reps.map(x=>replyCard(x,uid)).join('')
+          : `<div class="empty"><h3>公開中の返信はありません</h3><p>${isMe?'返信すると、ここにまとまります':'公開されると、ここに並びます'}</p></div>`;
+        box.onclick=onPostClick; return;
+      }
+      box.innerHTML = mine.length ? mine.map(p=>miniPost(p)).join('')
+        : `<div class="empty"><h3>公開中の投稿はありません</h3><p>公開されると、ここに並びます</p></div>`;
       box.onclick=onPostClick;
     }
   };
@@ -2660,9 +2748,8 @@ function pushThread(cid){
   const s=el(`<section class="screen" data-chat="${c.id}" data-owner="${c.u}">
     <header class="navbar">
       <div class="side"><button class="iconbtn js-back" aria-label="戻る">${I.back}</button></div>
-      <button class="ttl" id="thHead" style="display:flex;flex-direction:column;align-items:center;gap:1px;flex:1">
-        <span style="display:flex;align-items:center;gap:7px">${uav(c.u,22)}<span>${esc(u.name)}</span></span>
-        <span style="font-size:11px;color:var(--ink-3);font-weight:700">公式Bot</span>
+      <button class="ttl" id="thHead" style="display:flex;align-items:center;justify-content:center;gap:7px;flex:1">
+        ${uav(c.u,22)}<span>${esc(u.name)}</span>
       </button>
       <div class="side"><button class="iconbtn" id="thMore" aria-label="その他">${I.dots}</button></div>
     </header>
@@ -2774,6 +2861,21 @@ function scrollThread(th){ raf(()=>th.scrollTo({top:th.scrollHeight, behavior:'s
 
 function openThreadForPost(pid){ pushPostDetail(pid); }
 
+/* Profile cards keep the profile visible and open the reply composer directly. */
+function openReplyFromProfilePost(pid){
+  const p=S.posts.find(x=>x.id===pid); if(!p) return;
+  haptic(7);
+  openReplyCompose(p,null,r=>{
+    p.rep.push(r);
+    p.replies=p.rep.length;
+    syncCard(p);
+    quiet(()=>{
+      if($('#feed')) renderFeed(false);
+      if(S.tab==='me') renderMe();
+    });
+  });
+}
+
 /* =========================================================
    POST DETAIL  —  replies live here
    ========================================================= */
@@ -2800,7 +2902,7 @@ function pushPostDetail(pid){
         ${mediaHTML(p.media)}
         ${TAGS[p.tag]?`<span class="tag ${TAGS[p.tag].cls}">${TAGS[p.tag].label}</span>`:''}
         <div class="pd-stats">
-          <span class="pd-stat" id="pdRepCount">${I.reply}<span class="num">${p.replies}件の返信</span></span>
+          <button class="pd-stat" id="pdRepCount" type="button">${I.reply}<span class="num">${p.replies}件の返信</span></button>
           <button class="pd-stat${p.liked?' liked':''}" id="pdLike">
             <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span>
             <span class="num">${p.likes}件のいいね</span>
@@ -2857,6 +2959,7 @@ function pushPostDetail(pid){
     raf(()=>sc.scrollTo({top:sc.scrollHeight, behavior:'smooth'}));
   });
   $('#repOpen',s).onclick=()=>{ haptic(7); openReply(null); };
+  $('#pdRepCount',s).onclick=()=>{ haptic(7); openReply(null); };
   const setTarget=rep=>openReply(rep);
 
   function paintReplies(fresh){
@@ -3023,7 +3126,8 @@ function openReplyCompose(p, toReply, done){
   </div>`);
   $('#overlays').appendChild(m);
   fitBars(m);
-  raf(()=>m.classList.add('on'));
+  void m.offsetHeight;
+  m.classList.add('on');
 
   let att=null;
   const ta=$('#rcText',m), go=$('#rcGo',m), attBox=$('#rcAtt',m);
@@ -3050,7 +3154,8 @@ function openReplyCompose(p, toReply, done){
 
   $('#rcNo',m).onclick=close;
   $('#rcGo',m).onclick=fire;
-  setTimeout(()=>ta.focus(),380);
+  /* Keep this inside the original tap/click event so iOS opens the keyboard automatically. */
+  try{ ta.focus({preventScroll:true}); }catch(_){ ta.focus(); }
 
   async function fire(){
     const t=ta.value.trim();
@@ -4098,7 +4203,8 @@ function openCompose(){
   </div>`);
   $('#overlays').appendChild(m);
   fitBars(m);
-  raf(()=>m.classList.add('on'));
+  void m.offsetHeight;
+  m.classList.add('on');
 
   let tag='hitorigoto', att=null;
   const ta=$('#cmText',m), go=$('#cmGo',m), attBox=$('#cmAtt',m);
@@ -4146,7 +4252,8 @@ function openCompose(){
       toast(hidden ? '投稿しました。「おすすめ」で見られます' : '投稿しました');
     },260);
   };
-  setTimeout(()=>ta.focus(),380);
+  /* Focus synchronously while the user's tap is still active; iOS then shows the keyboard. */
+  try{ ta.focus({preventScroll:true}); }catch(_){ ta.focus(); }
 
   function close(){
     m.classList.remove('on');
