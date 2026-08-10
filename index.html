@@ -451,6 +451,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .screen{
   position:absolute; inset:0; pointer-events:auto;
   background:var(--bg); display:flex; flex-direction:column;
+  min-height:0; overflow:hidden;
   transform:translate3d(100%,0,0);
   box-shadow:-14px 0 40px rgba(0,0,0,.13);
   transition:transform 420ms var(--ease-out);
@@ -611,9 +612,16 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .sec-h{padding:16px 18px 8px; font-size:12px; font-weight:800; color:var(--ink-3); letter-spacing:.04em}
 
 /* ---------- chat thread ---------- */
-.thread{flex:1 1 auto; overflow-y:auto; scrollbar-width:none;
+/* DM thread must be the scroll owner. min-height:0 is essential inside the
+   fixed-height flex screen; without it, a long thread grows past the screen
+   and gets clipped by #app instead of becoming scrollable. */
+.thread{
+  flex:1 1 0; min-height:0; min-width:0;
+  overflow-y:auto; overflow-x:hidden;
+  -webkit-overflow-scrolling:touch; touch-action:pan-y; scrollbar-width:none;
   padding:calc(var(--barH,90px) + 14px) 14px calc(var(--barB,66px) + 16px);
-  display:flex; flex-direction:column; gap:4px; overscroll-behavior-y:contain}
+  display:flex; flex-direction:column; gap:4px; overscroll-behavior-y:contain;
+}
 .thread::-webkit-scrollbar{display:none}
 .msgrow{display:flex; align-items:flex-end; gap:8px; margin-top:8px}
 .msgrow.me{flex-direction:row-reverse}
@@ -711,6 +719,19 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .sendbtn svg{width:22px;height:22px}
 .sendbtn.live{color:var(--accent-ink); background:var(--accent); box-shadow:var(--glow)}
 .sendbtn:active{transform:scale(.86)}
+
+/* optimistic/background sending */
+.msgrow.is-sending .bub{opacity:.72}
+.msgrow.is-failed .bub{opacity:.82}
+.mtime.send-state{white-space:nowrap}
+.mtime.send-state.failed{color:#D94B62;font-weight:800}
+.post-send-state{
+  display:inline-flex; align-items:center; gap:6px;
+  margin-top:9px; padding:4px 9px; border-radius:999px;
+  background:var(--field); color:var(--ink-3);
+  font-size:11.5px; font-weight:800; line-height:1.2;
+}
+.post-send-state.failed{color:#D94B62}
 
 /* ---------- post detail (X-style) ---------- */
 .pd-card{background:var(--bg-elev); padding:16px 18px 0;
@@ -1305,7 +1326,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.14';
+const APP_VER='2.40.16';
 
 
 /* =========================================================
@@ -1592,7 +1613,9 @@ async function cloudReloadAll(initial=false, applyPosts=true){
     /* Home timeline is X-like: background sync may learn that the server changed,
        but the visible post snapshot only changes on initial load or manual refresh. */
     if(initial || applyPosts){
-      S.posts=remotePosts.sort((a,b)=>b.ts-a.ts);
+      const remoteIds=new Set(remotePosts.map(p=>p.id));
+      const localOutbox=S.posts.filter(p=>(p.pending||p.failed) && !remoteIds.has(p.id));
+      S.posts=[...localOutbox,...remotePosts].sort((a,b)=>b.ts-a.ts);
       CLOUD.feedDirty=false;
     }else{
       const currentIds=new Set(S.posts.filter(p=>p.cloud).map(p=>p.id));
@@ -1600,6 +1623,9 @@ async function cloudReloadAll(initial=false, applyPosts=true){
       if(currentIds.size!==remoteIds.size || [...remoteIds].some(id=>!currentIds.has(id))) CLOUD.feedDirty=true;
     }
 
+    const localChatOutbox=new Map(
+      S.chats.map(c=>[c.id,(c.msgs||[]).filter(m=>m.pending||m.failed)])
+    );
     const chatIds=chats.map(c=>c.id), stMap=new Map(states.map(x=>[x.chat_id,x]));
     const msgs=chatIds.length?await cloudRows(sb.from('messages').select('*').in('chat_id',chatIds).order('created_at',{ascending:true})):[];
     const msgsByChat=new Map();
@@ -1609,11 +1635,15 @@ async function cloudReloadAll(initial=false, applyPosts=true){
       if(!msgsByChat.has(m.chat_id)) msgsByChat.set(m.chat_id,[]); msgsByChat.get(m.chat_id).push(mm);
     }
     const cloudChats=chats.map(c=>{
-      const other=c.user_a===me?c.user_b:c.user_a, key=localKey(other), ms=msgsByChat.get(c.id)||[], st=stMap.get(c.id);
+      const other=c.user_a===me?c.user_b:c.user_a, key=localKey(other), st=stMap.get(c.id);
+      const remoteMs=msgsByChat.get(c.id)||[];
+      const remoteIds=new Set(remoteMs.map(m=>m.id));
+      const localMs=(localChatOutbox.get(c.id)||[]).filter(m=>!remoteIds.has(m.id));
+      const ms=[...remoteMs,...localMs].sort((a,b)=>a.ts-b.ts);
       const seen=st?.last_read_at?new Date(st.last_read_at).getTime():0;
       const unread=ms.filter(m=>!m.me&&!m.sys&&m.ts>seen).length;
       if(S.users[key]) S.users[key].talks=(S.users[key].talks||0)+1;
-      return {id:c.id,u:key,unread,ts:new Date(c.updated_at||c.created_at).getTime(),msgs:ms,pin:!!st?.pinned,hidden:!!st?.hidden,cloud:true};
+      return {id:c.id,u:key,unread,ts:Math.max(new Date(c.updated_at||c.created_at).getTime(),...(ms.map(m=>m.ts||0))),msgs:ms,pin:!!st?.pinned,hidden:!!st?.hidden,cloud:true};
     });
     S.chats=cloudChats;
 
@@ -1665,8 +1695,11 @@ function cloudStartRealtime(){
 async function cloudCreatePost(p){
   if(!CLOUD.enabled) return p;
   const media=await cloudUploadMedia(p.media,{scope:'post'});
-  const r=await CLOUD.client.from('posts').insert({author_id:CLOUD.userId,body:p.t||'',tag:p.tag,media:media||null,archived:false}).select().single();
-  if(r.error) throw r.error; p.id=r.data.id; p.media=await cloudHydrateMedia(media); p.cloud=true; return p;
+  const r=await CLOUD.client.from('posts').insert({id:p.id,author_id:CLOUD.userId,body:p.t||'',tag:p.tag,media:media||null,archived:false}).select().single();
+  if(r.error) throw r.error;
+  p.id=r.data.id;
+  p.ts=r.data.created_at?new Date(r.data.created_at).getTime():p.ts;
+  p.media=await cloudHydrateMedia(media); p.cloud=true; return p;
 }
 async function cloudUpdatePost(p){
   if(!CLOUD.enabled||!p.cloud) return;
@@ -1681,8 +1714,11 @@ async function cloudSetPostLike(p){
 async function cloudCreateReply(p,r){
   if(!CLOUD.enabled||!p.cloud) return r;
   const media=await cloudUploadMedia(r.media,{scope:'reply'});
-  const q=await CLOUD.client.from('replies').insert({post_id:p.id,author_id:CLOUD.userId,body:r.t||'',reply_to:cloudKey(r.to)||null,media:media||null}).select().single();
-  if(q.error) throw q.error; r.id=q.data.id; r.media=await cloudHydrateMedia(media); r.cloud=true; return r;
+  const q=await CLOUD.client.from('replies').insert({id:r.id,post_id:p.id,author_id:CLOUD.userId,body:r.t||'',reply_to:cloudKey(r.to)||null,media:media||null}).select().single();
+  if(q.error) throw q.error;
+  r.id=q.data.id;
+  r.ts=q.data.created_at?new Date(q.data.created_at).getTime():r.ts;
+  r.media=await cloudHydrateMedia(media); r.cloud=true; return r;
 }
 async function cloudDeleteReply(r){
   if(!CLOUD.enabled||!r.cloud||!r.id) return;
@@ -1716,8 +1752,11 @@ async function cloudGetOrCreateChat(uid){
 async function cloudSendMessage(c,m){
   if(!CLOUD.enabled||!c.cloud) return m;
   const media=await cloudUploadMedia(m.media,{scope:'dm',chatId:c.id});
-  const q=await CLOUD.client.from('messages').insert({chat_id:c.id,sender_id:CLOUD.userId,body:m.sys?'':(m.t||''),system_text:m.sys?(m.t||''):null,media:media||null}).select().single();
-  if(q.error) throw q.error; m.id=q.data.id; m.media=await cloudHydrateMedia(media); return m;
+  const q=await CLOUD.client.from('messages').insert({id:m.id,chat_id:c.id,sender_id:CLOUD.userId,body:m.sys?'':(m.t||''),system_text:m.sys?(m.t||''):null,media:media||null}).select().single();
+  if(q.error) throw q.error;
+  m.id=q.data.id;
+  m.ts=q.data.created_at?new Date(q.data.created_at).getTime():m.ts;
+  m.media=await cloudHydrateMedia(media); m.cloud=true; return m;
 }
 async function cloudUnsendMessage(m){
   if(!CLOUD.enabled||!m.id) return;
@@ -1748,6 +1787,18 @@ const el = (h)=>{const t=document.createElement('template');t.innerHTML=h.trim()
 const raf = (fn)=>requestAnimationFrame(()=>requestAnimationFrame(fn));
 const esc = (s='')=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const haptic = (ms=8)=>{try{navigator.vibrate&&navigator.vibrate(ms)}catch(e){}};
+
+/* Give every outgoing row its final UUID before the network request starts.
+   A repeated request with the same row cannot become a second DB row. */
+function newRowId(){
+  if(globalThis.crypto?.randomUUID) return crypto.randomUUID();
+  const b=new Uint8Array(16);
+  if(globalThis.crypto?.getRandomValues) crypto.getRandomValues(b);
+  else for(let i=0;i<b.length;i++) b[i]=Math.floor(Math.random()*256);
+  b[6]=(b[6]&0x0f)|0x40; b[8]=(b[8]&0x3f)|0x80;
+  const h=[...b].map(x=>x.toString(16).padStart(2,'0')).join('');
+  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+}
 
 /* ---------- icons ---------- */
 const I = {
@@ -2386,13 +2437,17 @@ function postCard(p, opts={}){
       ${mediaHTML(p.media,{owner:p.u})}
       ${tag?`<span class="tag ${tag.cls}">${tag.label}</span>`:''}
       ${p.arch?`<span class="tag tag-arch">アーカイブ</span>`:''}
-      <div class="p-foot">
-        <button class="act" data-reply="${p.id}">${I.reply}<span class="num">${p.replies}</span></button>
-        <button class="act${p.liked?' liked':''}" data-like="${p.id}">
-          <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span><span class="num">${p.likes}</span>
-        </button>
-        ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>`}
-      </div>
+      ${p.pending
+        ? `<span class="post-send-state">送信中…</span>`
+        : p.failed
+          ? `<span class="post-send-state failed">送信できませんでした</span>`
+          : `<div class="p-foot">
+              <button class="act" data-reply="${p.id}">${I.reply}<span class="num">${p.replies}</span></button>
+              <button class="act${p.liked?' liked':''}" data-like="${p.id}">
+                <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span><span class="num">${p.likes}</span>
+              </button>
+              ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>`}
+            </div>`}
       </div>
     </div>
   </article>`;
@@ -2465,7 +2520,12 @@ function onPostClick(e){
   const us=e.target.closest('[data-user]');
   if(us){ pushProfile(us.dataset.user); return; }
   const card=e.target.closest('[data-post]');
-  if(card){ pushPostDetail(card.dataset.post); }
+  if(card){
+    const p=S.posts.find(x=>x.id===card.dataset.post);
+    if(p?.pending){ toast('投稿を送信中です'); return; }
+    if(p?.failed){ toast('投稿を送信できませんでした'); return; }
+    pushPostDetail(card.dataset.post);
+  }
 }
 
 function toggleLike(id, btn){
@@ -3004,29 +3064,56 @@ function pushThread(cid){
   send.onclick=fire;
   { const mini=$('#repSendMini',s); if(mini) mini.onclick=fire; }
 
-  async function fire(){
-    const t=inp.value.trim(); if(!t && !dmAtt) return;
-    if(dmAtt && (dmAtt.kind==='image'||dmAtt.kind==='video') && !favoredBy(c.u)){
+  function fire(){
+    const t=inp.value.trim(), picked=dmAtt;
+    if(!t && !picked) return;
+    if(picked && (picked.kind==='image'||picked.kind==='video') && !favoredBy(c.u)){
       toast('お気に入りされてないので送信できません');
       return;
     }
+
+    /* Commit locally first. The same text/media is impossible to submit twice
+       because the composer is cleared before any await/network work starts. */
+    const m={id:newRowId(),me:true,t,media:picked,ts:Date.now(),pending:true};
     haptic(9);
-    const m={me:true,t,media:dmAtt,ts:Date.now()};
-    try{ await cloudSendMessage(c,m); }catch(e){ cloudErr('message',e); return; }
-    c.msgs.push(m); c.ts=Date.now();
+    c.msgs.push(m); c.ts=m.ts;
     inp.value=''; setDmAtt(null); autoGrow();
     appendMsg(th,c,m,true);
     scrollThread(th);
     quiet(()=>{ chatSig=null; if(S.tab==='chat') renderChatList(); });
+
+    void (async()=>{
+      try{
+        await cloudSendMessage(c,m);
+        m.pending=false; m.failed=false;
+        const liveC=S.chats.find(x=>x.id===c.id)||c;
+        const liveM=(liveC.msgs||[]).find(x=>x.id===m.id);
+        if(liveM && liveM!==m) Object.assign(liveM,m);
+        else if(!liveM) liveC.msgs.push(m);
+        liveC.ts=Math.max(liveC.ts||0,m.ts||0);
+        if(th.isConnected) paintThread(th,liveC);
+        quiet(()=>{ chatSig=null; if(S.tab==='chat') renderChatList(); });
+      }catch(e){
+        m.pending=false; m.failed=true;
+        const liveC=S.chats.find(x=>x.id===c.id)||c;
+        const liveM=(liveC.msgs||[]).find(x=>x.id===m.id);
+        if(liveM && liveM!==m) Object.assign(liveM,m);
+        else if(!liveM) liveC.msgs.push(m);
+        if(th.isConnected) paintThread(th,liveC);
+        cloudErr('message',e);
+        toast('メッセージを送信できませんでした');
+      }
+    })();
+
     // demo/botだけは従来どおり自動返信。本物のユーザーには勝手に返さない。
     if(u.demo||u.bot) setTimeout(()=>{
       const dots=el(`<div class="msgrow" id="typingRow">${uav(c.u,30)}<div class="bub"><span class="typing"><i></i><i></i><i></i></span></div></div>`);
       th.appendChild(dots); scrollThread(th);
       setTimeout(()=>{
         dots.remove();
-        const m={me:false, t:REPLIES[Math.floor(Math.random()*REPLIES.length)], ts:Date.now()};
-        c.msgs.push(m); c.ts=Date.now();
-        appendMsg(th,c,m,true); scrollThread(th);
+        const reply={me:false, t:REPLIES[Math.floor(Math.random()*REPLIES.length)], ts:Date.now()};
+        c.msgs.push(reply); c.ts=Date.now();
+        appendMsg(th,c,reply,true); scrollThread(th);
       }, 1150+Math.random()*700);
     }, 420);
   }
@@ -3054,10 +3141,16 @@ function appendMsg(th,c,m,animate,i=0){
     if(!animate) chip.style.animationDelay=Math.min(i*38,300)+'ms';
     th.appendChild(chip); return;
   }
-  const row=el(`<div class="msgrow${m.me?' me':''}">
+  const sendClass=m.pending?' is-sending':(m.failed?' is-failed':'');
+  const timeHTML=m.pending
+    ? `<span class="mtime send-state">送信中</span>`
+    : m.failed
+      ? `<span class="mtime send-state failed">送信失敗</span>`
+      : `<span class="mtime" data-ts="${m.ts}">${ago(m.ts)}</span>`;
+  const row=el(`<div class="msgrow${m.me?' me':''}${sendClass}">
     ${m.me?uav('me',30):uav(c.u,30)}
     <div class="bub${m.media?' has-media':''}">${m.media?mediaHTML(m.media,{forceShow:!!m.me}):''}${m.t?esc(m.t):''}</div>
-    <span class="mtime" data-ts="${m.ts}">${ago(m.ts)}</span>
+    ${timeHTML}
   </div>`);
   const bub=row.querySelector('.bub');
   if(!animate){ bub.style.animationDelay=Math.min(i*38,300)+'ms'; }
@@ -3330,9 +3423,9 @@ function openReplyCompose(p, toReply, done){
   void m.offsetHeight;
   m.classList.add('on');
 
-  let att=null;
+  let att=null, sending=false;
   const ta=$('#rcText',m), go=$('#rcGo',m), attBox=$('#rcAtt',m);
-  const sync=()=>{ go.disabled = ta.value.trim().length===0 && !att; };
+  const sync=()=>{ go.disabled = sending || (ta.value.trim().length===0 && !att); };
   ta.addEventListener('input',()=>{
     $('#rcCnt',m).textContent=[...ta.value].length+'/140';
     sync();
@@ -3359,12 +3452,13 @@ function openReplyCompose(p, toReply, done){
   focusAfterModalShown(m,ta);
 
   async function fire(){
+    if(sending) return;
     const t=ta.value.trim();
     if(!t && !att) return;
-    go.disabled=true;
-    const r={u:'me', t, to:toUid||null, media:att, ts:Date.now(), likes:0, liked:false};
+    sending=true; sync();
+    const r={id:newRowId(),u:'me', t, to:toUid||null, media:att, ts:Date.now(), likes:0, liked:false};
     try{ await cloudCreateReply(p,r); }
-    catch(e){ cloudErr('reply',e); go.disabled=false; toast('返信を送れませんでした'); return; }
+    catch(e){ sending=false; sync(); cloudErr('reply',e); toast('返信を送れませんでした'); return; }
     haptic(13);
     close();
     setTimeout(()=>{ done(r); toast('返信しました'); },240);
@@ -4469,9 +4563,9 @@ function openCompose(){
   void m.offsetHeight;
   m.classList.add('on');
 
-  let tag='hitorigoto', att=null;
+  let tag='hitorigoto', att=null, sending=false;
   const ta=$('#cmText',m), go=$('#cmGo',m), attBox=$('#cmAtt',m);
-  const sync=()=>{ go.disabled = ta.value.trim().length===0 && !att; };
+  const sync=()=>{ go.disabled = sending || (ta.value.trim().length===0 && !att); };
   ta.addEventListener('input',()=>{
     const n=[...ta.value].length;
     $('#cmCnt',m).textContent=n+'/140';
@@ -4496,24 +4590,46 @@ function openCompose(){
     $$('.tagopt',m).forEach(x=>x.classList.toggle('on',x===b));
   }));
   $('#cmNo',m).onclick=close;
-  $('#cmGo',m).onclick=async()=>{
+  $('#cmGo',m).onclick=()=>{
+    if(sending) return;
     const t=ta.value.trim(); if(!t && !att) return;
-    haptic(14);
-    const post={id:'p'+Date.now(), u:'me', t, tag, media:att, ts:Date.now(),
-      likes:0, replies:0, liked:false, req:false, rep:[], arch:false};
-    try{ await cloudCreatePost(post); }catch(e){ cloudErr('post',e); return; }
-    S.posts.unshift(post); const newId=post.id;
+    sending=true; sync(); haptic(14);
+
+    const post={id:newRowId(), u:'me', t, tag, media:att, ts:Date.now(),
+      likes:0, replies:0, liked:false, req:false, rep:[], arch:false, pending:true};
+    S.posts.unshift(post);
+    const newId=post.id;
+
+    /* Instagram-style UX: the composer is done immediately.
+       Upload/insert continues in the background while the app stays open. */
     close();
     setTimeout(()=>{
-      /* stay exactly where the person was — posting never changes tabs,
-         and never disturbs DMs or notifications */
       refreshInPlace('posts');
       if(S.tab==='home'){
         const sc=$('#feedScroll'); if(sc) sc.scrollTo({top:0,behavior:'smooth'});
       }
-      const hidden = S.tab==='home' && !visiblePosts().some(x=>x.id===newId);
-      toast(hidden ? '投稿しました。「おすすめ」で見られます' : '投稿しました');
-    },260);
+    },80);
+
+    void (async()=>{
+      try{
+        await cloudCreatePost(post);
+        post.pending=false; post.failed=false;
+        const live=S.posts.find(x=>x.id===post.id);
+        if(live && live!==post) Object.assign(live,post);
+        else if(!live) S.posts.unshift(post);
+        quiet(()=>refreshInPlace('posts'));
+        const hidden = S.tab==='home' && !visiblePosts().some(x=>x.id===newId);
+        toast(hidden ? '投稿しました。「おすすめ」で見られます' : '投稿しました');
+      }catch(e){
+        post.pending=false; post.failed=true;
+        const live=S.posts.find(x=>x.id===post.id);
+        if(live && live!==post) Object.assign(live,post);
+        else if(!live) S.posts.unshift(post);
+        quiet(()=>refreshInPlace('posts'));
+        cloudErr('post',e);
+        toast('投稿を送信できませんでした');
+      }
+    })();
   };
   /* Wait until the post screen is visually settled before opening the keyboard. */
   focusAfterModalShown(m,ta);
