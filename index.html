@@ -628,7 +628,10 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 .msgfield{
   flex:1; background:var(--field); border-radius:20px; padding:10px 15px;
-  font-size:15px; font-weight:600; resize:none; max-height:120px; line-height:1.5;
+  /* 16px prevents iPhone Safari from zooming/panning the page on focus.
+     Four visible lines maximum; anything beyond stays inside this field. */
+  font-size:16px; font-weight:600; resize:none; max-height:116px; line-height:1.5;
+  overflow-y:hidden;
   transition:background-color var(--dur-3) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
 }
 .msgfield:focus{box-shadow:inset 0 0 0 1.5px var(--accent)}
@@ -1221,7 +1224,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.7';
+const APP_VER='2.40.8';
 
 
 /* =========================================================
@@ -2856,8 +2859,20 @@ function pushThread(cid){
 
   const inp=$('#msgIn',s), send=$('#sendBtn',s), dmAttBox=$('#dmAtt',s);
   let dmAtt=null;
-  const autoGrow=()=>{ inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,120)+'px';
-    send.classList.toggle('live', inp.value.trim().length>0 || !!dmAtt); };
+  const autoGrow=()=>{
+    /* Keep DM composer at exactly four visible lines maximum.
+       The fifth line and later scroll inside the textarea instead of growing the page. */
+    inp.style.height='auto';
+    const cs=getComputedStyle(inp);
+    const lineH=parseFloat(cs.lineHeight) || 24;
+    const padT=parseFloat(cs.paddingTop) || 0;
+    const padB=parseFloat(cs.paddingBottom) || 0;
+    const maxH=Math.ceil(lineH*4 + padT + padB);
+    const needed=inp.scrollHeight;
+    inp.style.height=Math.min(needed,maxH)+'px';
+    inp.style.overflowY=needed>maxH ? 'auto' : 'hidden';
+    send.classList.toggle('live', inp.value.trim().length>0 || !!dmAtt);
+  };
   function setDmAtt(v){
     dmAtt=v;
     dmAttBox.innerHTML = v ? `<div class="attpreview" style="margin:12px 14px 0">
