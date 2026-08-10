@@ -1326,7 +1326,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.16';
+const APP_VER='2.40.17';
 
 
 /* =========================================================
@@ -1341,7 +1341,10 @@ const SUPABASE_PUBLISHABLE_KEY='sb_publishable_vYapd7Gg_rFLAFkO42BPUQ_GXLge49D';
 const CLOUD={
   enabled:false, client:null, userId:null, channel:null,
   reloading:false, reloadAgain:false, reloadAgainApplyPosts:false, reloadTimer:null, feedDirty:false,
-  remoteUserIds:new Set(), profileReplyLoads:new Map()
+  remoteUserIds:new Set(), profileReplyLoads:new Map(),
+  /* Keep hydrated media URLs stable across realtime reloads.
+     This avoids requesting a fresh signed URL for every old DM image each time one message changes. */
+  mediaUrlCache:new Map()
 };
 function cloudConfigured(){
   return /^https:\/\/.+\.supabase\.co\/?$/.test(SUPABASE_URL)
@@ -1387,12 +1390,24 @@ async function cloudUploadMedia(m,{scope='post',chatId=null}={}){
 async function cloudHydrateMedia(m){
   if(!m) return null;
   if(!m.bucket||!m.path) return m;
+
+  const cacheKey=`${m.bucket}:${m.path}`;
+  const cached=CLOUD.mediaUrlCache.get(cacheKey);
+  if(cached && cached.expiresAt>Date.now()){
+    return {...m,src:cached.src};
+  }
+
   if(m.bucket==='iroha-public'){
     const {data}=CLOUD.client.storage.from(m.bucket).getPublicUrl(m.path);
-    return {...m,src:data.publicUrl};
+    const src=data.publicUrl;
+    CLOUD.mediaUrlCache.set(cacheKey,{src,expiresAt:Number.MAX_SAFE_INTEGER});
+    return {...m,src};
   }
+
   const {data,error}=await CLOUD.client.storage.from(m.bucket).createSignedUrl(m.path,3600);
   if(error){ console.warn('[iroha cloud] signed url',error); return {...m,src:''}; }
+  /* Signed URL is valid for 60 min; renew a little early instead of on every realtime event. */
+  CLOUD.mediaUrlCache.set(cacheKey,{src:data.signedUrl,expiresAt:Date.now()+50*60*1000});
   return {...m,src:data.signedUrl};
 }
 async function cloudUploadProfileAsset(src,slot){
@@ -1674,7 +1689,12 @@ function cloudRefreshUI(refreshFeed=true){
     if(S.tab==='chat'){ chatSig=null; renderChatList(); }
     if(S.tab==='me') renderMe();
     $$('.screen[data-chat]').forEach(sc=>{
-      const c=S.chats.find(x=>x.id===sc.dataset.chat), th=$('#thread',sc); if(c&&th){ const near=th.scrollHeight-th.scrollTop-th.clientHeight<100; paintThread(th,c); if(near) raf(()=>scrollThread(th)); }
+      const c=S.chats.find(x=>x.id===sc.dataset.chat), th=$('#thread',sc);
+      if(c&&th){
+        const near=th.scrollHeight-th.scrollTop-th.clientHeight<100;
+        syncThread(th,c);
+        if(near) raf(()=>scrollThread(th));
+      }
     });
     syncNavBadges();
   });
@@ -3091,7 +3111,7 @@ function pushThread(cid){
         if(liveM && liveM!==m) Object.assign(liveM,m);
         else if(!liveM) liveC.msgs.push(m);
         liveC.ts=Math.max(liveC.ts||0,m.ts||0);
-        if(th.isConnected) paintThread(th,liveC);
+        if(th.isConnected) syncThread(th,liveC);
         quiet(()=>{ chatSig=null; if(S.tab==='chat') renderChatList(); });
       }catch(e){
         m.pending=false; m.failed=true;
@@ -3099,7 +3119,7 @@ function pushThread(cid){
         const liveM=(liveC.msgs||[]).find(x=>x.id===m.id);
         if(liveM && liveM!==m) Object.assign(liveM,m);
         else if(!liveM) liveC.msgs.push(m);
-        if(th.isConnected) paintThread(th,liveC);
+        if(th.isConnected) syncThread(th,liveC);
         cloudErr('message',e);
         toast('メッセージを送信できませんでした');
       }
@@ -3121,41 +3141,164 @@ function pushThread(cid){
   raf(()=>{ th.scrollTop=th.scrollHeight; });
 }
 
+function threadMessageKey(m,i=0){
+  return String(m?.id || `local:${m?.ts||0}:${i}`);
+}
+function threadDayKey(ts){
+  return new Date(ts).toDateString();
+}
+function threadDayLabel(ts){
+  const d=new Date(ts), day=d.toDateString(), today=new Date().toDateString();
+  return day===today ? '今日' : `${d.getMonth()+1}月${d.getDate()}日`;
+}
+function rebuildThreadDayChips(th){
+  /* Day labels are cheap to rebuild. Message nodes themselves are kept alive,
+     so images/videos/audio do not get recreated or downloaded again. */
+  $$('.daychip',th).forEach(x=>x.remove());
+  let lastDay='';
+  Array.from(th.children).filter(x=>x.dataset?.mid).forEach(node=>{
+    const day=node.dataset.day||'';
+    if(day!==lastDay){
+      lastDay=day;
+      const ts=Number(node.dataset.ts)||Date.now();
+      node.before(el(`<div class="daychip" data-day="${esc(day)}">${threadDayLabel(ts)}</div>`));
+    }
+  });
+}
+function updateMessageNode(node,m,c){
+  if(!node||!m) return;
+  node.dataset.day=threadDayKey(m.ts);
+  node.dataset.ts=String(m.ts);
+
+  if(m.sys){
+    const t=node.querySelector('.t');
+    if(t){ t.dataset.ts=String(m.ts); t.textContent=ago(m.ts); }
+    return;
+  }
+
+  node.classList.toggle('is-sending',!!m.pending);
+  node.classList.toggle('is-failed',!!m.failed);
+
+  let tm=node.querySelector('.mtime');
+  if(!tm){
+    tm=document.createElement('span');
+    tm.className='mtime';
+    node.appendChild(tm);
+  }
+  if(m.pending){
+    tm.className='mtime send-state';
+    tm.removeAttribute('data-ts');
+    tm.textContent='送信中';
+  }else if(m.failed){
+    tm.className='mtime send-state failed';
+    tm.removeAttribute('data-ts');
+    tm.textContent='送信失敗';
+  }else{
+    tm.className='mtime';
+    tm.dataset.ts=String(m.ts);
+    tm.textContent=ago(m.ts);
+  }
+}
 function paintThread(th,c){
+  /* Full paint is only for opening a thread / explicit media-setting changes.
+     Normal send + realtime updates use syncThread below. */
   th.innerHTML='';
   let lastDay='';
   c.msgs.forEach((m,i)=>{
-    const day=new Date(m.ts).toDateString();
+    const day=threadDayKey(m.ts);
     if(day!==lastDay){
       lastDay=day;
-      const d=new Date(m.ts), today=new Date().toDateString();
-      const label = day===today ? '今日' : `${d.getMonth()+1}月${d.getDate()}日`;
-      th.appendChild(el(`<div class="daychip">${label}</div>`));
+      th.appendChild(el(`<div class="daychip" data-day="${esc(day)}">${threadDayLabel(m.ts)}</div>`));
     }
     appendMsg(th,c,m,false,i);
   });
 }
-function appendMsg(th,c,m,animate,i=0){
-  if(m.sys){
-    const chip=el(`<div class="syschip">${I.check}<span>${esc(m.t)}</span><span class="t" data-ts="${m.ts}">${ago(m.ts)}</span></div>`);
-    if(!animate) chip.style.animationDelay=Math.min(i*38,300)+'ms';
-    th.appendChild(chip); return;
+function syncThread(th,c){
+  if(!th||!c) return;
+
+  const desired=c.msgs.map((m,i)=>({m,i,key:threadMessageKey(m,i)}));
+  const desiredKeys=new Set(desired.map(x=>x.key));
+  const existing=new Map();
+
+  Array.from(th.children).forEach(node=>{
+    if(node.dataset?.mid) existing.set(node.dataset.mid,node);
+  });
+
+  /* Remove only messages that genuinely disappeared (e.g. send cancel).
+     Existing message DOM, including <img>/<video>, is never recreated. */
+  existing.forEach((node,key)=>{
+    if(!desiredKeys.has(key)){
+      node.remove();
+      existing.delete(key);
+    }
+  });
+
+  const currentKeys=Array.from(th.children)
+    .filter(node=>node.dataset?.mid)
+    .map(node=>node.dataset.mid);
+
+  /* Realtime messages are chronological appends and removals. If an unusual
+     out-of-order insert ever occurs, do one safe full paint rather than corrupt order. */
+  const desiredExisting=desired.filter(x=>existing.has(x.key)).map(x=>x.key);
+  const orderOK=currentKeys.length===desiredExisting.length
+    && currentKeys.every((key,i)=>key===desiredExisting[i]);
+
+  if(!orderOK){
+    paintThread(th,c);
+    return;
   }
+
+  desired.forEach(({m,i,key})=>{
+    let node=existing.get(key);
+    if(node){
+      updateMessageNode(node,m,c);
+      return;
+    }
+
+    /* A new realtime/local message is appended once. Old media nodes stay untouched. */
+    appendMsg(th,c,m,true,i);
+    node=Array.from(th.children).find(x=>x.dataset?.mid===key) || null;
+    if(node) existing.set(key,node);
+  });
+
+  rebuildThreadDayChips(th);
+}
+function appendMsg(th,c,m,animate,i=0){
+  const key=threadMessageKey(m,i);
+  const day=threadDayKey(m.ts);
+
+  if(m.sys){
+    const chip=el(`<div class="syschip" data-mid="${esc(key)}" data-day="${esc(day)}" data-ts="${m.ts}">${I.check}<span>${esc(m.t)}</span><span class="t" data-ts="${m.ts}">${ago(m.ts)}</span></div>`);
+    if(!animate) chip.style.animationDelay=Math.min(i*38,300)+'ms';
+    th.appendChild(chip);
+    return chip;
+  }
+
   const sendClass=m.pending?' is-sending':(m.failed?' is-failed':'');
   const timeHTML=m.pending
     ? `<span class="mtime send-state">送信中</span>`
     : m.failed
       ? `<span class="mtime send-state failed">送信失敗</span>`
       : `<span class="mtime" data-ts="${m.ts}">${ago(m.ts)}</span>`;
-  const row=el(`<div class="msgrow${m.me?' me':''}${sendClass}">
+
+  const row=el(`<div class="msgrow${m.me?' me':''}${sendClass}" data-mid="${esc(key)}" data-day="${esc(day)}" data-ts="${m.ts}">
     ${m.me?uav('me',30):uav(c.u,30)}
     <div class="bub${m.media?' has-media':''}">${m.media?mediaHTML(m.media,{forceShow:!!m.me}):''}${m.t?esc(m.t):''}</div>
     ${timeHTML}
   </div>`);
+
   const bub=row.querySelector('.bub');
   if(!animate){ bub.style.animationDelay=Math.min(i*38,300)+'ms'; }
-  if(m.me) holdMenu(row, ()=>openMessageMenu(c, m, th));
+
+  if(m.me) holdMenu(row, ()=>{
+    /* cloudReloadAll may replace chat/message JS objects, while this DOM node stays alive. */
+    const liveC=S.chats.find(x=>x.id===c.id)||c;
+    const liveM=(liveC.msgs||[]).find(x=>threadMessageKey(x)===key)||m;
+    openMessageMenu(liveC,liveM,th);
+  });
+
   th.appendChild(row);
+  return row;
 }
 function scrollThread(th){ raf(()=>th.scrollTo({top:th.scrollHeight, behavior:'smooth'})); }
 
@@ -3601,7 +3744,7 @@ function openMessageMenu(c, m, th){
       c.msgs.splice(i,1);
       cloudUnsendMessage(m).catch(e=>cloudErr('unsend',e));
       haptic(12);
-      if(th) paintThread(th,c);
+      if(th) syncThread(th,c);
       c.ts = c.msgs.length ? c.msgs[c.msgs.length-1].ts : c.ts;
       quiet(()=>{ chatSig=null; if(S.tab==='chat') renderChatList(); });
       toast('送信を取り消しました');
