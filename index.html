@@ -1088,29 +1088,17 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 @keyframes toastIn{from{opacity:0; transform:translate3d(0,26px,0) scale(.9)}to{opacity:1;transform:none}}
 @keyframes toastOut{to{opacity:0; transform:translate3d(0,14px,0) scale(.95)}}
 
-/* compose modal */
+/* compose / reply modal
+   Open horizontally so the keyboard's vertical viewport change never competes
+   with the entrance motion. The focus is applied only after this transition ends. */
 .modal{
   position:absolute; inset:0; z-index:80; background:var(--bg);
   display:flex; flex-direction:column;
-  transform:translate3d(0,100%,0);
-  transition:transform 500ms var(--spring-soft);
+  transform:translate3d(100%,0,0);
+  transition:transform 460ms var(--ease-out);
   will-change:transform;
 }
 .modal.on{transform:none}
-/* iOS compose/reply opening:
-   Keep the layout at its final vertical position so focus/keyboard cannot race a
-   bottom-up transition.  A tiny horizontal compositor-only motion keeps the
-   "opened" feeling without moving the focused field toward the keyboard. */
-.modal.focus-fast-open{
-  transition:none !important;
-  animation:focusFastOpen 110ms cubic-bezier(.22,1,.36,1) both;
-  transform-origin:50% 50%;
-  will-change:transform,opacity;
-}
-@keyframes focusFastOpen{
-  from{opacity:.68;transform:translate3d(14px,0,0) scale(.998)}
-  to{opacity:1;transform:translate3d(0,0,0) scale(1)}
-}
 .tagpick{display:flex; gap:9px; flex-wrap:wrap; margin-top:4px}
 .tagopt{
   padding:9px 16px; border-radius:999px; font-size:13.5px; font-weight:800;
@@ -1151,7 +1139,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.34.2';
+const APP_VER='2.40.1';
 
 
 /* =========================================================
@@ -3054,23 +3042,27 @@ function openReplyMenu(ref, after){
   openMenu(items);
 }
 
-/* iOS only opens the software keyboard reliably while focus() is still
-   inside the original tap/click task.  The modal is therefore placed at its
-   final layout position immediately, while a very short horizontal animation
-   runs on the compositor.  Focus remains synchronous and closing keeps the
-   normal bottom transition. */
-function openModalWithMobileFocus(modal, field){
-  modal.classList.add('on','focus-fast-open');
-  void modal.offsetHeight;
-  try{ field.focus({preventScroll:true}); }catch(_){ field.focus(); }
-
-  let cleared=false;
-  const clearOpenMotion=()=>{
-    if(cleared) return; cleared=true;
-    if(modal.isConnected) modal.classList.remove('focus-fast-open');
+/* Focus only after the compose/reply modal has completely finished its entrance.
+   The modal itself moves horizontally, while the software keyboard moves vertically,
+   so their animations do not fight over the same axis. */
+function focusAfterModalShown(modal, field){
+  let finished=false;
+  let timer=0;
+  const focusNow=()=>{
+    if(finished) return;
+    finished=true;
+    clearTimeout(timer);
+    modal.removeEventListener('transitionend',onEnd);
+    if(!modal.isConnected || !modal.classList.contains('on') || !field.isConnected) return;
+    /* Focus immediately at transitionend: no extra RAF / timeout after the animation. */
+    try{ field.focus({preventScroll:true}); }catch(_){ field.focus(); }
   };
-  modal.addEventListener('animationend',clearOpenMotion,{once:true});
-  setTimeout(clearOpenMotion,180);
+  const onEnd=e=>{
+    if(e.target===modal && e.propertyName==='transform') focusNow();
+  };
+  modal.addEventListener('transitionend',onEnd);
+  /* Fallback only for reduced-motion or a browser that drops transitionend. */
+  timer=setTimeout(focusNow,540);
 }
 
 /* =========================================================
@@ -3119,6 +3111,8 @@ function openReplyCompose(p, toReply, done){
   </div>`);
   $('#overlays').appendChild(m);
   fitBars(m);
+  void m.offsetHeight;
+  m.classList.add('on');
 
   let att=null;
   const ta=$('#rcText',m), go=$('#rcGo',m), attBox=$('#rcAtt',m);
@@ -3145,8 +3139,8 @@ function openReplyCompose(p, toReply, done){
 
   $('#rcNo',m).onclick=close;
   $('#rcGo',m).onclick=fire;
-  /* The modal is already at its final position before focus, and focus stays inside the user's tap. */
-  openModalWithMobileFocus(m,ta);
+  /* Wait until the reply screen is visually settled before opening the keyboard. */
+  focusAfterModalShown(m,ta);
 
   async function fire(){
     const t=ta.value.trim();
@@ -4194,6 +4188,8 @@ function openCompose(){
   </div>`);
   $('#overlays').appendChild(m);
   fitBars(m);
+  void m.offsetHeight;
+  m.classList.add('on');
 
   let tag='hitorigoto', att=null;
   const ta=$('#cmText',m), go=$('#cmGo',m), attBox=$('#cmAtt',m);
@@ -4241,8 +4237,8 @@ function openCompose(){
       toast(hidden ? '投稿しました。「おすすめ」で見られます' : '投稿しました');
     },260);
   };
-  /* Same iOS-safe path as replies: final layout first, then synchronous focus. */
-  openModalWithMobileFocus(m,ta);
+  /* Wait until the post screen is visually settled before opening the keyboard. */
+  focusAfterModalShown(m,ta);
 
   function close(){
     m.classList.remove('on');
