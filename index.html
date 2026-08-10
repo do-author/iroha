@@ -612,15 +612,27 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .sec-h{padding:16px 18px 8px; font-size:12px; font-weight:800; color:var(--ink-3); letter-spacing:.04em}
 
 /* ---------- chat thread ---------- */
-/* DM thread must be the scroll owner. min-height:0 is essential inside the
-   fixed-height flex screen; without it, a long thread grows past the screen
-   and gets clipped by #app instead of becoming scrollable. */
+/* DM thread is the scroll owner. The composer is position:absolute, so the
+   browser still counts the area behind it as part of the visible scroller.
+   On iOS, bottom padding on a flex scroller can fail to create reliable
+   scrollable overflow. Keep the padding small and add a REAL flex spacer
+   with ::after whose height equals the composer. That makes messages covered
+   by the input bar genuinely scrollable above it. */
 .thread{
   flex:1 1 0; min-height:0; min-width:0;
   overflow-y:auto; overflow-x:hidden;
   -webkit-overflow-scrolling:touch; touch-action:pan-y; scrollbar-width:none;
-  padding:calc(var(--barH,90px) + 14px) 14px calc(var(--barB,66px) + 16px);
+  padding:calc(var(--barH,90px) + 14px) 14px 16px;
+  scroll-padding-bottom:calc(var(--barB,66px) + 18px);
   display:flex; flex-direction:column; gap:4px; overscroll-behavior-y:contain;
+}
+.thread::after{
+  content:"";
+  display:block;
+  width:1px;
+  height:calc(var(--barB,66px) + 18px);
+  flex:0 0 calc(var(--barB,66px) + 18px);
+  pointer-events:none;
 }
 .thread::-webkit-scrollbar{display:none}
 .msgrow{display:flex; align-items:flex-end; gap:8px; margin-top:8px}
@@ -1326,7 +1338,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.17';
+const APP_VER='2.40.18';
 
 
 /* =========================================================
@@ -3138,7 +3150,13 @@ function pushThread(cid){
     }, 420);
   }
   push(s);
-  raf(()=>{ th.scrollTop=th.scrollHeight; });
+  /* Measure again after mounting. Before push(), Safari can report 0px for an
+     absolutely positioned composer; the bottom spacer must use the real height. */
+  fitBars(s);
+  raf(()=>{
+    fitBars(s);
+    th.scrollTop=th.scrollHeight;
+  });
 }
 
 function threadMessageKey(m,i=0){
