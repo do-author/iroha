@@ -1275,7 +1275,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.11';
+const APP_VER='2.40.12';
 
 
 /* =========================================================
@@ -1903,12 +1903,37 @@ const REPLIES = [
   'その気持ち、ちゃんと届きました。'
 ];
 
+/* ---------- persistent preferences ---------- */
+const PREF_KEY='iroha:prefs:v1';
+function loadPrefs(){
+  try{
+    const p=JSON.parse(localStorage.getItem(PREF_KEY)||'null');
+    if(!p || typeof p!=='object') return;
+    if(p.theme==='light'||p.theme==='dark') S.theme=p.theme;
+    if(['osusume','new','fav'].includes(p.filter)) S.filter=p.filter;
+    if(['safety','raw','hide'].includes(p.media)) S.media=p.media;
+    if(typeof p.quiet==='boolean') S.quiet=p.quiet;
+    if(['all','fav','replied'].includes(p.who)) S.who=p.who;
+    if(Array.isArray(p.blocked)) S.blocked=[...new Set(p.blocked.filter(x=>typeof x==='string'))];
+    if(Array.isArray(p.muted)) S.muted=[...new Set(p.muted.filter(x=>typeof x==='string'))];
+  }catch(_){ }
+}
+function savePrefs(){
+  try{
+    localStorage.setItem(PREF_KEY,JSON.stringify({
+      theme:S.theme, filter:S.filter, media:S.media, quiet:S.quiet, who:S.who,
+      blocked:S.blocked, muted:S.muted
+    }));
+  }catch(_){ }
+}
+
 /* ---------- theme ---------- */
 function setTheme(t, animate=true){
   S.theme=t;
   document.documentElement.dataset.theme=t;
   const meta=document.querySelector('meta[name=theme-color]');
   if(meta) meta.content = t==='dark' ? '#0B0B0B' : '#FAF8F4';
+  savePrefs();
 }
 
 /* ---------- toast ---------- */
@@ -2294,7 +2319,7 @@ function paneHome(p){
     haptic(6);
     $$('.chip',p).forEach(x=>x.classList.remove('on'));
     c.classList.add('on');
-    S.filter=c.dataset.f;
+    S.filter=c.dataset.f; savePrefs();
     c.scrollIntoView({behavior:'smooth', inline:'center', block:'nearest'});
     renderFeed(true);
   }));
@@ -3404,7 +3429,7 @@ function pushSettings(){
       ico.style.transform=''; ico.style.opacity='1'; },170);
   };
   $$('[data-media]',body).forEach(b=>b.addEventListener('click',()=>{
-    haptic(6); S.media=b.dataset.media;
+    haptic(6); S.media=b.dataset.media; savePrefs();
     $$('[data-media] .radio',body).forEach(r=>r.classList.remove('on'));
     b.querySelector('.radio').classList.add('on');
     stopAudio();
@@ -3426,7 +3451,7 @@ function pushSettings(){
     toast(b.querySelector('b').textContent+'に変更しました');
   }));
   $('#stQuiet',body).onclick=()=>{
-    haptic(8); S.quiet=!S.quiet;
+    haptic(8); S.quiet=!S.quiet; savePrefs();
     $('#quietSw',body).classList.toggle('on',S.quiet);
     toast(S.quiet?'おやすみモードをオンにしました':'おやすみモードをオフにしました');
   };
@@ -3480,7 +3505,7 @@ function pushWhoCanTalk(){
     </div><p class="note" style="text-align:left;margin:12px 6px">
       設定にかかわらず、ブロックした相手からは申請できません。</p></div>`;
     $$('[data-who]',body).forEach(b=>b.addEventListener('click',()=>{
-      haptic(8); S.who=b.dataset.who;
+      haptic(8); S.who=b.dataset.who; savePrefs();
       $$('[data-who] .radio',body).forEach(r=>r.classList.remove('on'));
       b.querySelector('.radio').classList.add('on');
       const now=$('#whoNow'); if(now) now.textContent=WHO_OPTS[S.who].label;
@@ -3518,7 +3543,7 @@ function pushBlockList(){
         lead:'相手の投稿がふたたび表示され、会話の申請も届くようになります。',
         go:'解除する',
         fn:()=>{
-          S.blocked=S.blocked.filter(x=>x!==uid);
+          S.blocked=S.blocked.filter(x=>x!==uid); savePrefs();
           haptic(10); paint(); refreshInPlace();
           toast('ブロックを解除しました');
         }
@@ -4280,6 +4305,7 @@ function toggleMute(uid){
   const i=S.muted.indexOf(uid), name=S.users[uid].name;
   if(i<0){ S.muted.push(uid); toast(`${name}をミュートしました`); }
   else{ S.muted.splice(i,1); toast(`${name}のミュートを解除しました`); }
+  savePrefs();
   haptic(9); refreshInPlace();
 }
 function confirmBlock(uid){
@@ -4291,6 +4317,7 @@ function confirmBlock(uid){
     fn:()=>{
       if(!S.blocked.includes(uid)) S.blocked.push(uid);
       const mi=S.muted.indexOf(uid); if(mi>=0) S.muted.splice(mi,1);
+      savePrefs();
       S.chats=S.chats.filter(c=>c.u!==uid);
       ['like','reply'].forEach(k=>{ S.notes[k]=S.notes[k].filter(n=>n.u!==uid); });
       haptic(12);
@@ -4745,7 +4772,8 @@ function demoTick(){
    BOOT
    ========================================================= */
 async function boot(){
-  setTheme('light',false);
+  loadPrefs();
+  setTheme(S.theme,false);
   await cloudInit();
   buildNav();
   buildPane('home');
