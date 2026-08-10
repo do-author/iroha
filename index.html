@@ -654,10 +654,21 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .rep-empty{padding:52px 24px; text-align:center; font-size:14.5px; font-weight:700; color:var(--ink-3); line-height:2}
 .rep{display:flex; gap:14px; padding:16px 17px; border-bottom:1px solid var(--line-soft)}
 .rep-main{flex:1 1 auto; min-width:0}
-.rep-line{display:flex; align-items:center; gap:6px; flex-wrap:wrap; line-height:1.3}
+.rep-line{display:flex; align-items:center; gap:6px; line-height:1.3}
 .rep-line b{font-size:15px; font-weight:800}
 .rep-line > span:not(.gtag){font-size:13px; color:var(--ink-3); font-weight:600}
 .rep-body{margin:6px 0 0; font-size:16px; font-weight:600; line-height:1.6; white-space:pre-wrap; word-break:break-word}
+.mini-head{display:flex; align-items:center; gap:11px; flex-wrap:nowrap}
+.mini-who{display:flex; align-items:center; gap:6px; font-size:14.5px; font-weight:800;
+  min-width:0; flex:0 1 auto; overflow:hidden; white-space:nowrap}
+.mini-head .p-time{flex:0 0 auto; white-space:nowrap; margin-left:auto}
+.rep-line .p-more,.mini-head .p-more{margin-left:auto; flex:0 0 auto}
+.mini-head .p-more{margin-left:6px}
+.reply-src{
+  display:flex; align-items:center; gap:7px; margin:11px 0 0;
+  font-size:12.5px; font-weight:700; color:var(--ink-3);
+}
+.reply-src svg{width:15px;height:15px; flex:0 0 auto}
 .rep-foot{margin-top:8px; display:flex; align-items:center; gap:16px}
 .mention{color:var(--accent-deep); font-weight:800}
 [data-theme="dark"] .mention{color:var(--accent)}
@@ -686,33 +697,24 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 .reply-dock .reply-bar{position:static; background:none; border-top:0; -webkit-backdrop-filter:none; backdrop-filter:none}
 .reply-dock .replying{margin:10px 14px 0; border-radius:14px}
-.reply-tools{
-  display:flex; align-items:center; gap:4px;
-  padding:0 12px calc(var(--safe-b) + 10px);
-  max-height:0; opacity:0; overflow:hidden; pointer-events:none;
-  transition:max-height 300ms var(--ease-out), opacity 200ms var(--ease-out);
+.reply-trigger{
+  display:flex; align-items:center; gap:11px; width:100%;
+  padding:11px 14px calc(var(--safe-b) + 11px);
+  color:var(--ink-3); font-size:15px; font-weight:600; text-align:left;
+  transition:background-color var(--dur-2) var(--ease-out);
 }
-.reply-dock.open .reply-tools{max-height:70px; opacity:1; pointer-events:auto}
-.reply-dock.open .reply-bar{padding-bottom:6px}
-.toolbtn{
-  width:40px;height:40px;border-radius:50%; display:grid;place-items:center;
-  color:var(--accent-deep);
-  transition:transform var(--dur-2) var(--spring), background-color var(--dur-1) linear;
+.reply-trigger span{flex:1 1 auto}
+.reply-trigger svg{flex:0 0 auto; color:var(--ink-3)}
+.reply-trigger:active{background:var(--field)}
+.rc-quote{
+  display:flex; align-items:flex-start; gap:11px;
+  padding:13px 15px; border-radius:16px;
+  background:var(--field);
 }
-[data-theme="dark"] .toolbtn{color:var(--accent)}
-.toolbtn:active{transform:scale(.86); background:var(--field)}
-.toolbtn[disabled]{opacity:.35}
-.replybtn{
-  margin-left:auto; padding:9px 20px; border-radius:999px;
-  background:var(--accent); color:var(--accent-ink);
-  font-size:14px; font-weight:800;
-  transition:transform var(--dur-2) var(--spring), opacity var(--dur-2) linear;
-}
-.replybtn:active{transform:scale(.93)}
-.replybtn[disabled]{opacity:.42}
-.replysend.compact{width:34px;height:34px}
-.reply-dock.open .replysend.compact{display:none}
-.reply-bar{
+.rc-quote b{display:block; font-size:13.5px; font-weight:800}
+.rc-quote span{display:block; margin-top:3px; font-size:13px; font-weight:600;
+  color:var(--ink-3); line-height:1.6}
+.reply-dock.open [data-theme="dark"] .reply-dock.open .reply-bar{
   position:absolute; left:0; right:0; bottom:0; z-index:6;
   display:flex; align-items:flex-end; gap:10px;
   padding:10px 14px calc(var(--safe-b) + 10px);
@@ -1131,7 +1133,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.29.6';
+const APP_VER='2.33.6';
 
 
 /* =========================================================
@@ -1257,7 +1259,7 @@ function cloudViewSignature(){
     .map(u=>[u.id,u.name,u.handle,u.bio,u.av,u.gender,u.img||'',u.banner||'',!!u.fav,!!u.favMe,u.posts||0,u.replies||0,u.talks||0])
     .sort((a,b)=>String(a[0]).localeCompare(String(b[0])));
   const posts=S.posts.filter(p=>p.cloud).map(p=>[
-    p.id,p.u,p.t,p.tag,p.ts,p.likes,p.replies,!!p.liked,!!p.arch,!!p.edited,
+    p.id,p.u,p.t,p.tag,p.ts,p.likes,p.replies,!!p.liked,!!p.arch,
     (p.rep||[]).map(r=>[r.id,r.u,r.t,r.to||'',r.ts,r.likes,!!r.liked])
   ]);
   const chats=S.chats.filter(c=>c.cloud).map(c=>[
@@ -1276,7 +1278,7 @@ async function cloudReloadAll(initial=false, applyPosts=true){
   const beforeSig=initial ? '' : cloudViewSignature();
   try{
     const sb=CLOUD.client, me=CLOUD.userId;
-    const [profiles,posts,favOut,favIn,chats,states,notes]=await Promise.all([
+    let [profiles,posts,favOut,favIn,chats,states,notes]=await Promise.all([
       cloudRows(sb.from('profiles').select('*')),
       cloudRows(sb.from('posts').select('*').order('created_at',{ascending:false}).limit(250)),
       cloudRows(sb.from('favorites').select('target_id').eq('owner_id',me)),
@@ -1314,16 +1316,38 @@ async function cloudReloadAll(initial=false, applyPosts=true){
     const repsByPost=new Map();
     for(const r of replies){
       const rr={id:r.id,u:localKey(r.author_id),t:r.body||'',to:r.reply_to?localKey(r.reply_to):null,
-        media:await cloudHydrateMedia(r.media),ts:new Date(r.created_at).getTime(),likes:likesByReply.get(r.id)||0,liked:myReplyLikes.has(r.id)};
+        media:await cloudHydrateMedia(r.media),ts:new Date(r.created_at).getTime(),
+        likes:likesByReply.get(r.id)||0,liked:myReplyLikes.has(r.id),cloud:true};
       if(!repsByPost.has(r.post_id)) repsByPost.set(r.post_id,[]); repsByPost.get(r.post_id).push(rr);
       if(S.users[rr.u]) S.users[rr.u].replies=(S.users[rr.u].replies||0)+1;
     }
+    /* a reply of mine may live on a post beyond the timeline window;
+       fetch those parents so the profile's 返信 tab is never short */
+    const mineReplies=await cloudRows(
+      sb.from('replies').select('post_id').eq('author_id',me).limit(300));
+    const seen=new Set(postIds);
+    const missing=[...new Set(mineReplies.map(x=>x.post_id).filter(id=>id&&!seen.has(id)))];
+    if(missing.length){
+      const extra=await cloudRows(sb.from('posts').select('*').in('id',missing));
+      const extraIds=extra.map(x=>x.id);
+      if(extraIds.length){
+        const extraReps=await cloudRows(sb.from('replies').select('*').in('post_id',extraIds).order('created_at',{ascending:true}));
+        for(const r of extraReps){
+          const rr={id:r.id,u:localKey(r.author_id),t:r.body||'',to:r.reply_to?localKey(r.reply_to):null,
+            media:await cloudHydrateMedia(r.media),ts:new Date(r.created_at).getTime(),
+            likes:0,liked:false,cloud:true};
+          if(!repsByPost.has(r.post_id)) repsByPost.set(r.post_id,[]); repsByPost.get(r.post_id).push(rr);
+        }
+        posts=posts.concat(extra);
+      }
+    }
+
     const remotePosts=[];
     for(const p of posts){
       const rep=repsByPost.get(p.id)||[];
       const lp={id:p.id,u:localKey(p.author_id),t:p.body||'',tag:p.tag||'hitorigoto',media:await cloudHydrateMedia(p.media),
         ts:new Date(p.created_at).getTime(),likes:likesByPost.get(p.id)||0,replies:rep.length,liked:myPostLikes.has(p.id),
-        req:false,rep,arch:!!p.archived,edited:!!p.edited,cloud:true};
+        req:false,rep,arch:!!p.archived,cloud:true};
       remotePosts.push(lp); if(S.users[lp.u]) S.users[lp.u].posts=(S.users[lp.u].posts||0)+1;
     }
     /* Home timeline is X-like: background sync may learn that the server changed,
@@ -1407,7 +1431,7 @@ async function cloudCreatePost(p){
 }
 async function cloudUpdatePost(p){
   if(!CLOUD.enabled||!p.cloud) return;
-  const r=await CLOUD.client.from('posts').update({body:p.t||'',tag:p.tag,archived:!!p.arch,edited:!!p.edited}).eq('id',p.id); if(r.error) throw r.error;
+  const r=await CLOUD.client.from('posts').update({body:p.t||'',tag:p.tag,archived:!!p.arch}).eq('id',p.id); if(r.error) throw r.error;
 }
 async function cloudDeletePost(pid){ if(!CLOUD.enabled) return; const r=await CLOUD.client.from('posts').delete().eq('id',pid); if(r.error) throw r.error; }
 async function cloudSetPostLike(p){
@@ -1420,6 +1444,14 @@ async function cloudCreateReply(p,r){
   const media=await cloudUploadMedia(r.media,{scope:'reply'});
   const q=await CLOUD.client.from('replies').insert({post_id:p.id,author_id:CLOUD.userId,body:r.t||'',reply_to:cloudKey(r.to)||null,media:media||null}).select().single();
   if(q.error) throw q.error; r.id=q.data.id; r.media=await cloudHydrateMedia(media); r.cloud=true; return r;
+}
+async function cloudDeleteReply(r){
+  if(!CLOUD.enabled||!r.cloud||!r.id) return;
+  const q=await CLOUD.client.from('replies').delete().eq('id',r.id); if(q.error) throw q.error;
+}
+async function cloudUpdateReply(r){
+  if(!CLOUD.enabled||!r.cloud||!r.id) return;
+  const q=await CLOUD.client.from('replies').update({body:r.t||''}).eq('id',r.id); if(q.error) throw q.error;
 }
 async function cloudSetReplyLike(r){
   if(!CLOUD.enabled||!r.id) return;
@@ -1451,6 +1483,11 @@ async function cloudSendMessage(c,m){
   const media=await cloudUploadMedia(m.media,{scope:'dm',chatId:c.id});
   const q=await CLOUD.client.from('messages').insert({chat_id:c.id,sender_id:CLOUD.userId,body:m.sys?'':(m.t||''),system_text:m.sys?(m.t||''):null,media:media||null}).select().single();
   if(q.error) throw q.error; m.id=q.data.id; m.media=await cloudHydrateMedia(media); return m;
+}
+async function cloudUnsendMessage(m){
+  if(!CLOUD.enabled||!m.id) return;
+  const q=await CLOUD.client.from('messages').delete().eq('id',m.id).eq('sender_id',CLOUD.userId);
+  if(q.error) throw q.error;
 }
 async function cloudMarkChatRead(cid){
   if(!CLOUD.enabled) return;
@@ -1575,6 +1612,11 @@ function genderTag(u){
   const g=u && GENDERS[u.gender];
   if(!g || !g.sym) return '';
   return `<span class="gtag ${g.cls}" title="${g.label}" aria-label="${g.label}">${g.sym}</span>`;
+}
+
+/* names that already carry an honorific shouldn't get a second one */
+function honor(name){
+  return /(さん|くん|ちゃん|様|さま)$/.test(name||'') ? name : name+'さん';
 }
 
 /* the small chip shown after a display name */
@@ -2076,7 +2118,7 @@ function postCard(p, opts={}){
         <div class="p-line">
           <button class="p-name" data-user="${u.id}">${esc(u.name)}</button>
           ${genderTag(u)}${accountTag(u)}
-          <span class="p-time" data-ts="${p.ts}">${p.edited?'編集済み ':''}${ago(p.ts)}</span>
+          <span class="p-time" data-ts="${p.ts}">${ago(p.ts)}</span>
           <button class="p-more" data-more="${p.id}" aria-label="その他">${I.dots}</button>
         </div>
       <p class="p-body">${esc(p.t)}</p>
@@ -2129,6 +2171,23 @@ function wirePostActions(root){
   root.addEventListener('click', onPostClick);
 }
 function onPostClick(e){
+  const rm=e.target.closest('[data-repmore]');
+  if(rm){ e.stopPropagation(); openReplyMenu(rm.dataset.repmore, ()=>refreshInPlace()); return; }
+  const rlk=e.target.closest('[data-replike-card]');
+  if(rlk){
+    e.stopPropagation();
+    const r=findReply(rlk.dataset['replikeCard']); if(!r) return;
+    r.liked=!r.liked; r.likes+=r.liked?1:-1;
+    cloudSetReplyLike(r).catch(er=>cloudErr('reply like',er));
+    haptic(r.liked?11:5);
+    rlk.classList.toggle('liked',r.liked);
+    rlk.querySelector('.num').textContent=r.likes;
+    if(r.liked){ rlk.classList.remove('pop'); void rlk.offsetWidth; rlk.classList.add('pop');
+      setTimeout(()=>rlk.classList.remove('pop'),700); }
+    return;
+  }
+  const openp=e.target.closest('[data-openpost]');
+  if(openp && !e.target.closest('button')){ pushPostDetail(openp.dataset.openpost); return; }
   const like=e.target.closest('[data-like]');
   if(like){ toggleLike(like.dataset.like, like); return; }
   const talk=e.target.closest('[data-talk]');
@@ -2337,6 +2396,7 @@ function renderMe(){
   const q=QUIET;
   const u=S.users.me;
   const mine=S.posts.filter(p=>p.u==='me');
+  const repCount=myReplies().length;
   host.innerHTML=`
     <div class="banner" style="${bannerCSS(u)}"></div>
     <div class="prof under${q?' noanim':''}">
@@ -2346,14 +2406,9 @@ function renderMe(){
       <p class="bio">${esc(u.bio)}</p>
       <div class="prof-actions"><button class="obtn" id="editProf">プロフィールを編集</button></div>
     </div>
-    <div class="stats">
-      <div class="stat"><b>${mine.length}</b><span>投稿</span></div>
-      <div class="stat"><b>${u.replies}</b><span>返信</span></div>
-      <div class="stat"><b>${S.chats.length}</b><span>会話</span></div>
-    </div>
     <div class="utabs" id="meTabs">
       <button class="utab${meTab==='posts'?' on':''}" data-ut="posts">投稿 <small>${mine.length}</small></button>
-      <button class="utab${meTab==='replies'?' on':''}" data-ut="replies">返信 <small>${u.replies}</small></button>
+      <button class="utab${meTab==='replies'?' on':''}" data-ut="replies">返信 <small>${repCount}</small></button>
       <div class="uind" id="meInd"></div>
     </div>
     <div style="padding:6px 12px 0" id="meList"></div>`;
@@ -2370,12 +2425,17 @@ function renderMe(){
 
   function paintMeList(){
     const box=$('#meList');
-    const arr = meTab==='posts' ? mine : [];
     box.style.transition='none';
     box.style.opacity='1';
     box.style.transform='none';
-    box.innerHTML = arr.length ? arr.map(p=>miniPost(p)).join('')
-      : `<div class="empty"><h3>${meTab==='posts'?'公開中の投稿はありません':'公開中の返信はありません'}</h3><p>${meTab==='posts'?'「＋」から、いまの気持ちを置いてみましょう':'返信すると、ここにまとまります'}</p></div>`;
+    if(meTab==='posts'){
+      box.innerHTML = mine.length ? mine.map(p=>miniPost(p)).join('')
+        : `<div class="empty"><h3>公開中の投稿はありません</h3><p>「＋」から、いまの気持ちを置いてみましょう</p></div>`;
+    }else{
+      const reps=myReplies();
+      box.innerHTML = reps.length ? reps.map(replyCard).join('')
+        : `<div class="empty"><h3>公開中の返信はありません</h3><p>返信すると、ここにまとまります</p></div>`;
+    }
     box.onclick=onPostClick;
   }
 }
@@ -2392,6 +2452,41 @@ function miniPost(p){
   /* Profile posts use the exact same card markup as the home feed.
      Only remove the entrance stagger so profile contents appear immediately. */
   return postCard(p).replace('class="card tap stagger"','class="card tap"');
+}
+
+
+/* every reply I have written, newest first, with the post it belongs to */
+function myReplies(){
+  const out=[];
+  S.posts.forEach(p=>{
+    (p.rep||[]).forEach((r,i)=>{
+      if(r.u!=='me') return;
+      out.push({r, i, post:p});
+    });
+  });
+  return out.sort((a,b)=>b.r.ts-a.r.ts);
+}
+
+/* a reply rendered as a card on the profile */
+function replyCard(entry){
+  const {r, post}=entry;
+  const pu=S.users[post.u]||{name:'退会したユーザー'};
+  return `<article class="card tap stagger" data-openpost="${post.id}">
+    <div class="mini-head">
+      <button data-user="me" style="display:contents">${uav('me',40)}</button>
+      <div class="mini-who"><b>${esc(S.users.me.name)}</b>${genderTag(S.users.me)}</div>
+      <span class="p-time" data-ts="${r.ts}">${ago(r.ts)}</span>
+      <button class="p-more" data-repmore="${post.id}:${entry.i}" aria-label="その他">${I.dots}</button>
+    </div>
+    <p class="reply-src">${I.reply}<span>${esc(honor(pu.name))}の投稿への返信</span></p>
+    ${r.t?`<p class="p-body">${r.to&&S.users[r.to]?`<span class="mention">@${esc(S.users[r.to].handle)}</span> `:''}${esc(r.t)}</p>`:''}
+    ${mediaHTML(r.media)}
+    <div class="p-foot">
+      <button class="act${r.liked?' liked':''}" data-replike-card="${post.id}:${entry.i}">
+        <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span><span class="num">${r.likes}</span>
+      </button>
+    </div>
+  </article>`;
 }
 
 /* =========================================================
@@ -2464,8 +2559,10 @@ function screenShell(title, {left, right, big}={}){
 /* ---------- user profile ---------- */
 let profTab='posts';
 function pushProfile(uid){
-  const u=S.users[uid];
-  if(uid==='me'){ goTab('me'); return; }
+  const u=S.users[uid]; if(!u) return;
+  const isMe = uid==='me';
+  /* from a tab with nothing stacked, my own profile is just that tab */
+  if(isMe && !stackEls.length){ goTab('me'); return; }
   profTab='posts';
   const s=screenShell('プロフィール');
   s.dataset.owner=uid;
@@ -2481,15 +2578,12 @@ function pushProfile(uid){
         ${u.official?`<span class="pill-official">${I.bot}iroha公式BOT</span>`:u.demo?`<span class="badge-demo" style="margin-top:11px">DEMO アカウント</span>`:''}
         <p class="bio">${esc(u.bio)}</p>
         <div class="prof-actions">
-          <button class="obtn${u.fav?' on':''}" id="favBtn">${I.star}${u.fav?'お気に入り中':'お気に入り'}</button>
-          <button class="obtn" id="dmBtn">${I.reply}DM</button>
+          ${isMe
+            ? `<button class="obtn" id="editBtn">プロフィールを編集</button>`
+            : `<button class="obtn${u.fav?' on':''}" id="favBtn">${I.star}${u.fav?'お気に入り中':'お気に入り'}</button>
+               <button class="obtn" id="dmBtn">${I.reply}DM</button>`}
         </div>
-        <p class="note">お気に入りは相手へ通知されず、他の人にも表示されません</p>
-      </div>
-      <div class="stats">
-        <div class="stat"><b>${u.posts}</b><span>投稿</span></div>
-        <div class="stat"><b>${u.replies}</b><span>返信</span></div>
-        <div class="stat"><b>${u.talks}</b><span>会話</span></div>
+        ${isMe?'':'<p class="note">お気に入りは相手へ通知されず、他の人にも表示されません</p>'}
       </div>
       <div class="utabs" id="pfTabs">
         <button class="utab${profTab==='posts'?' on':''}" data-ut="posts">投稿 <small>${u.posts}</small></button>
@@ -2498,6 +2592,8 @@ function pushProfile(uid){
       </div>
       <div style="padding:6px 12px 40px" id="pfList"></div>`;
 
+    if(isMe){ $('#editBtn',body).onclick=()=>pushEdit(); }
+    else{
     $('#favBtn',body).onclick=()=>{
       u.fav=!u.fav; haptic(10);
       cloudSetFavorite(uid,u.fav).catch(e=>cloudErr('favorite',e));
@@ -2516,10 +2612,10 @@ function pushProfile(uid){
       }
     };
     $('#dmBtn',body).onclick=()=>{
-      if(uid==='me'){ goTab('me'); return; }
       const c=S.chats.find(c=>c.u===uid);
       if(c) pushThread(c.id); else openRequest(null,uid);
     };
+    }
     $$('#pfTabs .utab',body).forEach(b=>b.addEventListener('click',()=>{
       if(profTab===b.dataset.ut) return;
       haptic(6); profTab=b.dataset.ut;
@@ -2532,6 +2628,12 @@ function pushProfile(uid){
     function paintList(){
       const box=$('#pfList',body);
       const arr = profTab==='posts' ? mine : [];
+      if(profTab==='replies' && isMe){
+        const reps=myReplies();
+        box.innerHTML = reps.length ? reps.map(replyCard).join('')
+          : `<div class="empty"><h3>公開中の返信はありません</h3><p>返信すると、ここにまとまります</p></div>`;
+        box.onclick=onPostClick; return;
+      }
       box.style.transition='none';
       box.style.opacity='1';
       box.style.transform='none';
@@ -2661,6 +2763,7 @@ function appendMsg(th,c,m,animate,i=0){
   </div>`);
   const bub=row.querySelector('.bub');
   if(!animate){ bub.style.animationDelay=Math.min(i*38,300)+'ms'; }
+  if(m.me) holdMenu(row, ()=>openMessageMenu(c, m, th));
   th.appendChild(row);
 }
 function scrollThread(th){ raf(()=>th.scrollTo({top:th.scrollHeight, behavior:'smooth'})); }
@@ -2704,18 +2807,11 @@ function pushPostDetail(pid){
       <div id="repList"></div>
     </div>
     <div class="reply-dock">
-      <div id="replyTarget"></div>
-      <div id="repAtt"></div>
-      <div class="reply-bar">
+      <button class="reply-trigger" id="repOpen">
         ${uav('me',34)}
-        <textarea class="replyfield" id="repIn" rows="1" placeholder="やさしく返信する…"></textarea>
-        <button class="replysend compact" id="repSendMini" aria-label="返信する">${I.send}</button>
-      </div>
-      <div class="reply-tools" id="repTools">
-        <button class="toolbtn" data-att="media" aria-label="画像・動画">${I.camera}</button>
-        <button class="toolbtn" data-att="audio" aria-label="音声">${I.mic}</button>
-        <button class="replybtn" id="repSend">返信</button>
-      </div>
+        <span>やさしく返信する…</span>
+        ${I.pencil}
+      </button>
     </div>
   </section>`);
 
@@ -2746,75 +2842,18 @@ function pushPostDetail(pid){
   paintReplies();
 
   /* composer — same mechanics as the DM bar */
-  const inp=$('#repIn',s), send=$('#repSend',s), tgtBox=$('#replyTarget',s), attBox=$('#repAtt',s);
-  send.disabled=true;
-  let replyTo=null, repAtt=null;
-  function setRepAtt(v){
-    repAtt=v;
-    if(v) dock.classList.add('open');
-    attBox.innerHTML = v ? `<div class="attpreview" style="margin:12px 14px 0">
-        <button class="x" id="repAttX" aria-label="取り消す">${I.close}</button>${mediaHTML(v)}</div>` : '';
-    if(v) $('#repAttX',attBox).onclick=()=>{ haptic(6); stopAudio(); setRepAtt(null); };
-    grow(); fitBars(s);
-  }
-  const dock=s.querySelector('.reply-dock');
-  $$('.toolbtn',s).forEach(b=>b.addEventListener('click',()=>{
-    haptic(7);
-    const k=b.dataset.att;
-    if(k==='audio') openRecorder(setRepAtt);
-    else pickMedia('image/*,video/*', setRepAtt);
-  }));
-  /* the tool row unfolds once the field is in use, as on X */
-  const openTools=()=>{ dock.classList.add('open'); grow(); fitBars(s); };
-  const maybeClose=()=>{
-    if(inp.value.trim() || repAtt || replyTo) return;
-    dock.classList.remove('open'); fitBars(s);
-  };
-  inp.addEventListener('focus',openTools);
-  inp.addEventListener('blur',()=>setTimeout(maybeClose,180));
-  function setTarget(uid){
-    replyTo=uid;
-    if(!uid){ tgtBox.innerHTML=''; inp.placeholder='やさしく返信する…'; return; }
-    const u=S.users[uid];
-    tgtBox.innerHTML=`<div class="replying">${I.reply}<span><b>${esc(u.name)}</b>さんに返信中</span>
-      <button class="x" id="repCancel" aria-label="やめる">${I.close}</button></div>`;
-    tgtBox.querySelector('#repCancel').onclick=()=>{ haptic(5); setTarget(null); };
-    inp.placeholder=`${u.name}さんへ返信…`;
-    fitBars(s);
-    setTimeout(()=>inp.focus(),60);
-  }
-  const grow=()=>{
-    inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,120)+'px';
-    const ready = inp.value.trim().length>0 || !!repAtt;
-    send.disabled=!ready;
-    const mini=$('#repSendMini',s);
-    if(mini) mini.classList.toggle('live', ready);
-    $$('.toolbtn',s).forEach(b=>b.disabled=!!repAtt);
-  };
-  inp.addEventListener('input',grow);
-  inp.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();fire();} });
-  send.onclick=fire;
-  { const mini=$('#repSendMini',s); if(mini) mini.onclick=fire; }
-
-  async function fire(){
-    const t=inp.value.trim(); if(!t && !repAtt) return;
-    haptic(11);
-    send.classList.remove('fly'); void send.offsetWidth; send.classList.add('fly');
-    setTimeout(()=>send.classList.remove('fly'),540);
-    const r={u:'me', t, to:replyTo, media:repAtt, ts:Date.now(), likes:0, liked:false};
-    try{ await cloudCreateReply(p,r); }catch(e){ cloudErr('reply',e); return; }
+  const openReply=(toReply=null)=>openReplyCompose(p, toReply, r=>{
     p.rep.push(r);
-    setTarget(null); setRepAtt(null);
-    dock.classList.remove('open');
     p.replies=p.rep.length;
-    inp.value=''; grow();
     paintReplies(true);
     $('#pdRepCount',s).querySelector('.num').textContent=p.replies+'件の返信';
     syncCard(p);
     quiet(()=>{ if($('#feed')) renderFeed(false); });
     const sc=s.querySelector('.js-scroll');
     raf(()=>sc.scrollTo({top:sc.scrollHeight, behavior:'smooth'}));
-  }
+  });
+  $('#repOpen',s).onclick=()=>{ haptic(7); openReply(null); };
+  const setTarget=rep=>openReply(rep);
 
   function paintReplies(fresh){
     if(!p.rep.length){
@@ -2828,7 +2867,8 @@ function pushPostDetail(pid){
         <div class="rep-main">
           <div class="rep-line"><b>${esc(ru.name)}</b>${genderTag(ru)}
             <span>@${esc(ru.handle)}</span><span class="dot-sep"></span>
-            <span data-ts="${r.ts}">${ago(r.ts)}</span></div>
+            <span data-ts="${r.ts}">${ago(r.ts)}</span>
+            <button class="p-more" data-repmore="${p.id}:${i}" aria-label="その他">${I.dots}</button></div>
           ${r.t?`<p class="rep-body">${r.to&&S.users[r.to]?`<span class="mention">@${esc(S.users[r.to].handle)}</span> `:''}${esc(r.t)}</p>`:''}
           ${mediaHTML(r.media)}
           <div class="rep-foot">
@@ -2841,8 +2881,10 @@ function pushPostDetail(pid){
       </div>`;
     }).join('');
     list.onclick=e=>{
+      const rm=e.target.closest('[data-repmore]');
+      if(rm){ e.stopPropagation(); openReplyMenu(rm.dataset.repmore, ()=>paintReplies()); return; }
       const rr=e.target.closest('[data-repreply]');
-      if(rr){ haptic(6); setTarget(p.rep[+rr.dataset.repreply].u); return; }
+      if(rr){ haptic(6); setTarget(p.rep[+rr.dataset.repreply]); return; }
       const lk=e.target.closest('[data-replike]'); if(!lk) return;
       const r=p.rep[+lk.dataset.replike];
       r.liked=!r.liked; r.likes+=r.liked?1:-1;
@@ -2857,6 +2899,168 @@ function pushPostDetail(pid){
   push(s);
 }
 
+
+/* "post:index" → the reply object, plus its post */
+function findReplyPair(ref){
+  const [pid,idx]=String(ref).split(':');
+  const p=S.posts.find(x=>x.id===pid); if(!p) return null;
+  const r=(p.rep||[])[+idx]; if(!r) return null;
+  return {p, r, i:+idx};
+}
+function findReply(ref){ const f=findReplyPair(ref); return f && f.r; }
+
+/* the same menu a post gets, adapted to a reply */
+function openReplyMenu(ref, after){
+  const f=findReplyPair(ref); if(!f) return;
+  const {p, r, i}=f;
+  haptic(6);
+  const u=S.users[r.u]||{name:'このユーザー'};
+  const items=[{t:'この返信をシェア', fn:()=>toast('リンクをコピーしました')}];
+  if(r.u==='me'){
+    items.push(
+      {t:'返信を編集', fn:()=>editReply(ref, after)},
+      {t:'返信を削除', danger:true, fn:()=>{
+        p.rep.splice(i,1); p.replies=p.rep.length;
+        cloudDeleteReply(r).catch(e=>cloudErr('delete reply',e));
+        haptic(12); syncCard(p); after&&after(); refreshInPlace();
+        toast('返信を削除しました');
+      }}
+    );
+  }else{
+    items.push(
+      {t:S.muted.includes(r.u)?`${u.name}のミュートを解除`:`${u.name}をミュート`, fn:()=>toggleMute(r.u)},
+      {t:`${u.name}をブロック`, danger:true, fn:()=>confirmBlock(r.u)},
+      {t:'報告する', danger:true, fn:()=>toast('報告を受け付けました')}
+    );
+  }
+  openMenu(items);
+}
+
+function editReply(ref, after){
+  const f=findReplyPair(ref); if(!f) return;
+  const {p, r}=f;
+  const m=el(`<div class="modal" id="editRepM">
+    <header class="navbar">
+      <div class="side" style="justify-content:flex-start"><button class="txtbtn" id="erNo">キャンセル</button></div>
+      <div class="ttl">返信を編集</div>
+      <div class="side" style="justify-content:flex-end"><button class="txtbtn accent" id="erGo">保存</button></div>
+    </header>
+    <div class="scroll js-scroll">
+      <div style="display:flex;gap:12px">
+        ${uav('me',40)}
+        <textarea id="erText" maxlength="140" rows="4"
+          style="flex:1;font-size:17px;font-weight:600;line-height:1.7;resize:none;min-height:120px">${esc(r.t||'')}</textarea>
+      </div>
+      <div style="margin-top:6px;text-align:right;font-size:12px;color:var(--ink-3);font-weight:700" id="erCnt">${[...(r.t||'')].length}/140</div>
+      ${r.media?`<div style="margin-top:14px">${mediaHTML(r.media)}</div><p class="hint" style="text-align:left;margin-left:2px">添付は編集できません</p>`:''}
+    </div>
+  </div>`);
+  $('#overlays').appendChild(m); fitBars(m);
+  raf(()=>m.classList.add('on'));
+  const ta=$('#erText',m);
+  ta.addEventListener('input',()=>$('#erCnt',m).textContent=[...ta.value].length+'/140');
+  $('#erNo',m).onclick=close;
+  $('#erGo',m).onclick=()=>{
+    const t=ta.value.trim();
+    if(!t && !r.media){ toast('本文を入力してください'); return; }
+    r.t=t; haptic(12);
+    cloudUpdateReply(r).catch(e=>cloudErr('edit reply',e));
+    close();
+    setTimeout(()=>{ after&&after(); refreshInPlace(); toast('返信を更新しました'); },240);
+  };
+  setTimeout(()=>ta.focus(),380);
+  function close(){ m.classList.remove('on'); setTimeout(()=>m.remove(),520); }
+}
+
+
+/* =========================================================
+   REPLY COMPOSER  —  the same full screen the post composer uses,
+   minus the category tags
+   ========================================================= */
+function openReplyCompose(p, toReply, done){
+  if($('#replyM')) return;
+  /* answering a reply quotes that reply; answering the post quotes the post */
+  const toUid = toReply ? toReply.u : null;
+  const target = toUid && S.users[toUid] ? S.users[toUid] : null;
+  const src  = toReply || p;
+  const srcU = S.users[src.u] || {name:'このユーザー'};
+  const raw  = src.t || (src.media ? MEDIA_LABEL[src.media.kind]+'の投稿' : '');
+  const quoted = raw.slice(0,60) + (raw.length>60 ? '…' : '');
+
+  const m=el(`<div class="modal" id="replyM">
+    <header class="navbar">
+      <div class="side" style="justify-content:flex-start"><button class="txtbtn" id="rcNo">キャンセル</button></div>
+      <div class="ttl">返信</div>
+      <div class="side" style="justify-content:flex-end"><button class="txtbtn accent" id="rcGo" disabled>返信</button></div>
+    </header>
+    <div class="scroll js-scroll">
+      <div class="rc-quote">
+        ${uav(src.u,32)}
+        <div>
+          <b>${esc(honor(srcU.name))}${toReply?'の返信に返信':'の投稿に返信'}</b>
+          ${quoted?`<span>${esc(quoted)}</span>`:''}
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:16px">
+        ${uav('me',40)}
+        <textarea id="rcText" maxlength="140" rows="4"
+          placeholder="${target?esc(honor(target.name))+'へ、いまの言葉を。':'思ったことを、そのまま。'}"
+          style="flex:1;font-size:17px;font-weight:600;line-height:1.7;resize:none;min-height:130px"></textarea>
+      </div>
+      <div style="margin-top:6px;text-align:right;font-size:12px;color:var(--ink-3);font-weight:700" id="rcCnt">0/140</div>
+      <div class="attachrow">
+        <button class="attbtn" data-att="media">${I.camera}画像・動画</button>
+        <button class="attbtn" data-att="audio">${I.mic}音声</button>
+      </div>
+      <div id="rcAtt"></div>
+      <p class="safety" style="margin-top:22px">${I.shield}<span>まとまっていなくて大丈夫です。急がずどうぞ</span></p>
+    </div>
+  </div>`);
+  $('#overlays').appendChild(m);
+  fitBars(m);
+  raf(()=>m.classList.add('on'));
+
+  let att=null;
+  const ta=$('#rcText',m), go=$('#rcGo',m), attBox=$('#rcAtt',m);
+  const sync=()=>{ go.disabled = ta.value.trim().length===0 && !att; };
+  ta.addEventListener('input',()=>{
+    $('#rcCnt',m).textContent=[...ta.value].length+'/140';
+    sync();
+  });
+  ta.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); fire(); } });
+
+  function setAtt(v){
+    att=v;
+    attBox.innerHTML = v ? `<div class="attpreview">
+        <button class="x" id="rcAttX" aria-label="取り消す">${I.close}</button>${mediaHTML(v)}</div>` : '';
+    if(v) $('#rcAttX',attBox).onclick=()=>{ haptic(6); stopAudio(); setAtt(null); };
+    $$('.attbtn',m).forEach(b=>b.disabled=!!v);
+    sync(); fitBars(m);
+  }
+  $$('.attbtn',m).forEach(b=>b.addEventListener('click',()=>{
+    haptic(7);
+    if(b.dataset.att==='audio') openRecorder(setAtt);
+    else pickMedia('image/*,video/*', setAtt);
+  }));
+
+  $('#rcNo',m).onclick=close;
+  $('#rcGo',m).onclick=fire;
+  setTimeout(()=>ta.focus(),380);
+
+  async function fire(){
+    const t=ta.value.trim();
+    if(!t && !att) return;
+    go.disabled=true;
+    const r={u:'me', t, to:toUid||null, media:att, ts:Date.now(), likes:0, liked:false};
+    try{ await cloudCreateReply(p,r); }
+    catch(e){ cloudErr('reply',e); go.disabled=false; toast('返信を送れませんでした'); return; }
+    haptic(13);
+    close();
+    setTimeout(()=>{ done(r); toast('返信しました'); },240);
+  }
+  function close(){ stopAudio(); m.classList.remove('on'); setTimeout(()=>m.remove(),520); }
+}
+
 /* keep a feed card's counters in step with the detail screen */
 function syncCard(p){
   document.querySelectorAll(`[data-post="${p.id}"],[data-mini="${p.id}"]`).forEach(card=>{
@@ -2868,6 +3072,8 @@ function syncCard(p){
       t.textContent = card.dataset.mini ? p.replies+'件の返信' : p.replies; }
   });
 }
+
+
 
 /* =========================================================
    SETTINGS
@@ -2975,6 +3181,28 @@ function pushSettings(){
   push(s);
 }
 
+
+
+/* unsend: the message simply stops existing — no tombstone, no notice */
+function openMessageMenu(c, m, th){
+  openMenu([
+    ...(m.t ? [{t:'テキストをコピー', fn:()=>{
+      try{ navigator.clipboard.writeText(m.t); toast('コピーしました'); }
+      catch(e){ toast('コピーできませんでした'); }
+    }}] : []),
+    {t:'送信を取り消す', danger:true, fn:()=>{
+      const i=c.msgs.indexOf(m);
+      if(i<0) return;
+      c.msgs.splice(i,1);
+      cloudUnsendMessage(m).catch(e=>cloudErr('unsend',e));
+      haptic(12);
+      if(th) paintThread(th,c);
+      c.ts = c.msgs.length ? c.msgs[c.msgs.length-1].ts : c.ts;
+      quiet(()=>{ chatSig=null; if(S.tab==='chat') renderChatList(); });
+      toast('送信を取り消しました');
+    }}
+  ]);
+}
 
 /* =========================================================
    SETTINGS SUB-SCREENS
@@ -3689,7 +3917,6 @@ function openPostMenu(pid){
 
   if(p.u==='me'){
     items.push(
-      {t:'投稿を編集', fn:()=>editPost(p.id)},
       {t:p.arch?'アーカイブから戻す':'アーカイブする', fn:()=>toggleArchive(p.id)},
       {t:'投稿を削除', danger:true, fn:()=>confirmDelete(p.id)}
     );
@@ -3730,81 +3957,14 @@ function closeDetailFor(pid){
   }
 }
 function confirmDelete(pid){
-  confirmSheet({
-    title:'投稿を削除しますか？',
-    lead:'削除すると元に戻せません。返信も一緒に見えなくなります。',
-    go:'削除する', danger:true,
-    fn:()=>{
-      const i=S.posts.findIndex(x=>x.id===pid);
-      if(i<0) return;
-      const doomed=S.posts[i]; S.posts.splice(i,1); haptic(12);
-      if(doomed?.cloud) cloudDeletePost(pid).catch(e=>cloudErr('delete post',e));
-      closeDetailFor(pid);
-      refreshInPlace('posts');
-      toast('投稿を削除しました');
-    }
-  });
+  const i=S.posts.findIndex(x=>x.id===pid);
+  if(i<0) return;
+  const doomed=S.posts[i]; S.posts.splice(i,1); haptic(12);
+  if(doomed?.cloud) cloudDeletePost(pid).catch(e=>cloudErr('delete post',e));
+  closeDetailFor(pid);
+  refreshInPlace('posts');
+  toast('投稿を削除しました');
 }
-function editPost(pid){
-  const p=S.posts.find(x=>x.id===pid); if(!p) return;
-  const m=el(`<div class="modal" id="editPostM">
-    <header class="navbar">
-      <div class="side" style="justify-content:flex-start"><button class="txtbtn" id="epNo">キャンセル</button></div>
-      <div class="ttl">投稿を編集</div>
-      <div class="side" style="justify-content:flex-end"><button class="txtbtn accent" id="epGo">保存</button></div>
-    </header>
-    <div class="scroll js-scroll">
-      <div style="display:flex;gap:12px">
-        ${uav('me',40)}
-        <textarea id="epText" maxlength="140" rows="4"
-          style="flex:1;font-size:17px;font-weight:600;line-height:1.7;resize:none;min-height:130px">${esc(p.t)}</textarea>
-      </div>
-      <div style="margin-top:6px;text-align:right;font-size:12px;color:var(--ink-3);font-weight:700" id="epCnt">${[...p.t].length}/140</div>
-      <div class="attachrow">
-        <button class="attbtn" data-att="media">${I.camera}画像・動画</button>
-        <button class="attbtn" data-att="audio">${I.mic}音声</button>
-      </div>
-      <div id="cmAtt"></div>
-      <h4 style="margin:18px 0 10px;font-size:13px;font-weight:800">話題のタグ</h4>
-      <div class="tagpick" id="epTags">
-        ${Object.entries(TAGS).map(([k,v])=>`<button class="tagopt${k===p.tag?' on':''}" data-t="${k}">${v.label}</button>`).join('')}
-      </div>
-    </div>
-  </div>`);
-  $('#overlays').appendChild(m);
-  fitBars(m);
-  raf(()=>m.classList.add('on'));
-
-  let tag=p.tag;
-  const ta=$('#epText',m);
-  ta.addEventListener('input',()=>$('#epCnt',m).textContent=[...ta.value].length+'/140');
-  $$('.tagopt',m).forEach(b=>b.addEventListener('click',()=>{
-    haptic(6); tag=b.dataset.t;
-    $$('.tagopt',m).forEach(x=>x.classList.toggle('on',x===b));
-  }));
-  $('#epNo',m).onclick=close;
-  $('#epGo',m).onclick=()=>{
-    const t=ta.value.trim();
-    if(!t){ toast('本文を入力してください'); return; }
-    p.t=t; p.tag=tag; p.edited=true; haptic(12);
-    cloudUpdatePost(p).catch(e=>cloudErr('edit post',e));
-    close();
-    setTimeout(()=>{
-      /* if the post's detail screen is open, update it in place */
-      const d=stackEls.find(x=>x.dataset.post===p.id);
-      if(d){
-        d.querySelector('.pd-body').textContent=p.t;
-        const chip=d.querySelector('.pd-body + .tag');
-        if(chip && TAGS[p.tag]){ chip.className='tag '+TAGS[p.tag].cls; chip.textContent=TAGS[p.tag].label; }
-      }
-      refreshInPlace('posts');
-      toast('投稿を更新しました');
-    },240);
-  };
-  setTimeout(()=>ta.focus(),380);
-  function close(){ m.classList.remove('on'); setTimeout(()=>m.remove(),520); }
-}
-
 /* ---------- other people ---------- */
 function toggleMute(uid){
   const i=S.muted.indexOf(uid), name=S.users[uid].name;
