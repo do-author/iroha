@@ -1137,7 +1137,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.33.9';
+const APP_VER='2.34.0';
 
 
 /* =========================================================
@@ -1519,10 +1519,6 @@ async function cloudCreateReply(p,r){
 async function cloudDeleteReply(r){
   if(!CLOUD.enabled||!r.cloud||!r.id) return;
   const q=await CLOUD.client.from('replies').delete().eq('id',r.id); if(q.error) throw q.error;
-}
-async function cloudUpdateReply(r){
-  if(!CLOUD.enabled||!r.cloud||!r.id) return;
-  const q=await CLOUD.client.from('replies').update({body:r.t||''}).eq('id',r.id); if(q.error) throw q.error;
 }
 async function cloudSetReplyLike(r){
   if(!CLOUD.enabled||!r.id) return;
@@ -2196,6 +2192,7 @@ function postCard(p, opts={}){
       <p class="p-body">${esc(p.t)}</p>
       ${mediaHTML(p.media)}
       ${tag?`<span class="tag ${tag.cls}">${tag.label}</span>`:''}
+      ${p.arch?`<span class="tag tag-arch">アーカイブ</span>`:''}
       <div class="p-foot">
         <button class="act" data-reply="${p.id}">${I.reply}<span class="num">${p.replies}</span></button>
         <button class="act${p.liked?' liked':''}" data-like="${p.id}">
@@ -2901,6 +2898,7 @@ function pushPostDetail(pid){
         <p class="pd-body">${esc(p.t)}</p>
         ${mediaHTML(p.media)}
         ${TAGS[p.tag]?`<span class="tag ${TAGS[p.tag].cls}">${TAGS[p.tag].label}</span>`:''}
+        ${p.arch?`<span class="tag tag-arch">アーカイブ</span>`:''}
         <div class="pd-stats">
           <button class="pd-stat" id="pdRepCount" type="button">${I.reply}<span class="num">${p.replies}件の返信</span></button>
           <button class="pd-stat${p.liked?' liked':''}" id="pdLike">
@@ -3025,7 +3023,6 @@ function openReplyMenu(ref, after){
   const items=[{t:'この返信をシェア', fn:()=>toast('リンクをコピーしました')}];
   if(r.u==='me'){
     items.push(
-      {t:'返信を編集', fn:()=>editReply(ref, after)},
       {t:'返信を削除', danger:true, fn:()=>{
         p.rep.splice(i,1); p.replies=p.rep.length;
         cloudDeleteReply(r).catch(e=>cloudErr('delete reply',e));
@@ -3043,42 +3040,30 @@ function openReplyMenu(ref, after){
   openMenu(items);
 }
 
-function editReply(ref, after){
-  const f=findReplyPair(ref); if(!f) return;
-  const {p, r}=f;
-  const m=el(`<div class="modal" id="editRepM">
-    <header class="navbar">
-      <div class="side" style="justify-content:flex-start"><button class="txtbtn" id="erNo">キャンセル</button></div>
-      <div class="ttl">返信を編集</div>
-      <div class="side" style="justify-content:flex-end"><button class="txtbtn accent" id="erGo">保存</button></div>
-    </header>
-    <div class="scroll js-scroll">
-      <div style="display:flex;gap:12px">
-        ${uav('me',40)}
-        <textarea id="erText" maxlength="140" rows="4"
-          style="flex:1;font-size:17px;font-weight:600;line-height:1.7;resize:none;min-height:120px">${esc(r.t||'')}</textarea>
-      </div>
-      <div style="margin-top:6px;text-align:right;font-size:12px;color:var(--ink-3);font-weight:700" id="erCnt">${[...(r.t||'')].length}/140</div>
-      ${r.media?`<div style="margin-top:14px">${mediaHTML(r.media)}</div><p class="hint" style="text-align:left;margin-left:2px">添付は編集できません</p>`:''}
-    </div>
-  </div>`);
-  $('#overlays').appendChild(m); fitBars(m);
-  raf(()=>m.classList.add('on'));
-  const ta=$('#erText',m);
-  ta.addEventListener('input',()=>$('#erCnt',m).textContent=[...ta.value].length+'/140');
-  $('#erNo',m).onclick=close;
-  $('#erGo',m).onclick=()=>{
-    const t=ta.value.trim();
-    if(!t && !r.media){ toast('本文を入力してください'); return; }
-    r.t=t; haptic(12);
-    cloudUpdateReply(r).catch(e=>cloudErr('edit reply',e));
-    close();
-    setTimeout(()=>{ after&&after(); refreshInPlace(); toast('返信を更新しました'); },240);
+/* Focus only after the compose/reply modal has completely finished its entrance.
+   This prevents the iOS keyboard from racing the 500ms modal animation and panning
+   the whole app while the screen is still moving. */
+function focusAfterModalShown(modal, field){
+  let finished=false;
+  let timer=0;
+  const focusNow=()=>{
+    if(finished) return;
+    finished=true;
+    clearTimeout(timer);
+    modal.removeEventListener('transitionend',onEnd);
+    if(!modal.isConnected || !modal.classList.contains('on') || !field.isConnected) return;
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      if(!modal.isConnected || !modal.classList.contains('on') || !field.isConnected) return;
+      try{ field.focus({preventScroll:true}); }catch(_){ field.focus(); }
+    }));
   };
-  setTimeout(()=>ta.focus(),380);
-  function close(){ m.classList.remove('on'); setTimeout(()=>m.remove(),520); }
+  const onEnd=e=>{
+    if(e.target===modal && e.propertyName==='transform') focusNow();
+  };
+  modal.addEventListener('transitionend',onEnd);
+  /* .modal transition is 500ms; fallback covers reduced-motion / missed events. */
+  timer=setTimeout(focusNow,560);
 }
-
 
 /* =========================================================
    REPLY COMPOSER  —  the same full screen the post composer uses,
@@ -3154,8 +3139,8 @@ function openReplyCompose(p, toReply, done){
 
   $('#rcNo',m).onclick=close;
   $('#rcGo',m).onclick=fire;
-  /* Keep this inside the original tap/click event so iOS opens the keyboard automatically. */
-  try{ ta.focus({preventScroll:true}); }catch(_){ ta.focus(); }
+  /* Wait until the reply screen is visually settled before opening the keyboard. */
+  focusAfterModalShown(m,ta);
 
   async function fire(){
     const t=ta.value.trim();
@@ -4252,8 +4237,8 @@ function openCompose(){
       toast(hidden ? '投稿しました。「おすすめ」で見られます' : '投稿しました');
     },260);
   };
-  /* Focus synchronously while the user's tap is still active; iOS then shows the keyboard. */
-  try{ ta.focus({preventScroll:true}); }catch(_){ ta.focus(); }
+  /* Wait until the post screen is visually settled before opening the keyboard. */
+  focusAfterModalShown(m,ta);
 
   function close(){
     m.classList.remove('on');
