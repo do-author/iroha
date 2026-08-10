@@ -703,8 +703,12 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   color:var(--ink-3); font-size:15px; font-weight:600; text-align:left;
   transition:background-color var(--dur-2) var(--ease-out);
 }
-.reply-trigger span{flex:1 1 auto}
-.reply-trigger svg{flex:0 0 auto; color:var(--ink-3)}
+.reply-trigger > .av{
+  flex:0 0 34px; width:34px !important; height:34px !important;
+  min-width:34px; max-width:34px;
+}
+.reply-trigger > span:not(.av){flex:1 1 auto; min-width:0}
+.reply-trigger > svg{flex:0 0 auto; color:var(--ink-3)}
 .reply-trigger:active{background:var(--field)}
 .rc-quote{
   display:flex; align-items:flex-start; gap:11px;
@@ -1133,7 +1137,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.33.6';
+const APP_VER='2.33.7';
 
 
 /* =========================================================
@@ -2994,14 +2998,7 @@ function openReplyCompose(p, toReply, done){
       <div class="side" style="justify-content:flex-end"><button class="txtbtn accent" id="rcGo" disabled>返信</button></div>
     </header>
     <div class="scroll js-scroll">
-      <div class="rc-quote">
-        ${uav(src.u,32)}
-        <div>
-          <b>${esc(honor(srcU.name))}${toReply?'の返信に返信':'の投稿に返信'}</b>
-          ${quoted?`<span>${esc(quoted)}</span>`:''}
-        </div>
-      </div>
-      <div style="display:flex;gap:12px;margin-top:16px">
+      <div style="display:flex;gap:12px">
         ${uav('me',40)}
         <textarea id="rcText" maxlength="140" rows="4"
           placeholder="${target?esc(honor(target.name))+'へ、いまの言葉を。':'思ったことを、そのまま。'}"
@@ -3013,6 +3010,14 @@ function openReplyCompose(p, toReply, done){
         <button class="attbtn" data-att="audio">${I.mic}音声</button>
       </div>
       <div id="rcAtt"></div>
+      <h4 style="margin:18px 0 10px;font-size:13px;font-weight:800">返信先</h4>
+      <div class="rc-quote">
+        ${uav(src.u,32)}
+        <div>
+          <b>${esc(honor(srcU.name))}${toReply?'の返信に返信':'の投稿に返信'}</b>
+          ${quoted?`<span>${esc(quoted)}</span>`:''}
+        </div>
+      </div>
       <p class="safety" style="margin-top:22px">${I.shield}<span>まとまっていなくて大丈夫です。急がずどうぞ</span></p>
     </div>
   </div>`);
