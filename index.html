@@ -640,6 +640,33 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .dm-media-btn svg,.dm-mic-btn svg{width:22px;height:22px}
 .dm-media-btn:active,.dm-mic-btn:active{transform:scale(.88);background:var(--line-soft)}
 
+/* DM: selected attachment sits above the text bar as a compact preview. */
+.dm-composer-bar{
+  flex-direction:column; align-items:stretch; gap:7px;
+}
+.dm-att-slot:empty{display:none}
+.dm-att-slot{padding:0 4px}
+.dm-att-preview{
+  position:relative; width:max-content; max-width:100%;
+  margin:0;
+}
+.dm-att-thumb{
+  width:72px; height:72px; overflow:hidden; border-radius:13px;
+  background:var(--card-2); border:1px solid var(--line);
+}
+.dm-att-thumb img,.dm-att-thumb video{
+  display:block; width:100%; height:100%; object-fit:cover; background:#000;
+}
+.dm-att-preview .dm-att-x{
+  position:absolute; top:-7px; right:-7px; z-index:3;
+  width:24px; height:24px; border-radius:50%;
+  display:grid; place-items:center;
+  background:rgba(20,19,17,.78); color:#fff;
+  box-shadow:0 2px 8px rgba(0,0,0,.18);
+}
+.dm-att-preview .dm-att-x svg{width:14px;height:14px}
+.dm-att-preview .aplayer{margin:0; max-width:min(260px,calc(100vw - 48px))}
+
 .msgfield{
   flex:1; min-width:0; background:transparent; border-radius:0; padding:8px 6px;
   font-size:15px; font-weight:600; resize:none; max-height:120px; line-height:1.5;
@@ -786,6 +813,18 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   align-content:center; text-align:center; padding:16px;
 }
 .media .veil small{display:block; font-weight:600; opacity:.8; font-size:11.5px; margin-top:4px}
+.media-filter-restore{
+  position:absolute; right:10px; bottom:10px; z-index:4;
+  display:inline-flex; align-items:center; gap:6px;
+  padding:7px 10px; border-radius:999px;
+  background:rgba(18,17,15,.76); color:#fff;
+  -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px);
+  font-size:11.5px; font-weight:800; line-height:1;
+  box-shadow:0 2px 10px rgba(0,0,0,.18);
+  transition:transform var(--dur-2) var(--spring), opacity var(--dur-1) linear;
+}
+.media-filter-restore svg{width:15px;height:15px}
+.media-filter-restore:active{transform:scale(.92);opacity:.78}
 .media-off{
   margin-top:11px; display:flex; align-items:center; gap:9px;
   padding:13px 15px; border-radius:14px;
@@ -1236,7 +1275,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.9';
+const APP_VER='2.40.11';
 
 
 /* =========================================================
@@ -2289,7 +2328,7 @@ function postCard(p, opts={}){
           <button class="p-more" data-more="${p.id}" aria-label="その他">${I.dots}</button>
         </div>
       <p class="p-body">${esc(p.t)}</p>
-      ${mediaHTML(p.media)}
+      ${mediaHTML(p.media,{owner:p.u})}
       ${tag?`<span class="tag ${tag.cls}">${tag.label}</span>`:''}
       ${p.arch?`<span class="tag tag-arch">アーカイブ</span>`:''}
       <div class="p-foot">
@@ -2658,7 +2697,7 @@ function replyCard(entry,uid='me'){
     </div>
     <p class="reply-src">${I.reply}<span>${esc(honor(pu.name))}の投稿への返信</span></p>
     ${r.t?`<p class="p-body">${r.to&&S.users[r.to]?`<span class="mention">@${esc(S.users[r.to].handle)}</span> `:''}${esc(r.t)}</p>`:''}
-    ${mediaHTML(r.media)}
+    ${mediaHTML(r.media,{owner:r.u})}
     <div class="p-foot">
       <button class="act${r.liked?' liked':''}" data-replike-card="${post.id}:${entry.i}">
         <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span><span class="num">${r.likes}</span>
@@ -2850,8 +2889,8 @@ function pushThread(cid){
       <div class="side"><button class="iconbtn" id="thMore" aria-label="その他">${I.dots}</button></div>
     </header>
     <div class="thread" id="thread"></div>
-    <div id="dmAtt"></div>
-    <div class="composer-bar">
+    <div class="composer-bar dm-composer-bar">
+      <div id="dmAtt" class="dm-att-slot"></div>
       <div class="dm-compose-shell">
         <button class="dm-media-btn" id="dmMedia" aria-label="画像・動画を追加" title="画像・動画">${I.plusS}</button>
         <textarea class="msgfield" id="msgIn" rows="1" placeholder="メッセージ…"></textarea>
@@ -2878,9 +2917,19 @@ function pushThread(cid){
     send.classList.toggle('live', inp.value.trim().length>0 || !!dmAtt); };
   function setDmAtt(v){
     dmAtt=v;
-    dmAttBox.innerHTML = v ? `<div class="attpreview" style="margin:12px 14px 0">
-        <button class="x" id="dmAttX" aria-label="取り消す">${I.close}</button>${mediaHTML(v)}</div>` : '';
-    if(v) $('#dmAttX',dmAttBox).onclick=()=>{ haptic(6); stopAudio(); setDmAtt(null); };
+    if(!v){
+      dmAttBox.innerHTML='';
+    }else{
+      const preview = v.kind==='audio'
+        ? mediaHTML(v,{forceShow:true})
+        : `<div class="dm-att-thumb">${v.kind==='video'
+            ? `<video src="${v.src}" muted playsinline preload="metadata"></video>`
+            : `<img src="${v.src}" alt="選択中の画像">`}</div>`;
+      dmAttBox.innerHTML=`<div class="dm-att-preview">
+        <button class="dm-att-x" id="dmAttX" aria-label="取り消す">${I.close}</button>${preview}
+      </div>`;
+      $('#dmAttX',dmAttBox).onclick=()=>{ haptic(6); stopAudio(); setDmAtt(null); };
+    }
     autoGrow(); fitBars(s);
   }
   $('#dmMedia',s).onclick=()=>{
@@ -2952,7 +3001,7 @@ function appendMsg(th,c,m,animate,i=0){
   }
   const row=el(`<div class="msgrow${m.me?' me':''}">
     ${m.me?uav('me',30):uav(c.u,30)}
-    <div class="bub${m.media?' has-media':''}">${m.media?mediaHTML(m.media):''}${m.t?esc(m.t):''}</div>
+    <div class="bub${m.media?' has-media':''}">${m.media?mediaHTML(m.media,{forceShow:!!m.me}):''}${m.t?esc(m.t):''}</div>
     <span class="mtime" data-ts="${m.ts}">${ago(m.ts)}</span>
   </div>`);
   const bub=row.querySelector('.bub');
@@ -3002,7 +3051,7 @@ function pushPostDetail(pid){
           ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>`}
         </div>
         <p class="pd-body">${esc(p.t)}</p>
-        ${mediaHTML(p.media)}
+        ${mediaHTML(p.media,{owner:p.u})}
         ${TAGS[p.tag]?`<span class="tag ${TAGS[p.tag].cls}">${TAGS[p.tag].label}</span>`:''}
         ${p.arch?`<span class="tag tag-arch">アーカイブ</span>`:''}
         <div class="pd-stats">
@@ -3081,7 +3130,7 @@ function pushPostDetail(pid){
             <span data-ts="${r.ts}">${ago(r.ts)}</span>
             <button class="p-more" data-repmore="${p.id}:${i}" aria-label="その他">${I.dots}</button></div>
           ${r.t?`<p class="rep-body">${r.to&&S.users[r.to]?`<span class="mention">@${esc(S.users[r.to].handle)}</span> `:''}${esc(r.t)}</p>`:''}
-          ${mediaHTML(r.media)}
+          ${mediaHTML(r.media,{owner:r.u})}
           <div class="rep-foot">
             <button class="act" data-repreply="${i}">${I.reply}<span class="num">返信</span></button>
             <button class="act${r.liked?' liked':''}" data-replike="${i}">
@@ -3238,7 +3287,7 @@ function openReplyCompose(p, toReply, done){
   function setAtt(v){
     att=v;
     attBox.innerHTML = v ? `<div class="attpreview">
-        <button class="x" id="rcAttX" aria-label="取り消す">${I.close}</button>${mediaHTML(v)}</div>` : '';
+        <button class="x" id="rcAttX" aria-label="取り消す">${I.close}</button>${mediaHTML(v,{forceShow:true})}</div>` : '';
     if(v) $('#rcAttX',attBox).onclick=()=>{ haptic(6); stopAudio(); setAtt(null); };
     $$('.attbtn',m).forEach(b=>b.disabled=!!v);
     sync(); fitBars(m);
@@ -3370,7 +3419,7 @@ function pushSettings(){
         if(p && pm){
           const old=pm.nextElementSibling;
           if(old && (old.classList.contains('media')||old.classList.contains('media-off')||old.classList.contains('aplayer'))) old.remove();
-          if(p.media) pm.insertAdjacentHTML('afterend', mediaHTML(p.media));
+          if(p.media) pm.insertAdjacentHTML('afterend', mediaHTML(p.media,{owner:p.u}));
         }
       }
     });
@@ -3814,19 +3863,92 @@ function mediaMode(m){
   return 'show';
 }
 
-function mediaHTML(m){
+/* Safety reveal state is shared by feed, post detail and profile/reply views. */
+const REVEALED_MEDIA=new Set();
+function mediaKey(m){ return String(m && (m.src||m.name||'')); }
+function mediaKeyAttr(m){ return encodeURIComponent(mediaKey(m)); }
+
+function mediaHTML(m, opts={}){
   if(!m) return '';
   if(m.kind==='audio') return audioHTML(m);
-  const mode=mediaMode(m);
+  let mode=mediaMode(m);
+  /* A just-selected upload is always previewed raw. My own posted media also skips safety blur. */
+  if(opts.forceShow) mode='show';
+  else if(opts.owner==='me' && mode==='blur') mode='show';
+
+  const key=mediaKey(m), keyAttr=mediaKeyAttr(m);
+  const wasRevealed=!!key && REVEALED_MEDIA.has(key);
+  if(mode==='blur' && wasRevealed) mode='show';
+
   if(mode==='off')
     return `<div class="media-off">${I.eyeoff}<span>${MEDIA_LABEL[m.kind]}は非表示に設定されています</span></div>`;
+
   const inner = m.kind==='video'
     ? `<video src="${m.src}" playsinline ${mode==='blur'?'':'controls'} preload="metadata"></video>`
     : `<img src="${m.src}" alt="">`;
+
   if(mode==='blur')
-    return `<div class="media blurred" data-reveal>${inner}
+    return `<div class="media blurred" data-reveal data-media-key="${keyAttr}">${inner}
       <div class="veil">${I.eye}<span>タップして表示<small>セーフティ表示がオンです</small></span></div></div>`;
-  return `<div class="media">${inner}</div>`;
+
+  /* Only media that was manually revealed gets X-style “restore filter”. */
+  const restore = wasRevealed && S.media==='safety' && !opts.forceShow && opts.owner!=='me'
+    ? `<button class="media-filter-restore" data-restore-filter type="button">${I.eyeoff}<span>フィルターを戻す</span></button>` : '';
+  const keyData = restore ? ` data-media-key="${keyAttr}"` : '';
+  return `<div class="media"${keyData}>${inner}${restore}</div>`;
+}
+
+function revealMediaByAttr(keyAttr){
+  let key='';
+  try{ key=decodeURIComponent(keyAttr||''); }catch(_){ key=keyAttr||''; }
+  if(key) REVEALED_MEDIA.add(key);
+  $$('[data-media-key]').forEach(node=>{
+    if(node.dataset.mediaKey!==keyAttr) return;
+    node.classList.remove('blurred');
+    node.removeAttribute('data-reveal');
+    const v=node.querySelector('video'); if(v) v.controls=true;
+    const veil=node.querySelector('.veil'); if(veil) veil.remove();
+    if(!node.querySelector('[data-restore-filter]')){
+      node.insertAdjacentHTML('beforeend',`<button class="media-filter-restore" data-restore-filter type="button">${I.eyeoff}<span>フィルターを戻す</span></button>`);
+    }
+  });
+}
+
+function restoreMediaFilterByAttr(keyAttr){
+  let key='';
+  try{ key=decodeURIComponent(keyAttr||''); }catch(_){ key=keyAttr||''; }
+  if(key) REVEALED_MEDIA.delete(key);
+  if(S.media!=='safety') return;
+  $$('[data-media-key]').forEach(node=>{
+    if(node.dataset.mediaKey!==keyAttr) return;
+    node.classList.add('blurred');
+    node.setAttribute('data-reveal','');
+    const v=node.querySelector('video'); if(v) v.controls=false;
+    const restore=node.querySelector('[data-restore-filter]'); if(restore) restore.remove();
+    if(!node.querySelector('.veil')){
+      node.insertAdjacentHTML('beforeend',`<div class="veil">${I.eye}<span>タップして表示<small>セーフティ表示がオンです</small></span></div>`);
+    }
+  });
+}
+
+function handleMediaSafetyClick(e){
+  const restore=e.target.closest('[data-restore-filter]');
+  if(restore){
+    const media=restore.closest('[data-media-key]');
+    if(!media) return false;
+    e.preventDefault(); e.stopPropagation();
+    haptic(5);
+    restoreMediaFilterByAttr(media.dataset.mediaKey);
+    return true;
+  }
+  const rev=e.target.closest('[data-reveal]');
+  if(rev){
+    e.preventDefault(); e.stopPropagation();
+    haptic(6);
+    revealMediaByAttr(rev.dataset.mediaKey||'');
+    return true;
+  }
+  return false;
 }
 
 function audioHTML(m){
@@ -3859,12 +3981,10 @@ function stopAudio(){
     APnode=null;
   }
 }
-document.addEventListener('click',e=>{
-  const rev=e.target.closest('[data-reveal]');
-  if(rev){ rev.classList.remove('blurred'); rev.removeAttribute('data-reveal');
-    const v=rev.querySelector('video'); if(v) v.controls=true;
-    const veil=rev.querySelector('.veil'); if(veil) veil.remove(); return; }
+/* Capture safety taps before post/profile card click handlers can navigate. */
+document.addEventListener('click',e=>{ handleMediaSafetyClick(e); },true);
 
+document.addEventListener('click',e=>{
   const btn=e.target.closest('.apbtn');
   if(!btn) return;
   const node=btn.closest('[data-audio]'); if(!node) return;
@@ -4303,7 +4423,7 @@ function openCompose(){
   function setAtt(v){
     att=v;
     attBox.innerHTML = v ? `<div class="attpreview">
-        <button class="x" id="attX" aria-label="取り消す">${I.close}</button>${mediaHTML(v)}</div>` : '';
+        <button class="x" id="attX" aria-label="取り消す">${I.close}</button>${mediaHTML(v,{forceShow:true})}</div>` : '';
     if(v) $('#attX',attBox).onclick=()=>{ haptic(6); stopAudio(); setAtt(null); };
     $$('.attbtn',m).forEach(b=>b.disabled=!!v);
     sync(); fitBars(m);
