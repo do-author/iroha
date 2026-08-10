@@ -4,6 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#FAF8F4">
+<script>
+/* saved theme before first paint: keeps iOS/Safari top area in sync */
+try{
+  const p=JSON.parse(localStorage.getItem('iroha:prefs:v1')||'null');
+  if(p && (p.theme==='light'||p.theme==='dark')){
+    document.documentElement.dataset.theme=p.theme;
+    document.querySelector('meta[name="theme-color"]').content =
+      p.theme==='dark' ? '#0B0B0B' : '#FAF8F4';
+  }
+}catch(_){}
+</script>
 <title>iroha</title>
 <style>
 /* ============================================================
@@ -96,6 +107,12 @@
   -webkit-touch-callout:default;
 }
 html,body{height:100%}
+html{
+  background:var(--bg);
+  transition:background-color var(--dur-3) var(--ease-out);
+}
+html[data-theme="dark"]{background:#0B0B0B}
+html[data-theme="light"]{background:#FAF8F4}
 body{
   margin:0;
   background:var(--bg);
@@ -1288,7 +1305,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.13';
+const APP_VER='2.40.14';
 
 
 /* =========================================================
