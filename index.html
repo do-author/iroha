@@ -1090,7 +1090,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 
 /* compose / reply modal
    Open horizontally so the keyboard's vertical viewport change never competes
-   with the entrance motion. The focus is applied only after this transition ends. */
+   with the entrance motion. Focus is requested immediately from the original tap. */
 .modal{
   position:absolute; inset:0; z-index:80; background:var(--bg);
   display:flex; flex-direction:column;
@@ -1139,7 +1139,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.1';
+const APP_VER='2.40.2';
 
 
 /* =========================================================
@@ -3042,29 +3042,6 @@ function openReplyMenu(ref, after){
   openMenu(items);
 }
 
-/* Focus only after the compose/reply modal has completely finished its entrance.
-   The modal itself moves horizontally, while the software keyboard moves vertically,
-   so their animations do not fight over the same axis. */
-function focusAfterModalShown(modal, field){
-  let finished=false;
-  let timer=0;
-  const focusNow=()=>{
-    if(finished) return;
-    finished=true;
-    clearTimeout(timer);
-    modal.removeEventListener('transitionend',onEnd);
-    if(!modal.isConnected || !modal.classList.contains('on') || !field.isConnected) return;
-    /* Focus immediately at transitionend: no extra RAF / timeout after the animation. */
-    try{ field.focus({preventScroll:true}); }catch(_){ field.focus(); }
-  };
-  const onEnd=e=>{
-    if(e.target===modal && e.propertyName==='transform') focusNow();
-  };
-  modal.addEventListener('transitionend',onEnd);
-  /* Fallback only for reduced-motion or a browser that drops transitionend. */
-  timer=setTimeout(focusNow,540);
-}
-
 /* =========================================================
    REPLY COMPOSER  —  the same full screen the post composer uses,
    minus the category tags
@@ -3116,6 +3093,8 @@ function openReplyCompose(p, toReply, done){
 
   let att=null;
   const ta=$('#rcText',m), go=$('#rcGo',m), attBox=$('#rcAtt',m);
+  /* Keep focus inside the original tap/click task so iOS is allowed to show the keyboard. */
+  try{ ta.focus({preventScroll:true}); }catch(_){ ta.focus(); }
   const sync=()=>{ go.disabled = ta.value.trim().length===0 && !att; };
   ta.addEventListener('input',()=>{
     $('#rcCnt',m).textContent=[...ta.value].length+'/140';
@@ -3139,8 +3118,6 @@ function openReplyCompose(p, toReply, done){
 
   $('#rcNo',m).onclick=close;
   $('#rcGo',m).onclick=fire;
-  /* Wait until the reply screen is visually settled before opening the keyboard. */
-  focusAfterModalShown(m,ta);
 
   async function fire(){
     const t=ta.value.trim();
@@ -4193,6 +4170,8 @@ function openCompose(){
 
   let tag='hitorigoto', att=null;
   const ta=$('#cmText',m), go=$('#cmGo',m), attBox=$('#cmAtt',m);
+  /* Keep focus inside the original tap/click task so iOS is allowed to show the keyboard. */
+  try{ ta.focus({preventScroll:true}); }catch(_){ ta.focus(); }
   const sync=()=>{ go.disabled = ta.value.trim().length===0 && !att; };
   ta.addEventListener('input',()=>{
     const n=[...ta.value].length;
@@ -4237,8 +4216,6 @@ function openCompose(){
       toast(hidden ? '投稿しました。「おすすめ」で見られます' : '投稿しました');
     },260);
   };
-  /* Wait until the post screen is visually settled before opening the keyboard. */
-  focusAfterModalShown(m,ta);
 
   function close(){
     m.classList.remove('on');
