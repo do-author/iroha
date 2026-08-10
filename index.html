@@ -1089,8 +1089,10 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 @keyframes toastOut{to{opacity:0; transform:translate3d(0,14px,0) scale(.95)}}
 
 /* compose / reply modal
-   Open horizontally so the keyboard's vertical viewport change never competes
-   with the entrance motion. Focus is requested immediately from the original tap. */
+   iOS only opens the software keyboard reliably when the focused field is already
+   in the visible viewport during the original tap.  The modal is therefore mounted
+   invisibly at its final position for the synchronous focus, then moved off-screen
+   before the first paint and animated horizontally as usual. */
 .modal{
   position:absolute; inset:0; z-index:80; background:var(--bg);
   display:flex; flex-direction:column;
@@ -1098,6 +1100,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   transition:transform 460ms var(--ease-out);
   will-change:transform;
 }
+.modal.prefocus{transform:none !important;transition:none !important;opacity:0;pointer-events:none}
 .modal.on{transform:none}
 .tagpick{display:flex; gap:9px; flex-wrap:wrap; margin-top:4px}
 .tagopt{
@@ -1139,7 +1142,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.2';
+const APP_VER='2.40.3';
 
 
 /* =========================================================
@@ -3086,15 +3089,31 @@ function openReplyCompose(p, toReply, done){
       <p class="safety" style="margin-top:22px">${I.shield}<span>まとまっていなくて大丈夫です。急がずどうぞ</span></p>
     </div>
   </div>`);
+  /* Mount at the final viewport position but keep it invisible for the first focus.
+     On iPhone, focusing while the modal is still translateX(100%) can suppress the
+     software keyboard even though focus() itself is synchronous. */
+  m.classList.add('prefocus');
   $('#overlays').appendChild(m);
-  fitBars(m);
-  void m.offsetHeight;
-  m.classList.add('on');
 
   let att=null;
   const ta=$('#rcText',m), go=$('#rcGo',m), attBox=$('#rcAtt',m);
-  /* Keep focus inside the original tap/click task so iOS is allowed to show the keyboard. */
   try{ ta.focus({preventScroll:true}); }catch(_){ ta.focus(); }
+  fitBars(m);
+
+  /* Before the browser paints, place the modal back at the right edge. Then animate
+     it in on the next frame. The user only sees the horizontal slide, while iOS saw
+     a visible-position textarea at the moment focus() was requested. */
+  m.style.transition='none';
+  m.style.transform='translate3d(100%,0,0)';
+  m.style.opacity='1';
+  m.classList.remove('prefocus');
+  void m.offsetHeight;
+  m.style.transition='';
+  requestAnimationFrame(()=>{
+    if(!m.isConnected) return;
+    m.style.transform='';
+    m.classList.add('on');
+  });
   const sync=()=>{ go.disabled = ta.value.trim().length===0 && !att; };
   ta.addEventListener('input',()=>{
     $('#rcCnt',m).textContent=[...ta.value].length+'/140';
@@ -4163,15 +4182,27 @@ function openCompose(){
       <p class="safety" style="margin-top:22px">${I.shield}<span>個人を特定できる情報は書かないでください</span></p>
     </div>
   </div>`);
+  /* Same iPhone-safe order as the reply composer: focus while the textarea is
+     logically at its final on-screen position, then start the horizontal entrance. */
+  m.classList.add('prefocus');
   $('#overlays').appendChild(m);
-  fitBars(m);
-  void m.offsetHeight;
-  m.classList.add('on');
 
   let tag='hitorigoto', att=null;
   const ta=$('#cmText',m), go=$('#cmGo',m), attBox=$('#cmAtt',m);
-  /* Keep focus inside the original tap/click task so iOS is allowed to show the keyboard. */
   try{ ta.focus({preventScroll:true}); }catch(_){ ta.focus(); }
+  fitBars(m);
+
+  m.style.transition='none';
+  m.style.transform='translate3d(100%,0,0)';
+  m.style.opacity='1';
+  m.classList.remove('prefocus');
+  void m.offsetHeight;
+  m.style.transition='';
+  requestAnimationFrame(()=>{
+    if(!m.isConnected) return;
+    m.style.transform='';
+    m.classList.add('on');
+  });
   const sync=()=>{ go.disabled = ta.value.trim().length===0 && !att; };
   ta.addEventListener('input',()=>{
     const n=[...ta.value].length;
