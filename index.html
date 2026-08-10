@@ -1097,6 +1097,9 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   will-change:transform;
 }
 .modal.on{transform:none}
+/* iOS: compose/reply must already be at their final position before focus.
+   The class is removed on the next frame so closing can still animate normally. */
+.modal.instant-focus-open{transform:none !important; transition:none !important}
 .tagpick{display:flex; gap:9px; flex-wrap:wrap; margin-top:4px}
 .tagopt{
   padding:9px 16px; border-radius:999px; font-size:13.5px; font-weight:800;
@@ -1137,7 +1140,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.34.0';
+const APP_VER='2.34.1';
 
 
 /* =========================================================
@@ -3040,29 +3043,17 @@ function openReplyMenu(ref, after){
   openMenu(items);
 }
 
-/* Focus only after the compose/reply modal has completely finished its entrance.
-   This prevents the iOS keyboard from racing the 500ms modal animation and panning
-   the whole app while the screen is still moving. */
-function focusAfterModalShown(modal, field){
-  let finished=false;
-  let timer=0;
-  const focusNow=()=>{
-    if(finished) return;
-    finished=true;
-    clearTimeout(timer);
-    modal.removeEventListener('transitionend',onEnd);
-    if(!modal.isConnected || !modal.classList.contains('on') || !field.isConnected) return;
-    requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      if(!modal.isConnected || !modal.classList.contains('on') || !field.isConnected) return;
-      try{ field.focus({preventScroll:true}); }catch(_){ field.focus(); }
-    }));
-  };
-  const onEnd=e=>{
-    if(e.target===modal && e.propertyName==='transform') focusNow();
-  };
-  modal.addEventListener('transitionend',onEnd);
-  /* .modal transition is 500ms; fallback covers reduced-motion / missed events. */
-  timer=setTimeout(focusNow,560);
+/* iOS only opens the software keyboard reliably while focus() is still
+   inside the original tap/click task.  For compose/reply we therefore place
+   the modal at its final position first, focus synchronously, then restore
+   normal transitions on the next frame (closing still animates). */
+function openModalWithMobileFocus(modal, field){
+  modal.classList.add('instant-focus-open','on');
+  void modal.offsetHeight;
+  try{ field.focus({preventScroll:true}); }catch(_){ field.focus(); }
+  requestAnimationFrame(()=>{
+    if(modal.isConnected) modal.classList.remove('instant-focus-open');
+  });
 }
 
 /* =========================================================
@@ -3111,8 +3102,6 @@ function openReplyCompose(p, toReply, done){
   </div>`);
   $('#overlays').appendChild(m);
   fitBars(m);
-  void m.offsetHeight;
-  m.classList.add('on');
 
   let att=null;
   const ta=$('#rcText',m), go=$('#rcGo',m), attBox=$('#rcAtt',m);
@@ -3139,8 +3128,8 @@ function openReplyCompose(p, toReply, done){
 
   $('#rcNo',m).onclick=close;
   $('#rcGo',m).onclick=fire;
-  /* Wait until the reply screen is visually settled before opening the keyboard. */
-  focusAfterModalShown(m,ta);
+  /* The modal is already at its final position before focus, and focus stays inside the user's tap. */
+  openModalWithMobileFocus(m,ta);
 
   async function fire(){
     const t=ta.value.trim();
@@ -4188,8 +4177,6 @@ function openCompose(){
   </div>`);
   $('#overlays').appendChild(m);
   fitBars(m);
-  void m.offsetHeight;
-  m.classList.add('on');
 
   let tag='hitorigoto', att=null;
   const ta=$('#cmText',m), go=$('#cmGo',m), attBox=$('#cmAtt',m);
@@ -4237,8 +4224,8 @@ function openCompose(){
       toast(hidden ? '投稿しました。「おすすめ」で見られます' : '投稿しました');
     },260);
   };
-  /* Wait until the post screen is visually settled before opening the keyboard. */
-  focusAfterModalShown(m,ta);
+  /* Same iOS-safe path as replies: final layout first, then synchronous focus. */
+  openModalWithMobileFocus(m,ta);
 
   function close(){
     m.classList.remove('on');
