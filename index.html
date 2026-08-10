@@ -445,6 +445,15 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .navbar.stuck{border-bottom-color:var(--glass-line)}
 .navbar .ttl{flex:1 1 auto; text-align:center}
 .navbar .side{min-width:44px; display:flex; justify-content:center; flex:0 0 auto}
+/* 投稿・返信モーダルは左右ボタンの文字幅に関係なく、タイトルを画面中央へ固定 */
+#composeM .navbar,#replyM .navbar{
+  display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center;
+}
+#composeM .navbar .ttl,#replyM .navbar .ttl{
+  justify-self:center; flex:none;
+}
+#composeM .navbar .side:first-child,#replyM .navbar .side:first-child{justify-self:start}
+#composeM .navbar .side:last-child,#replyM .navbar .side:last-child{justify-self:end}
 .txtbtn{padding:8px 10px; white-space:nowrap; font-size:14.5px; font-weight:700; border-radius:10px;
   transition:transform var(--dur-2) var(--spring), opacity var(--dur-1) linear}
 .txtbtn:active{transform:scale(.92); opacity:.6}
@@ -792,15 +801,84 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .aptime{flex:0 0 auto; font-size:12px; font-weight:700; color:var(--ink-3); font-variant-numeric:tabular-nums}
 
 /* composer attachment strip */
-.attachrow{display:flex; gap:10px; margin-top:16px; flex-wrap:wrap}
+.attachrow{display:flex; gap:9px; margin-top:16px; flex-wrap:nowrap}
+/* v2.40.1 の「雑談」「相談」チップと同じ外枠・色。文字だけ外してアイコンを中央に置く。 */
 .attbtn{
-  display:inline-flex; align-items:center; gap:8px;
-  padding:11px 16px; border-radius:999px; border:1.5px solid var(--line);
-  font-size:13.5px; font-weight:700; color:var(--ink-2);
-  transition:transform var(--dur-2) var(--spring), border-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
+  flex:0 0 auto;
+  display:inline-grid; place-items:center;
+  padding:9px 16px; border-radius:999px;
+  border:1.5px solid var(--line); color:var(--ink-2); background:transparent;
+  transition:transform var(--dur-2) var(--spring), background-color var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
 }
+.attbtn svg{width:20px;height:20px}
 .attbtn:active{transform:scale(.93)}
 .attbtn[disabled]{opacity:.4}
+/* 投稿・返信: 添付ボタンの見た目は変えず、配置だけ参考画像に寄せる */
+.compose-input-grid{
+  display:grid;
+  grid-template-columns:40px minmax(0,1fr);
+  column-gap:12px;
+  align-items:start;
+}
+.compose-input-rail{
+  grid-column:1;
+  grid-row:1;
+  align-self:stretch;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
+.compose-input-rail .av{
+  width:40px !important;
+  height:40px !important;
+  flex:0 0 40px;
+}
+.compose-input-line{
+  width:3px;
+  flex:1 1 auto;
+  min-height:76px;
+  margin-top:9px;
+  margin-bottom:20px;
+  border-radius:999px;
+  background:var(--line);
+}
+.compose-input-main{
+  grid-column:2;
+  min-width:0;
+}
+.compose-text{
+  width:100%;
+  min-height:130px;
+  font-size:17px;
+  font-weight:600;
+  line-height:1.7;
+  resize:none;
+  border:0;
+  outline:none;
+  box-shadow:none;
+}
+.compose-text:focus,.compose-text:focus-visible{
+  border:0;
+  outline:none;
+  box-shadow:none;
+}
+.compose-tools{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin-top:6px;
+}
+.compose-tools .attachrow{
+  margin-top:0;
+}
+.compose-count{
+  margin-left:auto;
+  text-align:right;
+  font-size:12px;
+  color:var(--ink-3);
+  font-weight:700;
+  white-space:nowrap;
+}
 .attpreview{position:relative; margin-top:14px}
 .attpreview .x{
   position:absolute; top:10px; right:10px; width:30px;height:30px;border-radius:50%;
@@ -1007,6 +1085,9 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .doc h3{margin:0 0 8px; font-size:15.5px; font-weight:800}
 .doc p{margin:0; font-size:14.5px; font-weight:500; line-height:1.85; color:var(--ink-2)}
 .safety{display:flex; align-items:center; gap:9px; margin-top:20px; font-size:12px; color:var(--ink-3); font-weight:600}
+#composeM .safety,#replyM .safety{gap:7px;font-size:11.5px;white-space:nowrap}
+#composeM .safety span,#replyM .safety span{white-space:nowrap}
+#composeM .safety svg,#replyM .safety svg{width:16px;height:16px;flex:0 0 auto}
 
 /* ============ OVERLAYS ============ */
 .scrim{
@@ -1097,10 +1178,13 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   will-change:transform;
 }
 .modal.on{transform:none}
-.tagpick{display:flex; gap:9px; flex-wrap:wrap; margin-top:4px}
+.tagpick{
+  display:grid; grid-template-columns:1.45fr repeat(4,minmax(0,1fr));
+  gap:6px; margin-top:4px; width:100%;
+}
 .tagopt{
-  padding:9px 16px; border-radius:999px; font-size:13.5px; font-weight:800;
-  border:1.5px solid var(--line); color:var(--ink-2);
+  min-width:0; padding:9px 4px; border-radius:10px; font-size:12.5px; font-weight:800;
+  border:1.5px solid var(--line); color:var(--ink-2); white-space:nowrap;
   transition:transform var(--dur-2) var(--spring), background-color var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
 }
 .tagopt:active{transform:scale(.92)}
@@ -1137,7 +1221,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.34.0';
+const APP_VER='2.40.7';
 
 
 /* =========================================================
@@ -1709,8 +1793,8 @@ const MIN=60000, HOUR=3600000;
 /* ---------- tags ---------- */
 const TAGS = {
   hitorigoto:{label:'ひとりごと', cls:'tag-hitorigoto'},
-  soudan    :{label:'相談',       cls:'tag-soudan'},
   zatsudan  :{label:'雑談',       cls:'tag-zatsudan'},
+  soudan    :{label:'相談',       cls:'tag-soudan'},
   shumi     :{label:'趣味',       cls:'tag-shumi'},
   shitsumon :{label:'質問',       cls:'tag-shitsumon'}
 };
@@ -3086,18 +3170,24 @@ function openReplyCompose(p, toReply, done){
       <div class="side" style="justify-content:flex-end"><button class="txtbtn accent" id="rcGo" disabled>返信</button></div>
     </header>
     <div class="scroll js-scroll">
-      <div style="display:flex;gap:12px">
-        ${uav('me',40)}
-        <textarea id="rcText" maxlength="140" rows="4"
-          placeholder="${target?esc(honor(target.name))+'へ、いまの言葉を。':'思ったことを、そのまま。'}"
-          style="flex:1;font-size:17px;font-weight:600;line-height:1.7;resize:none;min-height:130px"></textarea>
+      <div class="compose-input-grid">
+        <div class="compose-input-rail">
+          ${uav('me',40)}
+          <div class="compose-input-line"></div>
+        </div>
+        <div class="compose-input-main">
+          <textarea class="compose-text" id="rcText" maxlength="140" rows="4"
+            placeholder="${target?esc(honor(target.name))+'へ、いまの言葉を。':'思ったことを、そのまま。'}"></textarea>
+          <div class="compose-tools">
+            <div class="attachrow">
+              <button class="attbtn" data-att="media" aria-label="画像・動画を追加" title="画像・動画">${I.camera}</button>
+              <button class="attbtn" data-att="audio" aria-label="音声を追加" title="音声">${I.mic}</button>
+            </div>
+            <div class="compose-count" id="rcCnt">0/140</div>
+          </div>
+          <div id="rcAtt"></div>
+        </div>
       </div>
-      <div style="margin-top:6px;text-align:right;font-size:12px;color:var(--ink-3);font-weight:700" id="rcCnt">0/140</div>
-      <div class="attachrow">
-        <button class="attbtn" data-att="media">${I.camera}画像・動画</button>
-        <button class="attbtn" data-att="audio">${I.mic}音声</button>
-      </div>
-      <div id="rcAtt"></div>
       <h4 style="margin:18px 0 10px;font-size:13px;font-weight:800">返信先</h4>
       <div class="rc-quote">
         ${uav(src.u,32)}
@@ -3106,7 +3196,7 @@ function openReplyCompose(p, toReply, done){
           ${quoted?`<span>${esc(quoted)}</span>`:''}
         </div>
       </div>
-      <p class="safety" style="margin-top:22px">${I.shield}<span>まとまっていなくて大丈夫です。急がずどうぞ</span></p>
+      <p class="safety" style="margin-top:22px">${I.shield}<span>出会い募集・連絡先・金銭要求の投稿は禁止です</span></p>
     </div>
   </div>`);
   $('#overlays').appendChild(m);
@@ -4168,22 +4258,28 @@ function openCompose(){
       <div class="side" style="justify-content:flex-end"><button class="txtbtn accent" id="cmGo" disabled>投稿</button></div>
     </header>
     <div class="scroll js-scroll">
-      <div style="display:flex;gap:12px">
-        ${uav('me',40)}
-        <textarea id="cmText" maxlength="140" rows="4" placeholder="いま、何を話したい？"
-          style="flex:1;font-size:17px;font-weight:600;line-height:1.7;resize:none;min-height:130px"></textarea>
+      <div class="compose-input-grid">
+        <div class="compose-input-rail">
+          ${uav('me',40)}
+          <div class="compose-input-line"></div>
+        </div>
+        <div class="compose-input-main">
+          <textarea class="compose-text" id="cmText" maxlength="140" rows="4" placeholder="いま、何を話したい？"></textarea>
+          <div class="compose-tools">
+            <div class="attachrow">
+              <button class="attbtn" data-att="media" aria-label="画像・動画を追加" title="画像・動画">${I.camera}</button>
+              <button class="attbtn" data-att="audio" aria-label="音声を追加" title="音声">${I.mic}</button>
+            </div>
+            <div class="compose-count" id="cmCnt">0/140</div>
+          </div>
+          <div id="cmAtt"></div>
+        </div>
       </div>
-      <div style="margin-top:6px;text-align:right;font-size:12px;color:var(--ink-3);font-weight:700" id="cmCnt">0/140</div>
-      <div class="attachrow">
-        <button class="attbtn" data-att="media">${I.camera}画像・動画</button>
-        <button class="attbtn" data-att="audio">${I.mic}音声</button>
-      </div>
-      <div id="cmAtt"></div>
-      <h4 style="margin:18px 0 10px;font-size:13px;font-weight:800">話題のタグ</h4>
+      <h4 style="margin:18px 0 10px;font-size:13px;font-weight:800">カテゴリー</h4>
       <div class="tagpick" id="cmTags">
         ${Object.entries(TAGS).map(([k,v],i)=>`<button class="tagopt${i===0?' on':''}" data-t="${k}">${v.label}</button>`).join('')}
       </div>
-      <p class="safety" style="margin-top:22px">${I.shield}<span>個人を特定できる情報は書かないでください</span></p>
+      <p class="safety" style="margin-top:22px">${I.shield}<span>出会い募集・連絡先・金銭要求の投稿は禁止です</span></p>
     </div>
   </div>`);
   $('#overlays').appendChild(m);
