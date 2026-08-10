@@ -1097,9 +1097,20 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   will-change:transform;
 }
 .modal.on{transform:none}
-/* iOS: compose/reply must already be at their final position before focus.
-   The class is removed on the next frame so closing can still animate normally. */
-.modal.instant-focus-open{transform:none !important; transition:none !important}
+/* iOS compose/reply opening:
+   Keep the layout at its final vertical position so focus/keyboard cannot race a
+   bottom-up transition.  A tiny horizontal compositor-only motion keeps the
+   "opened" feeling without moving the focused field toward the keyboard. */
+.modal.focus-fast-open{
+  transition:none !important;
+  animation:focusFastOpen 110ms cubic-bezier(.22,1,.36,1) both;
+  transform-origin:50% 50%;
+  will-change:transform,opacity;
+}
+@keyframes focusFastOpen{
+  from{opacity:.68;transform:translate3d(14px,0,0) scale(.998)}
+  to{opacity:1;transform:translate3d(0,0,0) scale(1)}
+}
 .tagpick{display:flex; gap:9px; flex-wrap:wrap; margin-top:4px}
 .tagopt{
   padding:9px 16px; border-radius:999px; font-size:13.5px; font-weight:800;
@@ -1140,7 +1151,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.34.1';
+const APP_VER='2.34.2';
 
 
 /* =========================================================
@@ -3044,16 +3055,22 @@ function openReplyMenu(ref, after){
 }
 
 /* iOS only opens the software keyboard reliably while focus() is still
-   inside the original tap/click task.  For compose/reply we therefore place
-   the modal at its final position first, focus synchronously, then restore
-   normal transitions on the next frame (closing still animates). */
+   inside the original tap/click task.  The modal is therefore placed at its
+   final layout position immediately, while a very short horizontal animation
+   runs on the compositor.  Focus remains synchronous and closing keeps the
+   normal bottom transition. */
 function openModalWithMobileFocus(modal, field){
-  modal.classList.add('instant-focus-open','on');
+  modal.classList.add('on','focus-fast-open');
   void modal.offsetHeight;
   try{ field.focus({preventScroll:true}); }catch(_){ field.focus(); }
-  requestAnimationFrame(()=>{
-    if(modal.isConnected) modal.classList.remove('instant-focus-open');
-  });
+
+  let cleared=false;
+  const clearOpenMotion=()=>{
+    if(cleared) return; cleared=true;
+    if(modal.isConnected) modal.classList.remove('focus-fast-open');
+  };
+  modal.addEventListener('animationend',clearOpenMotion,{once:true});
+  setTimeout(clearOpenMotion,180);
 }
 
 /* =========================================================
