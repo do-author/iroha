@@ -1346,7 +1346,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.22';
+const APP_VER='2.40.23';
 
 
 /* =========================================================
@@ -2171,9 +2171,10 @@ function chatWith(uid){
   return S.chats.find(c=>c.u===uid)||null;
 }
 /* "返信した相手のみ":
-   Restriction exists only until the first reply from the other person.
-   After they reply once, this chat is permanently a normal DM.
-   Deleting the chat deletes that history too, so a new chat starts restricted again. */
+   - 文章なしの「話す」申請(system message)は初回送信に数えない
+   - 自分が実際の文章を1通送ったら、相手の最初の実返信まで待つ
+   - 相手が1度でも実メッセージを返したら、そのチャットは以後ずっと通常DM
+   - チャット削除で履歴ごと消えるので、その時だけリセット */
 function canSendDmNow(c){
   if(!c) return false;
   const policy=dmPolicyOf(c.u);
@@ -2181,11 +2182,18 @@ function canSendDmNow(c){
 
   const good=(c.msgs||[]).filter(m=>!m.failed);
 
-  /* Once the owner of the policy has replied once, the conversation is established. */
-  if(good.some(m=>!m.me)) return true;
+  /* System-only request is not a reply. A real text/media/audio message is. */
+  const gotRealReply=good.some(m=>
+    !m.me && !m.sys && (String(m.t||'').trim().length>0 || !!m.media)
+  );
+  if(gotRealReply) return true;
 
-  /* Before establishment, I may send exactly one first message/request. */
-  return !good.some(m=>m.me);
+  /* Only an actual outgoing TEXT consumes the one-message allowance.
+     An empty 「話す」 request does not. */
+  const sentRealText=good.some(m=>
+    m.me && !m.sys && String(m.t||'').trim().length>0
+  );
+  return !sentRealText;
 }
 function notifyDmWait(){
   toast('相手が返信していないので送れません');
@@ -4067,7 +4075,7 @@ function openMessageMenu(c, m, th){
    ========================================================= */
 const WHO_OPTS={
   all    :{label:'すべての人',     sub:'誰でも何通でもDMできます'},
-  replied:{label:'返信した相手のみ', sub:'最初は1通だけ。あなたが一度返信すると、その後は普通のDMになります'},
+  replied:{label:'返信した相手のみ', sub:'最初の文章は1通だけ。文章なしの申請は数えず、あなたが一度返信すると普通のDMになります'},
   fav    :{label:'お気に入りのみ',   sub:'あなたがお気に入りした人だけ新しくDMを始められます'}
 };
 
