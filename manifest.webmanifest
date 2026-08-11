@@ -1,0 +1,11 @@
+{
+  "id": "./",
+  "name": "iroha",
+  "short_name": "iroha",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#FFFFFF",
+  "lang": "ja"
+}

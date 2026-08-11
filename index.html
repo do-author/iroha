@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#FFFFFF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="iroha">
+<link rel="manifest" href="./manifest.webmanifest">
 <script>
 /* saved theme before first paint: keeps iOS/Safari top area in sync */
 try{
@@ -1444,7 +1448,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.31';
+const APP_VER='2.40.32';
 
 
 /* =========================================================
@@ -4119,6 +4123,105 @@ function syncCard(p){
 
 
 
+
+/* =========================================================
+   DEVICE NOTIFICATIONS / PWA
+   ========================================================= */
+let IROHA_SW_REG=null;
+
+function isStandaloneWebApp(){
+  return !!(
+    window.matchMedia?.('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true
+  );
+}
+function notificationSupported(){
+  return 'Notification' in window && 'serviceWorker' in navigator;
+}
+function notificationPermission(){
+  return notificationSupported() ? Notification.permission : 'unsupported';
+}
+function notificationPermissionLabel(){
+  const p=notificationPermission();
+  if(p==='granted') return 'オン';
+  if(p==='denied') return '端末設定でオフ';
+  if(p==='unsupported') return 'この端末では利用できません';
+  return 'オフ';
+}
+async function ensureIrohaServiceWorker(){
+  if(!('serviceWorker' in navigator)) return null;
+  try{
+    const reg=await navigator.serviceWorker.register('./iroha-sw.js',{scope:'./'});
+    IROHA_SW_REG=reg;
+    await navigator.serviceWorker.ready;
+    return reg;
+  }catch(e){
+    console.warn('[iroha notify] service worker',e);
+    return null;
+  }
+}
+async function requestDeviceNotifications(){
+  if(!notificationSupported()){
+    toast('このブラウザでは端末通知を利用できません');
+    return false;
+  }
+
+  /* iPhone/iPad Web Push is for Home Screen web apps. */
+  const isiOS=/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+  if(isiOS && !isStandaloneWebApp()){
+    toast('iPhoneではホーム画面に追加したirohaから設定してください');
+    return false;
+  }
+
+  const reg=await ensureIrohaServiceWorker();
+  if(!reg){
+    toast('通知の準備に失敗しました');
+    return false;
+  }
+
+  let permission=Notification.permission;
+  if(permission==='default'){
+    permission=await Notification.requestPermission();
+  }
+
+  if(permission==='granted') return true;
+  if(permission==='denied'){
+    toast('通知が拒否されています。端末の通知設定から変更できます');
+    return false;
+  }
+  return false;
+}
+async function showDeviceTestNotification(){
+  const ok=await requestDeviceNotifications();
+  if(!ok) return false;
+
+  const reg=IROHA_SW_REG || await navigator.serviceWorker.ready;
+  await reg.showNotification('iroha',{
+    body:'端末通知のテストです',
+    tag:'iroha-device-test',
+    renotify:false,
+    data:{url:location.href}
+  });
+
+  if(navigator.setAppBadge){
+    try{ await navigator.setAppBadge(1); }catch(_){}
+  }
+  return true;
+}
+function syncNotificationSettingsUI(root=document){
+  const sw=$('#notifySw',root);
+  const sub=$('#notifyNow',root);
+  if(sw) sw.classList.toggle('on',notificationPermission()==='granted');
+  if(sub) sub.textContent=notificationPermissionLabel();
+}
+
+/* Register silently on normal launches.
+   Permission itself is NEVER requested here; that must stay behind a user tap. */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{ ensureIrohaServiceWorker(); },{once:true});
+}
+
 /* =========================================================
    SETTINGS
    ========================================================= */
@@ -4155,6 +4258,17 @@ function pushSettings(){
           .map(([k,ic,t,sub])=>`<button class="gitem" data-media="${k}">
             <span class="gi">${ic}</span><div class="gt"><b>${t}</b><span>${sub}</span></div>
             <span class="radio${S.media===k?' on':''}"></span></button>`).join('')}
+      </div>
+    </div>
+
+    <div class="group"><h4>通知</h4>
+      <div class="gcard">
+        <button class="gitem" id="stNotify"><span class="gi">${I.bell}</span>
+          <div class="gt"><b>端末通知</b><span id="notifyNow">${notificationPermissionLabel()}</span></div>
+          <span class="sw${notificationPermission()==='granted'?' on':''}" id="notifySw"></span></button>
+        <button class="gitem" id="stNotifyTest"><span class="gi">${I.bell}</span>
+          <div class="gt"><b>テスト通知</b><span>ロック画面に通知が出るか確認します</span></div>
+          <span class="chev">${I.chev}</span></button>
       </div>
     </div>
 
@@ -4219,6 +4333,29 @@ function pushSettings(){
     });
     toast(b.querySelector('b').textContent+'に変更しました');
   }));
+  $('#stNotify',body).onclick=async()=>{
+    haptic(8);
+    if(notificationPermission()==='granted'){
+      toast('端末通知はオンです。オフにする場合は端末の通知設定から変更できます');
+      syncNotificationSettingsUI(body);
+      return;
+    }
+    const ok=await requestDeviceNotifications();
+    syncNotificationSettingsUI(body);
+    if(ok) toast('端末通知をオンにしました');
+  };
+  $('#stNotifyTest',body).onclick=async()=>{
+    haptic(8);
+    try{
+      const ok=await showDeviceTestNotification();
+      syncNotificationSettingsUI(body);
+      if(ok) toast('テスト通知を送信しました');
+    }catch(e){
+      console.warn('[iroha notify] test',e);
+      toast('テスト通知を送れませんでした');
+    }
+  };
+
   $('#stQuiet',body).onclick=()=>{
     haptic(8); S.quiet=!S.quiet; savePrefs();
     $('#quietSw',body).classList.toggle('on',S.quiet);
