@@ -870,15 +870,21 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 .media img,.media video{display:block; width:100%; max-height:340px; object-fit:cover; background:#000}
 .media.blurred img,.media.blurred video{filter:blur(26px) saturate(.7); transform:scale(1.08)}
+/* iOS Safari can let a native <video> consume the tap before the post-card
+   click guard sees it. While safety blur is active, the video is display-only:
+   the veil owns the tap. Controls become interactive again after reveal. */
+.media.blurred video{pointer-events:none}
 .media .veil{
-  position:absolute; inset:0; display:grid; place-items:center; gap:8px;
+  position:absolute; inset:0; z-index:5; display:grid; place-items:center; gap:8px;
+  pointer-events:auto; touch-action:manipulation;
   background:rgba(12,11,9,.34); color:#fff; font-size:13px; font-weight:800;
   align-content:center; text-align:center; padding:16px;
 }
 .media .veil small{display:block; font-weight:600; opacity:.8; font-size:11.5px; margin-top:4px}
 .media-filter-restore{
-  position:absolute; right:10px; bottom:10px; z-index:4;
+  position:absolute; right:10px; bottom:10px; z-index:6;
   display:inline-flex; align-items:center; gap:6px;
+  touch-action:manipulation;
   padding:7px 10px; border-radius:999px;
   background:rgba(18,17,15,.76); color:#fff;
   -webkit-backdrop-filter:blur(12px); backdrop-filter:blur(12px);
@@ -1338,7 +1344,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.18';
+const APP_VER='2.40.20';
 
 
 /* =========================================================
@@ -1439,7 +1445,9 @@ async function cloudEnsureProfile(){
   if(r.error) throw r.error;
   if(r.data){
     Object.assign(me,{name:r.data.name,handle:r.data.handle,bio:r.data.bio||'',av:r.data.av||me.av,
-      gender:r.data.gender||'secret',img:r.data.avatar_url||null,banner:r.data.banner_url||null,cloudId:r.data.id});
+      gender:r.data.gender||'secret',img:r.data.avatar_url||null,banner:r.data.banner_url||null,cloudId:r.data.id,
+      dmPolicy:['all','replied','fav'].includes(r.data.dm_policy)?r.data.dm_policy:S.who});
+    if(['all','replied','fav'].includes(r.data.dm_policy)) S.who=r.data.dm_policy;
     return;
   }
   let handle=me.handle;
@@ -1525,7 +1533,7 @@ async function cloudFetchProfileReplies(uid){
     const fresh={id:row.id,u:localKey(row.author_id),t:row.body||'',tag:row.tag||'hitorigoto',
       media:await cloudHydrateMedia(row.media),ts:new Date(row.created_at).getTime(),
       likes:likesByPost.get(row.id)||0,replies:rep.length,liked:myPostLikes.has(row.id),
-      req:false,rep,arch:!!row.archived,cloud:true};
+      req:isPostRequested(row.id),rep,arch:!!row.archived,cloud:true};
     const existing=S.posts.find(p=>p.id===row.id);
     if(existing){
       const profileOnly=!!existing.profileOnly;
@@ -1543,7 +1551,7 @@ async function cloudFetchProfileReplies(uid){
 function cloudViewSignature(){
   const users=Object.values(S.users)
     .filter(u=>!u.demo&&!u.bot)
-    .map(u=>[u.id,u.name,u.handle,u.bio,u.av,u.gender,u.img||'',u.banner||'',!!u.fav,!!u.favMe,u.posts||0,u.replies||0,u.talks||0])
+    .map(u=>[u.id,u.name,u.handle,u.bio,u.av,u.gender,u.img||'',u.banner||'',u.dmPolicy||'all',!!u.fav,!!u.favMe,u.posts||0,u.replies||0,u.talks||0])
     .sort((a,b)=>String(a[0]).localeCompare(String(b[0])));
   const posts=S.posts.filter(p=>p.cloud).map(p=>[
     p.id,p.u,p.t,p.tag,p.ts,p.likes,p.replies,!!p.liked,!!p.arch,
@@ -1565,6 +1573,7 @@ async function cloudReloadAll(initial=false, applyPosts=true){
   const beforeSig=initial ? '' : cloudViewSignature();
   try{
     const sb=CLOUD.client, me=CLOUD.userId;
+    const previousCloudPeers=new Set(S.chats.filter(c=>c.cloud).map(c=>c.u));
     let [profiles,posts,favOut,favIn,chats,states,notes]=await Promise.all([
       cloudRows(sb.from('profiles').select('*')),
       cloudRows(sb.from('posts').select('*').order('created_at',{ascending:false}).limit(250)),
@@ -1583,7 +1592,10 @@ async function cloudReloadAll(initial=false, applyPosts=true){
       const key=localKey(u.id);
       const target=key==='me'?S.users.me:(S.users[key]||{id:key});
       Object.assign(target,{id:key,cloudId:u.id,name:u.name,handle:u.handle,bio:u.bio||'',av:u.av||'stone',gender:u.gender||'secret',
-        img:u.avatar_url||null,banner:u.banner_url||null,posts:0,replies:0,talks:0,fav:false,favMe:false});
+        img:u.avatar_url||null,banner:u.banner_url||null,
+        dmPolicy:['all','replied','fav'].includes(u.dm_policy)?u.dm_policy:(key==='me'?S.who:'all'),
+        posts:0,replies:0,talks:0,fav:false,favMe:false});
+      if(key==='me' && ['all','replied','fav'].includes(u.dm_policy)) S.who=u.dm_policy;
       S.users[key]=target; if(key!=='me') CLOUD.remoteUserIds.add(key);
     }
     const outSet=new Set(favOut.map(x=>x.target_id)), inSet=new Set(favIn.map(x=>x.owner_id));
@@ -1634,7 +1646,7 @@ async function cloudReloadAll(initial=false, applyPosts=true){
       const rep=repsByPost.get(p.id)||[];
       const lp={id:p.id,u:localKey(p.author_id),t:p.body||'',tag:p.tag||'hitorigoto',media:await cloudHydrateMedia(p.media),
         ts:new Date(p.created_at).getTime(),likes:likesByPost.get(p.id)||0,replies:rep.length,liked:myPostLikes.has(p.id),
-        req:false,rep,arch:!!p.archived,cloud:true};
+        req:isPostRequested(p.id),rep,arch:!!p.archived,cloud:true};
       remotePosts.push(lp); if(S.users[lp.u]) S.users[lp.u].posts=(S.users[lp.u].posts||0)+1;
     }
     /* Home timeline is X-like: background sync may learn that the server changed,
@@ -1673,6 +1685,16 @@ async function cloudReloadAll(initial=false, applyPosts=true){
       return {id:c.id,u:key,unread,ts:Math.max(new Date(c.updated_at||c.created_at).getTime(),...(ms.map(m=>m.ts||0))),msgs:ms,pin:!!st?.pinned,hidden:!!st?.hidden,cloud:true};
     });
     S.chats=cloudChats;
+
+    /* If a chat was deleted by either participant, this device must also forget
+       old 「申請済み」 markers so the relationship really returns to "from scratch". */
+    const currentCloudPeers=new Set(cloudChats.map(c=>c.u));
+    for(const uid of previousCloudPeers){
+      if(!currentCloudPeers.has(uid)) clearRequestedForUser(uid);
+    }
+    S.posts.forEach(p=>{
+      p.req=isPostRequested(p.id) && !!S.chats.find(c=>c.u===p.u);
+    });
 
     S.notes={like:[],reply:[]};
     for(const n of notes){
@@ -1764,8 +1786,36 @@ async function cloudSetReplyLike(r){
 async function cloudSaveProfile(u){
   if(!CLOUD.enabled) return;
   const avatar=await cloudUploadProfileAsset(u.img,'avatar'), banner=await cloudUploadProfileAsset(u.banner,'banner');
-  const r=await CLOUD.client.from('profiles').update({name:u.name,handle:u.handle,bio:u.bio||'',av:u.av,gender:u.gender||'secret',avatar_url:avatar,banner_url:banner,updated_at:new Date().toISOString()}).eq('id',CLOUD.userId);
+  const r=await CLOUD.client.from('profiles').update({name:u.name,handle:u.handle,bio:u.bio||'',av:u.av,gender:u.gender||'secret',avatar_url:avatar,banner_url:banner,dm_policy:S.who,updated_at:new Date().toISOString()}).eq('id',CLOUD.userId);
   if(r.error) throw r.error; u.img=avatar; u.banner=banner;
+}
+async function cloudSetDmPolicy(policy){
+  if(!CLOUD.enabled) return;
+  const r=await CLOUD.client.from('profiles').update({dm_policy:policy,updated_at:new Date().toISOString()}).eq('id',CLOUD.userId);
+  if(r.error) throw r.error;
+  if(S.users.me) S.users.me.dmPolicy=policy;
+}
+async function cloudDeleteChatForEveryone(c){
+  if(!CLOUD.enabled||!c?.cloud) return;
+  const other=cloudKey(c.u);
+
+  /* Delete DM storage objects while the chat still exists, because storage RLS
+     verifies that the caller is a participant in this chat. */
+  for(const sender of [CLOUD.userId,other].filter(Boolean)){
+    try{
+      const folder=`${c.id}/${sender}`;
+      const {data,error}=await CLOUD.client.storage.from('iroha-dm').list(folder,{limit:1000});
+      if(error) throw error;
+      const paths=(data||[]).filter(x=>x.name && x.id).map(x=>`${folder}/${x.name}`);
+      if(paths.length){
+        const rm=await CLOUD.client.storage.from('iroha-dm').remove(paths);
+        if(rm.error) throw rm.error;
+      }
+    }catch(e){ console.warn('[iroha cloud] dm media cleanup',e); }
+  }
+
+  const r=await CLOUD.client.from('direct_chats').delete().eq('id',c.id);
+  if(r.error) throw r.error;
 }
 async function cloudSetFavorite(uid,on){
   if(!CLOUD.enabled||!cloudUserKeyIsReal(uid)) return;
@@ -1978,17 +2028,19 @@ const S = {
   filter:'osusume',
   media:'safety',
   quiet:false,
-  who:'replied',      /* who may start a conversation with me */
-  noteSeen:new Set(),   /* notification ids already looked at */
+  who:'replied',      /* who may start/send a conversation with me */
+  postCooldowns:{},    /* tag -> optimistic submit time; persisted */
+  requestedPosts:[],   /* post ids whose 「話す」 request was already sent on this device */
+  noteSeen:new Set(),  /* notification ids already looked at */
   blocked:[],          /* user ids — their posts vanish entirely */
   muted:[],            /* user ids — quieter, but still reachable */
   users:{
-    me  :{id:'me', name:'妖精さん', handle:FRESH_HANDLE, bio:'', av:FRESH_AV, gender:'secret', posts:0, replies:0, talks:0},
-    bot :{id:'bot', name:'iroha Bot', handle:'iroha_official', bio:'irohaの公式Botです。\n会話のきっかけになる話題を届けます。', av:'stone', bot:true, official:true, posts:31, replies:0, talks:1, fav:false},
-    nagi:{id:'nagi', gender:'secret', name:'なぎ', handle:'nagi_0000', bio:'夜のほうが言葉が出てくる。', av:'slate', demo:true, posts:12, replies:8, talks:0, fav:false},
-    koto:{id:'koto', gender:'female', favMe:true, name:'ことは', handle:'kotoha_pon', bio:'たのしいことを集めています。', av:'amber', demo:true, posts:24, replies:19, talks:0, fav:false},
-    rui :{id:'rui', gender:'male', name:'るい', handle:'rui_room', bio:'気になったことはだいたい聞きます。', av:'moss', demo:true, posts:17, replies:22, talks:0, fav:false},
-    mio :{id:'mio', gender:'female', favMe:true, name:'みお', handle:'mio_note', bio:'music / coffee / 散歩', av:'clay', demo:true, posts:9, replies:6, talks:0, fav:false}
+    me  :{id:'me', name:'妖精さん', handle:FRESH_HANDLE, bio:'', av:FRESH_AV, gender:'secret', posts:0, replies:0, talks:0, dmPolicy:'replied'},
+    bot :{id:'bot', name:'iroha Bot', handle:'iroha_official', bio:'irohaの公式Botです。\n会話のきっかけになる話題を届けます。', av:'stone', bot:true, official:true, posts:31, replies:0, talks:1, fav:false, dmPolicy:'all'},
+    nagi:{id:'nagi', gender:'secret', name:'なぎ', handle:'nagi_0000', bio:'夜のほうが言葉が出てくる。', av:'slate', demo:true, posts:12, replies:8, talks:0, fav:false, dmPolicy:'all'},
+    koto:{id:'koto', gender:'female', favMe:true, name:'ことは', handle:'kotoha_pon', bio:'たのしいことを集めています。', av:'amber', demo:true, posts:24, replies:19, talks:0, fav:false, dmPolicy:'all'},
+    rui :{id:'rui', gender:'male', name:'るい', handle:'rui_room', bio:'気になったことはだいたい聞きます。', av:'moss', demo:true, posts:17, replies:22, talks:0, fav:false, dmPolicy:'all'},
+    mio :{id:'mio', gender:'female', favMe:true, name:'みお', handle:'mio_note', bio:'music / coffee / 散歩', av:'clay', demo:true, posts:9, replies:6, talks:0, fav:false, dmPolicy:'all'}
   },
   DEMOS:['nagi','koto','rui','mio'],
   posts:[
@@ -2027,6 +2079,13 @@ function loadPrefs(){
     if(['safety','raw','hide'].includes(p.media)) S.media=p.media;
     if(typeof p.quiet==='boolean') S.quiet=p.quiet;
     if(['all','fav','replied'].includes(p.who)) S.who=p.who;
+    if(p.postCooldowns && typeof p.postCooldowns==='object'){
+      S.postCooldowns={};
+      for(const [k,v] of Object.entries(p.postCooldowns)){
+        if(TAGS[k] && Number.isFinite(Number(v))) S.postCooldowns[k]=Number(v);
+      }
+    }
+    if(Array.isArray(p.requestedPosts)) S.requestedPosts=[...new Set(p.requestedPosts.filter(x=>typeof x==='string'))];
     if(Array.isArray(p.blocked)) S.blocked=[...new Set(p.blocked.filter(x=>typeof x==='string'))];
     if(Array.isArray(p.muted)) S.muted=[...new Set(p.muted.filter(x=>typeof x==='string'))];
   }catch(_){ }
@@ -2035,9 +2094,81 @@ function savePrefs(){
   try{
     localStorage.setItem(PREF_KEY,JSON.stringify({
       theme:S.theme, filter:S.filter, media:S.media, quiet:S.quiet, who:S.who,
+      postCooldowns:S.postCooldowns, requestedPosts:S.requestedPosts,
       blocked:S.blocked, muted:S.muted
     }));
   }catch(_){ }
+}
+
+const POST_CATEGORY_COOLDOWN=60*1000;
+function categoryCooldownLeft(tag,at=Date.now()){
+  const started=Number(S.postCooldowns[tag]||0);
+  return Math.max(0, POST_CATEGORY_COOLDOWN-(at-started));
+}
+function startCategoryCooldown(tag,at=Date.now()){
+  S.postCooldowns[tag]=at; savePrefs(); return at;
+}
+function rollbackCategoryCooldown(tag,stamp){
+  if(Number(S.postCooldowns[tag])===Number(stamp)){
+    delete S.postCooldowns[tag];
+    savePrefs();
+  }
+}
+function isPostRequested(pid){
+  return S.requestedPosts.includes(String(pid));
+}
+function markPostRequested(pid){
+  pid=String(pid||''); if(!pid) return;
+  if(!S.requestedPosts.includes(pid)) S.requestedPosts.push(pid);
+  const p=S.posts.find(x=>x.id===pid); if(p) p.req=true;
+  savePrefs();
+}
+function clearRequestedForUser(uid){
+  const ids=new Set(S.posts.filter(p=>p.u===uid).map(p=>String(p.id)));
+  if(!ids.size) return;
+  const next=S.requestedPosts.filter(id=>!ids.has(String(id)));
+  if(next.length!==S.requestedPosts.length){
+    S.requestedPosts=next;
+    S.posts.forEach(p=>{ if(p.u===uid) p.req=false; });
+    savePrefs();
+  }
+}
+function dmPolicyOf(uid){
+  const p=S.users[uid]?.dmPolicy;
+  return ['all','replied','fav'].includes(p)?p:'all';
+}
+function chatWith(uid){
+  return S.chats.find(c=>c.u===uid)||null;
+}
+/* "返信した相手のみ": one outgoing message, then wait until the other person replies. */
+function canSendDmNow(c){
+  if(!c) return false;
+  const policy=dmPolicyOf(c.u);
+  if(policy==='all' || policy==='fav') return true;
+  const good=(c.msgs||[]).filter(m=>!m.failed);
+  let lastMine=-Infinity, lastTheirs=-Infinity;
+  for(const m of good){
+    const ts=Number(m.ts)||0;
+    if(m.me) lastMine=Math.max(lastMine,ts);
+    else lastTheirs=Math.max(lastTheirs,ts);
+  }
+  return lastMine===-Infinity || lastTheirs>lastMine;
+}
+function notifyDmWait(){
+  toast('相手が返信していないので送れません');
+}
+function notifyFavOnly(){
+  toast('相手にお気に入りされていないのでDMできません');
+}
+/* Starting a new chat is different from opening an existing one.
+   favorite-only blocks only a NEW conversation; an existing DM can still open. */
+function canStartNewDm(uid,notify=true){
+  if(chatWith(uid)) return true;
+  if(dmPolicyOf(uid)==='fav' && !favoredBy(uid)){
+    if(notify) notifyFavOnly();
+    return false;
+  }
+  return true;
 }
 
 /* ---------- theme ---------- */
@@ -2520,6 +2651,10 @@ function wirePostActions(root){
   root.addEventListener('click', onPostClick);
 }
 function onPostClick(e){
+  /* Video controls are an interaction of their own. Never let a play/pause/
+     scrub tap bubble into the post card and open the post/reply screen. */
+  if(e.target.closest('.media video')){ e.stopPropagation(); return; }
+
   const rm=e.target.closest('[data-repmore]');
   if(rm){ e.stopPropagation(); openReplyMenu(rm.dataset.repmore, ()=>refreshInPlace()); return; }
   const rlk=e.target.closest('[data-replike-card]');
@@ -2976,8 +3111,10 @@ function pushProfile(uid){
       }
     };
     $('#dmBtn',body).onclick=()=>{
-      const c=S.chats.find(c=>c.u===uid);
-      if(c) pushThread(c.id); else openRequest(null,uid);
+      const c=chatWith(uid);
+      if(c){ pushThread(c.id); return; }
+      if(!canStartNewDm(uid,true)) return;
+      openRequest(null,uid);
     };
     }
     const loadReplies=async()=>{
@@ -3099,6 +3236,7 @@ function pushThread(cid){
   function fire(){
     const t=inp.value.trim(), picked=dmAtt;
     if(!t && !picked) return;
+    if(!canSendDmNow(c)){ notifyDmWait(); return; }
     if(picked && (picked.kind==='image'||picked.kind==='video') && !favoredBy(c.u)){
       toast('お気に入りされてないので送信できません');
       return;
@@ -3132,8 +3270,9 @@ function pushThread(cid){
         if(liveM && liveM!==m) Object.assign(liveM,m);
         else if(!liveM) liveC.msgs.push(m);
         if(th.isConnected) syncThread(th,liveC);
-        cloudErr('message',e);
-        toast('メッセージを送信できませんでした');
+        if(String(e?.message||e).includes('dm_waiting_for_reply')) notifyDmWait();
+        else if(String(e?.message||e).includes('dm_favorite_only')) notifyFavOnly();
+        else{ cloudErr('message',e); toast('メッセージを送信できませんでした'); }
       }
     })();
 
@@ -3774,9 +3913,9 @@ function openMessageMenu(c, m, th){
    SETTINGS SUB-SCREENS
    ========================================================= */
 const WHO_OPTS={
-  all    :{label:'すべての人',     sub:'誰でも会話を申請できます'},
-  replied:{label:'返信した相手のみ', sub:'あなたが返信した人だけが申請できます'},
-  fav    :{label:'お気に入りのみ',   sub:'お気に入りにした人だけが申請できます'}
+  all    :{label:'すべての人',     sub:'誰でも何通でもDMできます'},
+  replied:{label:'返信した相手のみ', sub:'相手は1通送ったあと、あなたが返信するまで追加送信できません'},
+  fav    :{label:'お気に入りのみ',   sub:'あなたがお気に入りした人だけ新しくDMを始められます'}
 };
 
 function pushWhoCanTalk(){
@@ -3788,9 +3927,10 @@ function pushWhoCanTalk(){
         <div class="gt"><b>${v.label}</b><span>${v.sub}</span></div>
         <span class="radio${S.who===k?' on':''}"></span></button>`).join('')}
     </div><p class="note" style="text-align:left;margin:12px 6px">
-      設定にかかわらず、ブロックした相手からは申請できません。</p></div>`;
+      設定にかかわらず、ブロックした相手からは申請できません。既にあるDMは「お気に入りのみ」に変えても開けます。</p></div>`;
     $$('[data-who]',body).forEach(b=>b.addEventListener('click',()=>{
-      haptic(8); S.who=b.dataset.who; savePrefs();
+      haptic(8); S.who=b.dataset.who; if(S.users.me) S.users.me.dmPolicy=S.who; savePrefs();
+      cloudSetDmPolicy(S.who).catch(e=>{ cloudErr('dm policy',e); toast('会話設定を保存できませんでした'); });
       $$('[data-who] .radio',body).forEach(r=>r.classList.remove('on'));
       b.querySelector('.radio').classList.add('on');
       const now=$('#whoNow'); if(now) now.textContent=WHO_OPTS[S.who].label;
@@ -4242,7 +4382,10 @@ function restoreMediaFilterByAttr(keyAttr){
 }
 
 function handleMediaSafetyClick(e){
-  const restore=e.target.closest('[data-restore-filter]');
+  const target=e.target instanceof Element ? e.target : null;
+  if(!target) return false;
+
+  const restore=target.closest('[data-restore-filter]');
   if(restore){
     const media=restore.closest('[data-media-key]');
     if(!media) return false;
@@ -4251,7 +4394,10 @@ function handleMediaSafetyClick(e){
     restoreMediaFilterByAttr(media.dataset.mediaKey);
     return true;
   }
-  const rev=e.target.closest('[data-reveal]');
+
+  /* The normal target is the veil. target.closest('[data-reveal]') also
+     covers browsers that retarget a native video tap to the <video> itself. */
+  const rev=target.closest('[data-reveal]');
   if(rev){
     e.preventDefault(); e.stopPropagation();
     haptic(6);
@@ -4446,8 +4592,15 @@ function openRequest(postId, uidOverride){
   if($('#reqSheet')) return;
   const p = postId ? S.posts.find(x=>x.id===postId) : null;
   const uid = uidOverride || (p && p.u); if(!uid) return;
+  if(p && (p.req||isPostRequested(p.id))){ toast('申請済みです'); return; }
   if(uid==='me'){ toast('自分自身とは会話できません'); return; }
   if(S.blocked.includes(uid)){ toast('ブロック中の相手には申請できません'); return; }
+
+  const existing=chatWith(uid);
+  if(!existing && !canStartNewDm(uid,true)) return;
+  if(existing && dmPolicyOf(uid)==='replied' && !canSendDmNow(existing)){
+    notifyDmWait(); return;
+  }
   const u=S.users[uid];
 
   const sheet=el(`<div class="sheet" id="reqSheet">
@@ -4478,11 +4631,20 @@ function openRequest(postId, uidOverride){
     try{
       if(!c && cloudUserKeyIsReal(uid)) c=await cloudGetOrCreateChat(uid);
       if(!c){ c={id:'c'+Date.now(), u:uid, unread:0, ts:Date.now(), msgs:[]}; S.chats.push(c); }
-      const m=text?{me:true,t:text,ts:Date.now()}:{sys:true,t:'会話申請を送信しました',ts:Date.now()};
+      if(dmPolicyOf(uid)==='replied' && !canSendDmNow(c)){ notifyDmWait(); return; }
+      const m=text
+        ? {id:newRowId(),me:true,t:text,ts:Date.now()}
+        : {id:newRowId(),me:true,sys:true,t:'会話申請を送信しました',ts:Date.now()};
       await cloudSendMessage(c,m); c.msgs.push(m); c.ts=Date.now();
-    }catch(e){ cloudErr('conversation request',e); return; }
+    }catch(e){
+      if(String(e?.message||e).includes('dm_waiting_for_reply')) notifyDmWait();
+      else if(String(e?.message||e).includes('dm_favorite_only')) notifyFavOnly();
+      else cloudErr('conversation request',e);
+      return;
+    }
     if(S.users[uid]?.demo||S.users[uid]?.bot) scheduleReplyTo(c, text);
-    if(p){ p.req=true;
+    if(p){
+      markPostRequested(p.id);
       const btn=document.querySelector(`[data-talk="${p.id}"]`);
       if(btn){ btn.classList.add('done'); btn.innerHTML=I.reply+'申請済み'; }
     }
@@ -4632,15 +4794,24 @@ function openChatMenu(cid){
     }},
     {t:'チャットを削除', danger:true, fn:()=>confirmSheet({
       title:`${u.name}とのチャットを削除しますか？`,
-      lead:'メッセージの履歴が消えます。相手に通知は届きません。',
+      lead:'メッセージの履歴が相手側からも消え、最初からの状態に戻ります。相手に通知は届きません。',
       go:'削除する', danger:true,
       fn:()=>{
-        if(c.cloud) cloudSetChatState(c,{hidden:true});
+        const deleted={...c,msgs:[...(c.msgs||[])]};
         S.chats=S.chats.filter(x=>x.id!==cid);
+        clearRequestedForUser(c.u);
         for(let i=stackEls.length-1;i>=0;i--)
           if(stackEls[i].dataset.chat===cid){ while(stackEls.length>i) pop(); break; }
         haptic(12); chatSig=null; renderChatList(); syncNavBadges();
         toast('チャットを削除しました');
+
+        if(deleted.cloud){
+          void cloudDeleteChatForEveryone(deleted).catch(e=>{
+            cloudErr('delete chat',e);
+            toast('チャットを完全に削除できませんでした');
+            cloudReloadAll(false,false);
+          });
+        }
       }
     })}
   ]);
@@ -4754,7 +4925,17 @@ function openCompose(){
   $('#cmGo',m).onclick=()=>{
     if(sending) return;
     const t=ta.value.trim(); if(!t && !att) return;
+
+    const left=categoryCooldownLeft(tag);
+    if(left>0){
+      const sec=Math.max(1,Math.ceil(left/1000));
+      toast(`「${TAGS[tag]?.label||'このカテゴリー'}」はあと${sec}秒待ってください`);
+      haptic(5);
+      return;
+    }
+
     sending=true; sync(); haptic(14);
+    const cooldownStamp=startCategoryCooldown(tag);
 
     const post={id:newRowId(), u:'me', t, tag, media:att, ts:Date.now(),
       likes:0, replies:0, liked:false, req:false, rep:[], arch:false, pending:true};
@@ -4783,6 +4964,7 @@ function openCompose(){
         toast(hidden ? '投稿しました。「おすすめ」で見られます' : '投稿しました');
       }catch(e){
         post.pending=false; post.failed=true;
+        rollbackCategoryCooldown(tag,cooldownStamp);
         const live=S.posts.find(x=>x.id===post.id);
         if(live && live!==post) Object.assign(live,post);
         else if(!live) S.posts.unshift(post);
@@ -5080,6 +5262,8 @@ function demoTick(){
    ========================================================= */
 async function boot(){
   loadPrefs();
+  S.posts.forEach(p=>{ p.req=isPostRequested(p.id); });
+  if(S.users.me) S.users.me.dmPolicy=S.who;
   setTheme(S.theme,false);
   await cloudInit();
   buildNav();
