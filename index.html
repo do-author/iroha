@@ -1346,7 +1346,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.21';
+const APP_VER='2.40.22';
 
 
 /* =========================================================
@@ -1458,7 +1458,7 @@ async function cloudEnsureProfile(){
   let handle=me.handle;
   for(let n=0;n<4;n++){
     const ins=await CLOUD.client.from('profiles').insert({
-      id:CLOUD.userId,name:me.name,handle,bio:me.bio||'',av:me.av,gender:me.gender||'secret'
+      id:CLOUD.userId,name:me.name,handle,bio:me.bio||'',av:me.av,gender:me.gender||'secret',dm_policy:S.who
     }).select().single();
     if(!ins.error){ me.handle=handle; me.cloudId=CLOUD.userId; return; }
     if(ins.error.code!=='23505') throw ins.error;
@@ -2053,14 +2053,14 @@ const S = {
   filter:'osusume',
   media:'safety',
   quiet:false,
-  who:'replied',      /* who may start/send a conversation with me */
+  who:'all',          /* default: everyone may start/send a conversation with me */
   postCooldowns:{},    /* tag -> optimistic submit time; persisted */
   requestedPosts:[],   /* post ids whose 「話す」 request was already sent on this device */
   noteSeen:new Set(),  /* notification ids already looked at */
   blocked:[],          /* user ids — their posts vanish entirely */
   muted:[],            /* user ids — quieter, but still reachable */
   users:{
-    me  :{id:'me', name:'妖精さん', handle:FRESH_HANDLE, bio:'', av:FRESH_AV, gender:'secret', posts:0, replies:0, talks:0, dmPolicy:'replied'},
+    me  :{id:'me', name:'妖精さん', handle:FRESH_HANDLE, bio:'', av:FRESH_AV, gender:'secret', posts:0, replies:0, talks:0, dmPolicy:'all'},
     bot :{id:'bot', name:'iroha Bot', handle:'iroha_official', bio:'irohaの公式Botです。\n会話のきっかけになる話題を届けます。', av:'stone', bot:true, official:true, posts:31, replies:0, talks:1, fav:false, dmPolicy:'all'},
     nagi:{id:'nagi', gender:'secret', name:'なぎ', handle:'nagi_0000', bio:'夜のほうが言葉が出てくる。', av:'slate', demo:true, posts:12, replies:8, talks:0, fav:false, dmPolicy:'all'},
     koto:{id:'koto', gender:'female', favMe:true, name:'ことは', handle:'kotoha_pon', bio:'たのしいことを集めています。', av:'amber', demo:true, posts:24, replies:19, talks:0, fav:false, dmPolicy:'all'},
@@ -2103,7 +2103,11 @@ function loadPrefs(){
     if(['osusume','new','fav'].includes(p.filter)) S.filter=p.filter;
     if(['safety','raw','hide'].includes(p.media)) S.media=p.media;
     if(typeof p.quiet==='boolean') S.quiet=p.quiet;
-    if(['all','fav','replied'].includes(p.who)) S.who=p.who;
+    if(['all','fav','replied'].includes(p.who)){
+      /* v2.40.20/21 used replied as the initial default.
+         Move that old default to the new "all" default once. */
+      S.who = (p.who==='replied' && !p.dmDefaultAllMigrated) ? 'all' : p.who;
+    }
     if(p.postCooldowns && typeof p.postCooldowns==='object'){
       S.postCooldowns={};
       for(const [k,v] of Object.entries(p.postCooldowns)){
@@ -2119,6 +2123,7 @@ function savePrefs(){
   try{
     localStorage.setItem(PREF_KEY,JSON.stringify({
       theme:S.theme, filter:S.filter, media:S.media, quiet:S.quiet, who:S.who,
+      dmDefaultAllMigrated:true,
       postCooldowns:S.postCooldowns, requestedPosts:S.requestedPosts,
       blocked:S.blocked, muted:S.muted
     }));
@@ -2165,19 +2170,22 @@ function dmPolicyOf(uid){
 function chatWith(uid){
   return S.chats.find(c=>c.u===uid)||null;
 }
-/* "返信した相手のみ": one outgoing message, then wait until the other person replies. */
+/* "返信した相手のみ":
+   Restriction exists only until the first reply from the other person.
+   After they reply once, this chat is permanently a normal DM.
+   Deleting the chat deletes that history too, so a new chat starts restricted again. */
 function canSendDmNow(c){
   if(!c) return false;
   const policy=dmPolicyOf(c.u);
   if(policy==='all' || policy==='fav') return true;
+
   const good=(c.msgs||[]).filter(m=>!m.failed);
-  let lastMine=-Infinity, lastTheirs=-Infinity;
-  for(const m of good){
-    const ts=Number(m.ts)||0;
-    if(m.me) lastMine=Math.max(lastMine,ts);
-    else lastTheirs=Math.max(lastTheirs,ts);
-  }
-  return lastMine===-Infinity || lastTheirs>lastMine;
+
+  /* Once the owner of the policy has replied once, the conversation is established. */
+  if(good.some(m=>!m.me)) return true;
+
+  /* Before establishment, I may send exactly one first message/request. */
+  return !good.some(m=>m.me);
 }
 function notifyDmWait(){
   toast('相手が返信していないので送れません');
@@ -3396,6 +3404,21 @@ function updateMessageNode(node,m,c){
   node.dataset.day=threadDayKey(m.ts);
   node.dataset.ts=String(m.ts);
 
+  /* Keep an existing cached bubble visibly stable even if iOS preserved
+     an animation frame while the screen was detached. */
+  const stableBub=node.querySelector('.bub');
+  if(stableBub && !node.classList.contains('dm-new-message')){
+    stableBub.style.animation='none';
+    stableBub.style.opacity='1';
+    stableBub.style.transform='none';
+    stableBub.style.visibility='visible';
+  }
+  if(node.classList.contains('syschip') && !node.classList.contains('dm-new-message')){
+    node.style.animation='none';
+    node.style.opacity='1';
+    node.style.transform='none';
+  }
+
   if(m.sys){
     const t=node.querySelector('.t');
     if(t){ t.dataset.ts=String(m.ts); t.textContent=ago(m.ts); }
@@ -3440,10 +3463,37 @@ function paintThread(th,c,{reuse=false}={}){
     let node=reuse ? cachedDmRow(c.id,m,i) : null;
     if(node){
       node.classList.remove('dm-new-message');
+
+      /* Safari can retain the animation's opacity/transform when a detached
+         element is reused and its animation is cancelled. That made the bubble
+         invisible while the time (outside .bub) stayed visible.
+         Never cancel the animation object; explicitly restore the stable state. */
+      if(node.classList.contains('syschip')){
+        node.style.animation='none';
+        node.style.opacity='1';
+        node.style.transform='none';
+      }
       const bub=node.querySelector('.bub');
-      if(bub) bub.getAnimations?.().forEach(a=>a.cancel());
-      updateMessageNode(node,m,c);
-      th.appendChild(node);
+      if(bub){
+        bub.style.animation='none';
+        bub.style.opacity='1';
+        bub.style.transform='none';
+        bub.style.visibility='visible';
+      }
+
+      /* A broken/stale cache entry is cheaper to rebuild once than to show
+         a timestamp with no message bubble. */
+      const structurallyValid = m.sys
+        ? node.classList.contains('syschip')
+        : node.classList.contains('msgrow') && !!node.querySelector('.bub');
+
+      if(structurallyValid){
+        updateMessageNode(node,m,c);
+        th.appendChild(node);
+      }else{
+        forgetDmRow(c.id,m,i);
+        appendMsg(th,c,m,false,i);
+      }
     }else{
       appendMsg(th,c,m,false,i);
     }
@@ -3508,6 +3558,12 @@ function appendMsg(th,c,m,animate,i=0){
     const chip=el(`<div class="syschip${animate?' dm-new-message':''}" data-mid="${esc(key)}" data-day="${esc(day)}" data-ts="${m.ts}">${I.check}<span>${esc(m.t)}</span><span class="t" data-ts="${m.ts}">${ago(m.ts)}</span></div>`);
     th.appendChild(chip);
     rememberDmRow(c.id,m,i,chip);
+    if(animate) setTimeout(()=>{
+      chip.classList.remove('dm-new-message');
+      chip.style.animation='none';
+      chip.style.opacity='1';
+      chip.style.transform='none';
+    },340);
     return chip;
   }
 
@@ -3536,7 +3592,16 @@ function appendMsg(th,c,m,animate,i=0){
 
   /* Arrival animation is one-shot. Removing the marker after it ends means
      moving this same cached node on a later DM open can never replay it. */
-  if(animate) setTimeout(()=>row.classList.remove('dm-new-message'),340);
+  if(animate) setTimeout(()=>{
+    row.classList.remove('dm-new-message');
+    const bub=row.querySelector('.bub');
+    if(bub){
+      bub.style.animation='none';
+      bub.style.opacity='1';
+      bub.style.transform='none';
+      bub.style.visibility='visible';
+    }
+  },340);
   return row;
 }
 function scrollThread(th){ raf(()=>th.scrollTo({top:th.scrollHeight, behavior:'smooth'})); }
@@ -4002,7 +4067,7 @@ function openMessageMenu(c, m, th){
    ========================================================= */
 const WHO_OPTS={
   all    :{label:'すべての人',     sub:'誰でも何通でもDMできます'},
-  replied:{label:'返信した相手のみ', sub:'相手は1通送ったあと、あなたが返信するまで追加送信できません'},
+  replied:{label:'返信した相手のみ', sub:'最初は1通だけ。あなたが一度返信すると、その後は普通のDMになります'},
   fav    :{label:'お気に入りのみ',   sub:'あなたがお気に入りした人だけ新しくDMを始められます'}
 };
 
