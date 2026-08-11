@@ -126,7 +126,7 @@ body{
 }
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
-:focus-visible{outline:2px solid var(--accent-deep);outline-offset:2px;border-radius:8px}
+:focus-visible{outline:none}
 .msgfield:focus-visible,.replyfield:focus-visible,.field input:focus-visible,
 .field textarea:focus-visible,.obox textarea:focus-visible{outline:none}
 .msgfield,.replyfield{
@@ -1215,40 +1215,95 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 #composeM .safety svg,#replyM .safety svg{width:16px;height:16px;flex:0 0 auto}
 
 /* ============ FIRST RUN ============ */
-/* A new visitor is NOT authenticated and no profile is created until they
-   explicitly press 「はじめる」 or 「スキップしてはじめる」. */
 .first-setup{
   position:absolute; inset:0; z-index:110;
   display:flex; flex-direction:column;
   overflow-y:auto; overscroll-behavior:contain;
-  padding:calc(var(--safe-t) + 24px) 20px calc(var(--safe-b) + 24px);
+  padding:calc(var(--safe-t) + 22px) 22px calc(var(--safe-b) + 22px);
   background:var(--bg);
 }
 .first-setup-inner{
-  width:min(100%,420px); margin:auto;
-  padding:10px 0 18px;
+  width:min(100%,370px);
+  margin:auto;
+  padding:8px 0 16px;
 }
 .first-setup-brand{
-  display:flex; align-items:center; gap:10px; margin-bottom:28px;
-  font-size:24px; font-weight:800; letter-spacing:-.035em;
+  display:flex; align-items:center; gap:9px;
+  margin-bottom:34px;
+  font-size:20px; font-weight:800; letter-spacing:-.03em;
 }
 .first-setup-brand .dot{
-  width:25px; height:25px; border-radius:50%;
+  width:22px; height:22px; border-radius:50%;
   background:radial-gradient(circle at 34% 32%,#FFF0B4,var(--accent) 62%,var(--accent-deep));
   box-shadow:var(--glow);
 }
 .first-setup h1{
-  margin:0; font-size:27px; line-height:1.35; letter-spacing:-.025em;
+  margin:0 0 28px;
+  font-size:28px; line-height:1.3; letter-spacing:-.035em;
 }
-.first-setup .lead{
-  margin:9px 0 22px; color:var(--ink-3);
-  font-size:13.5px; font-weight:600; line-height:1.75;
+.first-name-label{
+  display:block;
+  margin:0 0 7px 3px;
+  color:var(--ink-3);
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.08em;
+  text-transform:lowercase;
 }
-.first-setup .pick-h{margin-top:20px}
+.first-name-row{
+  position:relative;
+  height:48px;
+  border-bottom:1.5px solid var(--line);
+  transition:border-color var(--dur-2) var(--ease-out);
+}
+.first-name-row:focus-within{border-bottom-color:var(--ink)}
+.first-name-row input{
+  width:100%; height:100%;
+  padding:0 44px 0 2px;
+  font-size:18px; font-weight:700;
+  letter-spacing:-.015em;
+  color:var(--ink);
+}
+.first-name-row input::placeholder{color:var(--ink-3); font-weight:600}
+.first-name-count{
+  position:absolute;
+  right:2px;
+  bottom:8px;
+  color:var(--ink-3);
+  font-size:10px;
+  font-weight:700;
+  line-height:1;
+  pointer-events:none;
+}
+.first-setup .pick-h{
+  margin:28px 0 10px;
+  text-align:left;
+  color:var(--ink-3);
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.08em;
+}
 .first-setup .genderpick{margin-top:9px}
-.first-setup .field{margin-top:0}
-.first-setup .bigbtn{margin-top:26px}
-.first-setup .textlink{margin-top:4px}
+.first-setup .hint{
+  margin:8px 2px 0;
+  text-align:left;
+  font-size:11.5px;
+  color:var(--ink-3);
+  font-weight:600;
+  line-height:1.65;
+}
+.first-setup .profile-note{margin-top:2px}
+.first-setup .bigbtn{
+  margin-top:30px;
+  border-radius:14px;
+  padding:14px;
+  box-shadow:none;
+}
+.first-setup .textlink{
+  margin-top:2px;
+  padding:12px;
+  font-size:13.5px;
+}
 .first-setup.busy{pointer-events:none}
 .first-setup.busy .bigbtn,.first-setup.busy .textlink{opacity:.48}
 .first-setup.busy .bigbtn::after{
@@ -1389,7 +1444,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.29';
+const APP_VER='2.40.31';
 
 
 /* =========================================================
@@ -5577,18 +5632,17 @@ function demoTick(){
    ========================================================= */
 function openFirstSetup(prefill={}){
   return new Promise(resolve=>{
-    const initialName=String(prefill.name && prefill.name!=='ユーザー' ? prefill.name : '').slice(0,20);
+    const initialName=String(prefill.name && prefill.name!=='ユーザー' ? prefill.name : '').slice(0,10);
     let gender=['male','female','secret'].includes(prefill.gender)?prefill.gender:'secret';
     const layer=el(`<section class="first-setup" id="firstSetup" aria-label="初回設定">
       <div class="first-setup-inner">
         <div class="first-setup-brand"><span class="dot"></span><span>iroha</span></div>
         <h1>irohaをはじめる</h1>
-        <p class="lead">名前と性別を設定できます。どちらもプロフィールからあとで変更できます。</p>
 
-        <div class="field">
-          <label>名前</label>
-          <div class="fin"><input id="firstName" maxlength="20" placeholder="妖精さん" autocomplete="nickname" value="${esc(initialName)}"></div>
-          <span class="cnt" id="firstNameCount">${[...initialName].length}/20</span>
+        <label class="first-name-label" for="firstName">name</label>
+        <div class="first-name-row">
+          <input id="firstName" maxlength="10" placeholder="妖精さん" autocomplete="nickname" value="${esc(initialName)}">
+          <span class="first-name-count" id="firstNameCount">${[...initialName].length}/10</span>
         </div>
 
         <h4 class="pick-h">性別</h4>
@@ -5598,6 +5652,7 @@ function openFirstSetup(prefill={}){
             <span>${v.label}</span></button>`).join('')}
         </div>
         <p class="hint">「秘密」を選ぶとプロフィールには表示されません</p>
+        <p class="hint profile-note">どちらもプロフィールからあとで変更できます</p>
 
         <button class="bigbtn" id="firstStart">はじめる</button>
         <button class="textlink" id="firstSkip">スキップしてはじめる</button>
@@ -5610,7 +5665,7 @@ function openFirstSetup(prefill={}){
     const skip=$('#firstSkip',layer);
 
     nm.addEventListener('input',()=>{
-      $('#firstNameCount',layer).textContent=`${[...nm.value].length}/20`;
+      $('#firstNameCount',layer).textContent=`${[...nm.value].length}/10`;
     });
 
     $$('.gopt',layer).forEach(b=>b.addEventListener('click',()=>{
