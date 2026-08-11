@@ -1346,7 +1346,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.23';
+const APP_VER='2.40.24';
 
 
 /* =========================================================
@@ -2747,9 +2747,18 @@ function toggleLike(id, btn){
     setTimeout(()=>btn.classList.remove('pop'),700); }
 }
 
-/* live relative time */
+/* live relative time
+   IMPORTANT: update only leaf time labels.
+   A container must never have its textContent replaced, or its children
+   (DM bubble / avatar / media) would be destroyed. */
 setInterval(()=>{
-  $$('[data-ts]').forEach(n=>{ const t=+n.dataset.ts; const s=ago(t); if(n.textContent!==s) n.textContent=s; });
+  $$('[data-ts]').forEach(n=>{
+    if(n.children.length) return;
+    const t=Number(n.dataset.ts);
+    if(!Number.isFinite(t)) return;
+    const s=ago(t);
+    if(n.textContent!==s) n.textContent=s;
+  });
 },20000);
 
 /* =========================================================
@@ -3402,7 +3411,7 @@ function rebuildThreadDayChips(th){
     const day=node.dataset.day||'';
     if(day!==lastDay){
       lastDay=day;
-      const ts=Number(node.dataset.ts)||Date.now();
+      const ts=Number(node.dataset.msgTs)||Date.now();
       node.before(el(`<div class="daychip" data-day="${esc(day)}">${threadDayLabel(ts)}</div>`));
     }
   });
@@ -3410,7 +3419,7 @@ function rebuildThreadDayChips(th){
 function updateMessageNode(node,m,c){
   if(!node||!m) return;
   node.dataset.day=threadDayKey(m.ts);
-  node.dataset.ts=String(m.ts);
+  node.dataset.msgTs=String(m.ts);
 
   /* Keep an existing cached bubble visibly stable even if iOS preserved
      an animation frame while the screen was detached. */
@@ -3546,8 +3555,20 @@ function syncThread(th,c){
   desired.forEach(({m,i,key})=>{
     let node=existing.get(key);
     if(node){
-      updateMessageNode(node,m,c);
-      return;
+      const structurallyValid = m.sys
+        ? node.classList.contains('syschip')
+        : node.classList.contains('msgrow') && !!node.querySelector('.bub');
+
+      if(structurallyValid){
+        updateMessageNode(node,m,c);
+        return;
+      }
+
+      /* Never preserve a timestamp-only/corrupted cached row. */
+      node.remove();
+      existing.delete(key);
+      DM_ROW_CACHE.delete(`${c.id}:${key}`);
+      node=null;
     }
 
     /* A new realtime/local message is appended once. Old media nodes stay untouched. */
@@ -3563,7 +3584,7 @@ function appendMsg(th,c,m,animate,i=0){
   const day=threadDayKey(m.ts);
 
   if(m.sys){
-    const chip=el(`<div class="syschip${animate?' dm-new-message':''}" data-mid="${esc(key)}" data-day="${esc(day)}" data-ts="${m.ts}">${I.check}<span>${esc(m.t)}</span><span class="t" data-ts="${m.ts}">${ago(m.ts)}</span></div>`);
+    const chip=el(`<div class="syschip${animate?' dm-new-message':''}" data-mid="${esc(key)}" data-day="${esc(day)}" data-msg-ts="${m.ts}">${I.check}<span>${esc(m.t)}</span><span class="t" data-ts="${m.ts}">${ago(m.ts)}</span></div>`);
     th.appendChild(chip);
     rememberDmRow(c.id,m,i,chip);
     if(animate) setTimeout(()=>{
@@ -3582,7 +3603,7 @@ function appendMsg(th,c,m,animate,i=0){
       ? `<span class="mtime send-state failed">送信失敗</span>`
       : `<span class="mtime" data-ts="${m.ts}">${ago(m.ts)}</span>`;
 
-  const row=el(`<div class="msgrow${m.me?' me':''}${sendClass}${animate?' dm-new-message':''}" data-mid="${esc(key)}" data-day="${esc(day)}" data-ts="${m.ts}">
+  const row=el(`<div class="msgrow${m.me?' me':''}${sendClass}${animate?' dm-new-message':''}" data-mid="${esc(key)}" data-day="${esc(day)}" data-msg-ts="${m.ts}">
     ${m.me?uav('me',30):uav(c.u,30)}
     <div class="bub${m.media?' has-media':''}">${m.media?mediaHTML(m.media,{forceShow:!!m.me}):''}${m.t?esc(m.t):''}</div>
     ${timeHTML}
