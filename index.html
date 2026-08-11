@@ -1214,6 +1214,53 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 #composeM .safety span,#replyM .safety span{white-space:nowrap}
 #composeM .safety svg,#replyM .safety svg{width:16px;height:16px;flex:0 0 auto}
 
+/* ============ FIRST RUN ============ */
+/* A new visitor is NOT authenticated and no profile is created until they
+   explicitly press 「はじめる」 or 「スキップしてはじめる」. */
+.first-setup{
+  position:absolute; inset:0; z-index:110;
+  display:flex; flex-direction:column;
+  overflow-y:auto; overscroll-behavior:contain;
+  padding:calc(var(--safe-t) + 24px) 20px calc(var(--safe-b) + 24px);
+  background:var(--bg);
+}
+.first-setup-inner{
+  width:min(100%,420px); margin:auto;
+  padding:10px 0 18px;
+}
+.first-setup-brand{
+  display:flex; align-items:center; gap:10px; margin-bottom:28px;
+  font-size:24px; font-weight:800; letter-spacing:-.035em;
+}
+.first-setup-brand .dot{
+  width:25px; height:25px; border-radius:50%;
+  background:radial-gradient(circle at 34% 32%,#FFF0B4,var(--accent) 62%,var(--accent-deep));
+  box-shadow:var(--glow);
+}
+.first-setup h1{
+  margin:0; font-size:27px; line-height:1.35; letter-spacing:-.025em;
+}
+.first-setup .lead{
+  margin:9px 0 22px; color:var(--ink-3);
+  font-size:13.5px; font-weight:600; line-height:1.75;
+}
+.first-setup .pick-h{margin-top:20px}
+.first-setup .genderpick{margin-top:9px}
+.first-setup .field{margin-top:0}
+.first-setup .bigbtn{margin-top:26px}
+.first-setup .textlink{margin-top:4px}
+.first-setup .first-note{
+  margin:12px 8px 0; text-align:center;
+  color:var(--ink-3); font-size:11.5px; font-weight:600; line-height:1.7;
+}
+.first-setup.busy{pointer-events:none}
+.first-setup.busy .bigbtn,.first-setup.busy .textlink{opacity:.48}
+.first-setup.busy .bigbtn::after{
+  content:""; display:inline-block; width:14px; height:14px; margin-left:9px;
+  border:2px solid rgba(36,30,5,.28); border-top-color:var(--accent-ink);
+  border-radius:50%; vertical-align:-2px; animation:sp .7s linear infinite;
+}
+
 /* ============ OVERLAYS ============ */
 .scrim{
   position:absolute; inset:0; z-index:88; background:rgba(14,12,8,.42);
@@ -1346,7 +1393,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.24';
+const APP_VER='2.40.25';
 
 
 /* =========================================================
@@ -1466,13 +1513,32 @@ async function cloudEnsureProfile(){
   }
   throw new Error('プロフィールIDを作成できませんでした');
 }
+function cloudClient(){
+  if(!CLOUD.client && window.supabase?.createClient){
+    CLOUD.client=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+  }
+  return CLOUD.client;
+}
+async function cloudExistingSession(){
+  if(!cloudConfigured() || !window.supabase?.createClient) return null;
+  const client=cloudClient(); if(!client) return null;
+  const {data:{session},error}=await client.auth.getSession();
+  if(error) throw error;
+  return session||null;
+}
 async function cloudInit(){
   if(!cloudConfigured()) return false;
   if(!window.supabase?.createClient){ console.error('supabase-js failed to load'); return false; }
   try{
-    CLOUD.client=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
-    let {data:{session},error}=await CLOUD.client.auth.getSession(); if(error) throw error;
-    if(!session){ const r=await CLOUD.client.auth.signInAnonymously(); if(r.error) throw r.error; session=r.data.session; }
+    const client=cloudClient();
+    let {data:{session},error}=await client.auth.getSession(); if(error) throw error;
+    /* New anonymous Auth users are created only after the first-run screen
+       has been explicitly completed or skipped. boot() enforces that gate. */
+    if(!session){
+      const r=await client.auth.signInAnonymously();
+      if(r.error) throw r.error;
+      session=r.data.session;
+    }
     CLOUD.userId=session.user.id; CLOUD.enabled=true;
     await cloudEnsureProfile();
     await cloudReloadAll(true);
@@ -1806,6 +1872,26 @@ async function cloudSaveProfile(u){
   const avatar=await cloudUploadProfileAsset(u.img,'avatar'), banner=await cloudUploadProfileAsset(u.banner,'banner');
   const r=await CLOUD.client.from('profiles').update({name:u.name,handle:u.handle,bio:u.bio||'',av:u.av,gender:u.gender||'secret',avatar_url:avatar,banner_url:banner,dm_policy:S.who,updated_at:new Date().toISOString()}).eq('id',CLOUD.userId);
   if(r.error) throw r.error; u.img=avatar; u.banner=banner;
+}
+function cloudIsHandleTakenError(err){
+  if(!err) return false;
+  const code=String(err.code||'');
+  const msg=`${err.message||''} ${err.details||''} ${err.hint||''}`.toLowerCase();
+  return code==='23505' && (
+    msg.includes('handle') ||
+    msg.includes('profiles_handle_key') ||
+    msg.includes('duplicate key')
+  );
+}
+async function cloudHandleTaken(handle){
+  if(!CLOUD.enabled) return false;
+  const q=await CLOUD.client.from('profiles')
+    .select('id')
+    .eq('handle',handle)
+    .neq('id',CLOUD.userId)
+    .limit(1);
+  if(q.error) throw q.error;
+  return (q.data||[]).length>0;
 }
 async function cloudSetDmPolicy(policy){
   if(!CLOUD.enabled) return;
@@ -4295,12 +4381,36 @@ function pushEdit(){
 
   $('#edSave',s).onclick=async()=>{
     const h=hd.value.trim();
-    if(!nm.value.trim()){ toast('表示名を入力してください'); return; }
+    const name=nm.value.trim();
+    if(!name){ toast('表示名を入力してください'); return; }
     if(h.length<3){ toast('ユーザーIDは3文字以上にしてください'); return; }
-    u.name=nm.value.trim(); u.handle=h; u.bio=bio.value; u.av=draft.av;
-    u.img=draft.img; u.banner=draft.banner; u.gender=draft.gender;
-    try{ await cloudSaveProfile(u); }catch(e){ cloudErr('profile',e); return; }
-    haptic(12); pop(); toast('プロフィールを更新しました');
+
+    const saveBtn=$('#edSave',s);
+    if(saveBtn.disabled) return;
+    saveBtn.disabled=true;
+
+    try{
+      if(h!==u.handle && await cloudHandleTaken(h)){
+        toast('このユーザーIDは他のユーザーが使用しています');
+        return;
+      }
+
+      /* Keep the visible/local profile untouched until the DB accepts it. */
+      const next={...u,name,handle:h,bio:bio.value,av:draft.av,
+        img:draft.img,banner:draft.banner,gender:draft.gender};
+      await cloudSaveProfile(next);
+      Object.assign(u,next);
+
+      haptic(12); pop(); toast('プロフィールを更新しました');
+    }catch(e){
+      if(cloudIsHandleTakenError(e)){
+        toast('このユーザーIDは他のユーザーが使用しています');
+      }else{
+        cloudErr('profile',e);
+      }
+    }finally{
+      if(saveBtn.isConnected) saveBtn.disabled=false;
+    }
   };
   push(s);
 }
@@ -5441,6 +5551,71 @@ function demoTick(){
 }
 
 /* =========================================================
+   FIRST RUN
+   ========================================================= */
+function openFirstSetup(){
+  return new Promise(resolve=>{
+    let gender='secret';
+    const layer=el(`<section class="first-setup" id="firstSetup" aria-label="初回設定">
+      <div class="first-setup-inner">
+        <div class="first-setup-brand"><span class="dot"></span><span>iroha</span></div>
+        <h1>irohaをはじめる</h1>
+        <p class="lead">名前と性別を設定できます。どちらもプロフィールからあとで変更できます。</p>
+
+        <div class="field">
+          <label>名前</label>
+          <div class="fin"><input id="firstName" maxlength="20" placeholder="表示する名前" autocomplete="nickname"></div>
+          <span class="cnt" id="firstNameCount">0/20</span>
+        </div>
+
+        <h4 class="pick-h">性別</h4>
+        <div class="genderpick" id="firstGender">
+          ${Object.entries(GENDERS).map(([k,v])=>`<button class="gopt${k==='secret'?' on':''}" data-g="${k}">
+            ${v.sym?`<span class="gtag ${v.cls}">${v.sym}</span>`:`<span class="gtag g-secret">${I.lockS}</span>`}
+            <span>${v.label}</span></button>`).join('')}
+        </div>
+        <p class="hint">「秘密」を選ぶとプロフィールには表示されません</p>
+
+        <button class="bigbtn" id="firstStart">はじめる</button>
+        <button class="textlink" id="firstSkip">スキップしてはじめる</button>
+        <p class="first-note">この画面を開いただけではアカウントは作成されません。</p>
+      </div>
+    </section>`);
+
+    $('#app').appendChild(layer);
+    const nm=$('#firstName',layer);
+    const start=$('#firstStart',layer);
+    const skip=$('#firstSkip',layer);
+
+    nm.addEventListener('input',()=>{
+      $('#firstNameCount',layer).textContent=`${[...nm.value].length}/20`;
+    });
+
+    $$('.gopt',layer).forEach(b=>b.addEventListener('click',()=>{
+      haptic(6);
+      gender=b.dataset.g;
+      $$('.gopt',layer).forEach(x=>x.classList.toggle('on',x===b));
+    }));
+
+    start.onclick=()=>{
+      const name=nm.value.trim();
+      if(!name){ toast('名前を入力してください'); return; }
+      layer.classList.add('busy');
+      start.textContent='はじめています';
+      resolve({layer,name,gender,skipped:false});
+    };
+
+    skip.onclick=()=>{
+      layer.classList.add('busy');
+      start.textContent='はじめています';
+      resolve({layer,name:'ユーザー',gender:'secret',skipped:true});
+    };
+
+    setTimeout(()=>nm.focus({preventScroll:true}),80);
+  });
+}
+
+/* =========================================================
    BOOT
    ========================================================= */
 async function boot(){
@@ -5448,7 +5623,25 @@ async function boot(){
   S.posts.forEach(p=>{ p.req=isPostRequested(p.id); });
   if(S.users.me) S.users.me.dmPolicy=S.who;
   setTheme(S.theme,false);
+
+  let firstSetup=null;
+  if(cloudConfigured() && window.supabase?.createClient){
+    try{
+      const existing=await cloudExistingSession();
+      if(!existing){
+        /* No Auth user and no profiles row are created before this resolves. */
+        firstSetup=await openFirstSetup();
+        S.users.me.name=firstSetup.name;
+        S.users.me.gender=firstSetup.gender;
+      }
+    }catch(e){
+      console.warn('[iroha cloud] session check',e);
+    }
+  }
+
   await cloudInit();
+  if(firstSetup?.layer?.isConnected) firstSetup.layer.remove();
+
   buildNav();
   buildPane('home');
   raf(()=>{
