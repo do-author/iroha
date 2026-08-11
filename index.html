@@ -1393,7 +1393,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.25';
+const APP_VER='2.40.27';
 
 
 /* =========================================================
@@ -1498,6 +1498,7 @@ async function cloudEnsureProfile(){
   if(r.data){
     Object.assign(me,{name:r.data.name,handle:r.data.handle,bio:r.data.bio||'',av:r.data.av||me.av,
       gender:r.data.gender||'secret',img:r.data.avatar_url||null,banner:r.data.banner_url||null,cloudId:r.data.id,
+      isActive:r.data.is_active!==false,
       dmPolicy:['all','replied','fav'].includes(r.data.dm_policy)?r.data.dm_policy:S.who});
     if(['all','replied','fav'].includes(r.data.dm_policy)) S.who=r.data.dm_policy;
     return;
@@ -1505,9 +1506,10 @@ async function cloudEnsureProfile(){
   let handle=me.handle;
   for(let n=0;n<4;n++){
     const ins=await CLOUD.client.from('profiles').insert({
-      id:CLOUD.userId,name:me.name,handle,bio:me.bio||'',av:me.av,gender:me.gender||'secret',dm_policy:S.who
+      id:CLOUD.userId,name:me.name,handle,bio:me.bio||'',av:me.av,gender:me.gender||'secret',
+      dm_policy:S.who,is_active:true
     }).select().single();
-    if(!ins.error){ me.handle=handle; me.cloudId=CLOUD.userId; return; }
+    if(!ins.error){ me.handle=handle; me.cloudId=CLOUD.userId; me.isActive=true; return; }
     if(ins.error.code!=='23505') throw ins.error;
     handle='u'+Math.random().toString(36).slice(2,11);
   }
@@ -1525,6 +1527,16 @@ async function cloudExistingSession(){
   const {data:{session},error}=await client.auth.getSession();
   if(error) throw error;
   return session||null;
+}
+async function cloudExistingProfile(session){
+  if(!session?.user?.id) return null;
+  const client=cloudClient(); if(!client) return null;
+  const r=await client.from('profiles')
+    .select('id,name,gender,is_active')
+    .eq('id',session.user.id)
+    .maybeSingle();
+  if(r.error) throw r.error;
+  return r.data||null;
 }
 async function cloudInit(){
   if(!cloudConfigured()) return false;
@@ -1622,7 +1634,7 @@ async function cloudFetchProfileReplies(uid){
 function cloudViewSignature(){
   const users=Object.values(S.users)
     .filter(u=>!u.demo&&!u.bot)
-    .map(u=>[u.id,u.name,u.handle,u.bio,u.av,u.gender,u.img||'',u.banner||'',u.dmPolicy||'all',!!u.fav,!!u.favMe,u.posts||0,u.replies||0,u.talks||0])
+    .map(u=>[u.id,u.name,u.handle,u.bio,u.av,u.gender,u.img||'',u.banner||'',u.dmPolicy||'all',u.isActive!==false,!!u.fav,!!u.favMe,u.posts||0,u.replies||0,u.talks||0])
     .sort((a,b)=>String(a[0]).localeCompare(String(b[0])));
   const posts=S.posts.filter(p=>p.cloud).map(p=>[
     p.id,p.u,p.t,p.tag,p.ts,p.likes,p.replies,!!p.liked,!!p.arch,
@@ -1663,7 +1675,7 @@ async function cloudReloadAll(initial=false, applyPosts=true){
       const key=localKey(u.id);
       const target=key==='me'?S.users.me:(S.users[key]||{id:key});
       Object.assign(target,{id:key,cloudId:u.id,name:u.name,handle:u.handle,bio:u.bio||'',av:u.av||'stone',gender:u.gender||'secret',
-        img:u.avatar_url||null,banner:u.banner_url||null,
+        img:u.avatar_url||null,banner:u.banner_url||null,isActive:u.is_active!==false,
         dmPolicy:['all','replied','fav'].includes(u.dm_policy)?u.dm_policy:(key==='me'?S.who:'all'),
         posts:0,replies:0,talks:0,fav:false,favMe:false});
       if(key==='me' && ['all','replied','fav'].includes(u.dm_policy)) S.who=u.dm_policy;
@@ -1898,6 +1910,20 @@ async function cloudSetDmPolicy(policy){
   const r=await CLOUD.client.from('profiles').update({dm_policy:policy,updated_at:new Date().toISOString()}).eq('id',CLOUD.userId);
   if(r.error) throw r.error;
   if(S.users.me) S.users.me.dmPolicy=policy;
+}
+async function cloudSetProfileActive(active){
+  if(!CLOUD.enabled) return;
+  const value=!!active;
+  const r=await CLOUD.client.from('profiles')
+    .update({is_active:value,updated_at:new Date().toISOString()})
+    .eq('id',CLOUD.userId);
+  if(r.error) throw r.error;
+  if(S.users.me) S.users.me.isActive=value;
+}
+/* When a withdrawal UI is wired, keep profiles.id and call this.
+   On the next launch is_active=false makes the start screen appear again. */
+async function cloudWithdrawProfile(){
+  await cloudSetProfileActive(false);
 }
 async function cloudDeleteChatForEveryone(c){
   if(!CLOUD.enabled||!c?.cloud) return;
@@ -5553,9 +5579,10 @@ function demoTick(){
 /* =========================================================
    FIRST RUN
    ========================================================= */
-function openFirstSetup(){
+function openFirstSetup(prefill={}){
   return new Promise(resolve=>{
-    let gender='secret';
+    const initialName=String(prefill.name||'').slice(0,20);
+    let gender=['male','female','secret'].includes(prefill.gender)?prefill.gender:'secret';
     const layer=el(`<section class="first-setup" id="firstSetup" aria-label="初回設定">
       <div class="first-setup-inner">
         <div class="first-setup-brand"><span class="dot"></span><span>iroha</span></div>
@@ -5564,13 +5591,13 @@ function openFirstSetup(){
 
         <div class="field">
           <label>名前</label>
-          <div class="fin"><input id="firstName" maxlength="20" placeholder="表示する名前" autocomplete="nickname"></div>
-          <span class="cnt" id="firstNameCount">0/20</span>
+          <div class="fin"><input id="firstName" maxlength="20" placeholder="表示する名前" autocomplete="nickname" value="${esc(initialName)}"></div>
+          <span class="cnt" id="firstNameCount">${[...initialName].length}/20</span>
         </div>
 
         <h4 class="pick-h">性別</h4>
         <div class="genderpick" id="firstGender">
-          ${Object.entries(GENDERS).map(([k,v])=>`<button class="gopt${k==='secret'?' on':''}" data-g="${k}">
+          ${Object.entries(GENDERS).map(([k,v])=>`<button class="gopt${k===gender?' on':''}" data-g="${k}">
             ${v.sym?`<span class="gtag ${v.cls}">${v.sym}</span>`:`<span class="gtag g-secret">${I.lockS}</span>`}
             <span>${v.label}</span></button>`).join('')}
         </div>
@@ -5578,7 +5605,7 @@ function openFirstSetup(){
 
         <button class="bigbtn" id="firstStart">はじめる</button>
         <button class="textlink" id="firstSkip">スキップしてはじめる</button>
-        <p class="first-note">この画面を開いただけではアカウントは作成されません。</p>
+        <p class="first-note">「はじめる」か「スキップしてはじめる」を押すまで開始されません。</p>
       </div>
     </section>`);
 
@@ -5608,7 +5635,12 @@ function openFirstSetup(){
     skip.onclick=()=>{
       layer.classList.add('busy');
       start.textContent='はじめています';
-      resolve({layer,name:'ユーザー',gender:'secret',skipped:true});
+      resolve({
+        layer,
+        name:initialName||'ユーザー',
+        gender:['male','female','secret'].includes(prefill.gender)?prefill.gender:'secret',
+        skipped:true
+      });
     };
 
     setTimeout(()=>nm.focus({preventScroll:true}),80);
@@ -5625,21 +5657,59 @@ async function boot(){
   setTheme(S.theme,false);
 
   let firstSetup=null;
+  let existingSession=null;
+  let existingProfile=null;
+
   if(cloudConfigured() && window.supabase?.createClient){
     try{
-      const existing=await cloudExistingSession();
-      if(!existing){
-        /* No Auth user and no profiles row are created before this resolves. */
-        firstSetup=await openFirstSetup();
-        S.users.me.name=firstSetup.name;
-        S.users.me.gender=firstSetup.gender;
+      existingSession=await cloudExistingSession();
+      existingProfile=existingSession ? await cloudExistingProfile(existingSession) : null;
+
+      /* One source of truth:
+         - no profiles row         -> start screen
+         - profiles.is_active=true -> normal start
+         - profiles.is_active=false-> start screen (withdrawn, UUID stays) */
+      const needsSetup=!existingProfile || existingProfile.is_active===false;
+
+      if(needsSetup){
+        firstSetup=await openFirstSetup(existingProfile||{});
+
+        /* A truly new profile is created only after the user presses a start button. */
+        if(!existingProfile){
+          S.users.me.name=firstSetup.name;
+          S.users.me.gender=firstSetup.gender;
+        }
       }
     }catch(e){
-      console.warn('[iroha cloud] session check',e);
+      console.warn('[iroha cloud] profile/start check',e);
     }
   }
 
-  await cloudInit();
+  const cloudOK=await cloudInit();
+
+  if(firstSetup && cloudOK){
+    const u=S.users.me;
+
+    if(existingProfile){
+      /* Withdrawn profile: keep the same profiles.id and simply reactivate it.
+         Skip preserves its old name/gender; normal start applies the chosen values. */
+      const next=firstSetup.skipped
+        ? {...u,isActive:true}
+        : {...u,name:firstSetup.name,gender:firstSetup.gender,isActive:true};
+
+      try{
+        if(!firstSetup.skipped) await cloudSaveProfile(next);
+        await cloudSetProfileActive(true);
+        Object.assign(u,next);
+      }catch(e){
+        cloudErr('restart profile',e);
+      }
+    }else{
+      /* cloudInit/cloudEnsureProfile just created this profile after the user started. */
+      u.isActive=true;
+    }
+  }
+
   if(firstSetup?.layer?.isConnected) firstSetup.layer.remove();
 
   buildNav();
