@@ -643,14 +643,17 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   font-size:14.5px; font-weight:600; line-height:1.68; word-break:break-word;
   background:var(--card-2); border:1px solid var(--line-soft);
   border-bottom-left-radius:7px;
-  animation:bubIn 480ms var(--spring-soft) both;
   transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
 }
 .msgrow.me .bub{
   background:var(--accent); color:var(--accent-ink); border-color:transparent;
   border-bottom-left-radius:19px; border-bottom-right-radius:7px;
 }
-@keyframes bubIn{from{opacity:0; transform:translate3d(0,12px,0) scale(.94)}to{opacity:1;transform:none}}
+/* Existing DM history is already there when a thread opens.
+   Only a genuinely new message gets the small arrival motion. */
+.msgrow.dm-new-message .bub,
+.syschip.dm-new-message{animation:bubIn 300ms var(--ease-out) both}
+@keyframes bubIn{from{opacity:0; transform:translate3d(0,7px,0) scale(.975)}to{opacity:1;transform:none}}
 .mtime{font-size:10.5px; color:var(--ink-3); font-weight:600; align-self:flex-end; padding-bottom:3px; flex:0 0 auto}
 .syschip{
   align-self:center; margin:10px 0 2px;
@@ -658,7 +661,6 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   background:var(--card-2); border:1px solid var(--line-soft);
   color:var(--ink-2); font-size:13px; font-weight:700;
   padding:10px 18px; border-radius:999px;
-  animation:bubIn 420ms var(--spring-soft) both;
   transition:background-color var(--dur-3) var(--ease-out), border-color var(--dur-3) var(--ease-out);
 }
 .syschip .t{color:var(--ink-3); font-size:12px; font-weight:600}
@@ -1344,7 +1346,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.20';
+const APP_VER='2.40.21';
 
 
 /* =========================================================
@@ -1362,7 +1364,10 @@ const CLOUD={
   remoteUserIds:new Set(), profileReplyLoads:new Map(),
   /* Keep hydrated media URLs stable across realtime reloads.
      This avoids requesting a fresh signed URL for every old DM image each time one message changes. */
-  mediaUrlCache:new Map()
+  mediaUrlCache:new Map(),
+  /* Opening a DM writes last_read_at. That write comes back through Realtime;
+     do not turn our own read receipt into a full app reload. */
+  suppressChatStateUntil:new Map()
 };
 function cloudConfigured(){
   return /^https:\/\/.+\.supabase\.co\/?$/.test(SUPABASE_URL)
@@ -1741,9 +1746,22 @@ function cloudScheduleReload(){
 function cloudStartRealtime(){
   if(!CLOUD.enabled||CLOUD.channel) return;
   let ch=CLOUD.client.channel('iroha-live');
-  ['profiles','posts','post_likes','replies','reply_likes','favorites','direct_chats','direct_chat_state','messages','notifications'].forEach(table=>{
+
+  ['profiles','posts','post_likes','replies','reply_likes','favorites','direct_chats','messages','notifications'].forEach(table=>{
     ch=ch.on('postgres_changes',{event:'*',schema:'public',table},cloudScheduleReload);
   });
+
+  ch=ch.on('postgres_changes',{event:'*',schema:'public',table:'direct_chat_state'},payload=>{
+    const row=payload?.new && Object.keys(payload.new).length ? payload.new : payload?.old;
+    const cid=String(row?.chat_id||'');
+    const until=Number(CLOUD.suppressChatStateUntil.get(cid)||0);
+    if(cid && Date.now()<until){
+      CLOUD.suppressChatStateUntil.delete(cid);
+      return;
+    }
+    cloudScheduleReload();
+  });
+
   CLOUD.channel=ch.subscribe();
 }
 async function cloudCreatePost(p){
@@ -1847,7 +1865,14 @@ async function cloudUnsendMessage(m){
 }
 async function cloudMarkChatRead(cid){
   if(!CLOUD.enabled) return;
-  const r=await CLOUD.client.from('direct_chat_state').upsert({chat_id:cid,user_id:CLOUD.userId,last_read_at:new Date().toISOString(),hidden:false},{onConflict:'chat_id,user_id'}); if(r.error) console.warn(r.error);
+  /* The UI already knows this chat is read. Ignore the immediate Realtime echo
+     so simply opening a thread never triggers cloudReloadAll(). */
+  CLOUD.suppressChatStateUntil.set(String(cid),Date.now()+1800);
+  const r=await CLOUD.client.from('direct_chat_state').upsert(
+    {chat_id:cid,user_id:CLOUD.userId,last_read_at:new Date().toISOString(),hidden:false},
+    {onConflict:'chat_id,user_id'}
+  );
+  if(r.error) console.warn(r.error);
 }
 async function cloudSetChatState(c,patch){
   if(!CLOUD.enabled||!c.cloud) return;
@@ -3160,6 +3185,44 @@ function pushProfile(uid){
 /* =========================================================
    DM THREAD
    ========================================================= */
+
+/* Keep already-rendered message nodes across DM close/open.
+   This preserves loaded <img>/<video> elements instead of constructing them again. */
+const DM_ROW_CACHE=new Map();
+const DM_ROW_CACHE_MAX=320;
+
+function dmRowCacheKey(cid,m,i=0){
+  return `${cid}:${threadMessageKey(m,i)}`;
+}
+function rememberDmRow(cid,m,i,node){
+  if(!node) return node;
+  const key=dmRowCacheKey(cid,m,i);
+  DM_ROW_CACHE.delete(key);
+  DM_ROW_CACHE.set(key,node);
+
+  if(DM_ROW_CACHE.size>DM_ROW_CACHE_MAX){
+    for(const [oldKey,oldNode] of DM_ROW_CACHE){
+      if(!oldNode.isConnected){
+        DM_ROW_CACHE.delete(oldKey);
+        if(DM_ROW_CACHE.size<=DM_ROW_CACHE_MAX) break;
+      }
+    }
+  }
+  return node;
+}
+function forgetDmRow(cid,m,i=0){
+  DM_ROW_CACHE.delete(dmRowCacheKey(cid,m,i));
+}
+function clearDmRowCache(cid){
+  const prefix=`${cid}:`;
+  for(const key of [...DM_ROW_CACHE.keys()]){
+    if(key.startsWith(prefix)) DM_ROW_CACHE.delete(key);
+  }
+}
+function cachedDmRow(cid,m,i=0){
+  return DM_ROW_CACHE.get(dmRowCacheKey(cid,m,i))||null;
+}
+
 function pushThread(cid){
   const c=S.chats.find(x=>x.id===cid); if(!c) return;
   c.unread=0; cloudMarkChatRead(c.id);
@@ -3193,7 +3256,9 @@ function pushThread(cid){
 
   fitBars(s);
   const th=$('#thread',s);
-  paintThread(th,c);
+  /* Reuse old message nodes if this DM has been opened before.
+     Existing media is therefore already decoded/loaded and appears immediately. */
+  paintThread(th,c,{reuse:true});
 
   const inp=$('#msgIn',s), send=$('#sendBtn',s), dmAttBox=$('#dmAtt',s);
   let dmAtt=null;
@@ -3288,11 +3353,15 @@ function pushThread(cid){
       }, 1150+Math.random()*700);
     }, 420);
   }
+  /* Put the thread at the bottom BEFORE the visible screen transition starts.
+     No smooth-scroll and no second visible jump after opening. */
+  th.scrollTop=th.scrollHeight;
   push(s);
-  /* Measure again after mounting. Before push(), Safari can report 0px for an
-     absolutely positioned composer; the bottom spacer must use the real height. */
+
+  /* Measure once after mounting for iOS safe-area/composer height, then snap
+     directly to the final bottom. This happens without a scroll animation. */
   fitBars(s);
-  raf(()=>{
+  requestAnimationFrame(()=>{
     fitBars(s);
     th.scrollTop=th.scrollHeight;
   });
@@ -3356,10 +3425,10 @@ function updateMessageNode(node,m,c){
     tm.textContent=ago(m.ts);
   }
 }
-function paintThread(th,c){
-  /* Full paint is only for opening a thread / explicit media-setting changes.
-     Normal send + realtime updates use syncThread below. */
-  th.innerHTML='';
+function paintThread(th,c,{reuse=false}={}){
+  /* Normal open reuses cached message nodes. A deliberate media-setting change
+     passes reuse:false after clearing the cache and rebuilds only then. */
+  th.replaceChildren();
   let lastDay='';
   c.msgs.forEach((m,i)=>{
     const day=threadDayKey(m.ts);
@@ -3367,7 +3436,17 @@ function paintThread(th,c){
       lastDay=day;
       th.appendChild(el(`<div class="daychip" data-day="${esc(day)}">${threadDayLabel(m.ts)}</div>`));
     }
-    appendMsg(th,c,m,false,i);
+
+    let node=reuse ? cachedDmRow(c.id,m,i) : null;
+    if(node){
+      node.classList.remove('dm-new-message');
+      const bub=node.querySelector('.bub');
+      if(bub) bub.getAnimations?.().forEach(a=>a.cancel());
+      updateMessageNode(node,m,c);
+      th.appendChild(node);
+    }else{
+      appendMsg(th,c,m,false,i);
+    }
   });
 }
 function syncThread(th,c){
@@ -3386,6 +3465,7 @@ function syncThread(th,c){
   existing.forEach((node,key)=>{
     if(!desiredKeys.has(key)){
       node.remove();
+      DM_ROW_CACHE.delete(`${c.id}:${key}`);
       existing.delete(key);
     }
   });
@@ -3401,7 +3481,7 @@ function syncThread(th,c){
     && currentKeys.every((key,i)=>key===desiredExisting[i]);
 
   if(!orderOK){
-    paintThread(th,c);
+    paintThread(th,c,{reuse:true});
     return;
   }
 
@@ -3425,9 +3505,9 @@ function appendMsg(th,c,m,animate,i=0){
   const day=threadDayKey(m.ts);
 
   if(m.sys){
-    const chip=el(`<div class="syschip" data-mid="${esc(key)}" data-day="${esc(day)}" data-ts="${m.ts}">${I.check}<span>${esc(m.t)}</span><span class="t" data-ts="${m.ts}">${ago(m.ts)}</span></div>`);
-    if(!animate) chip.style.animationDelay=Math.min(i*38,300)+'ms';
+    const chip=el(`<div class="syschip${animate?' dm-new-message':''}" data-mid="${esc(key)}" data-day="${esc(day)}" data-ts="${m.ts}">${I.check}<span>${esc(m.t)}</span><span class="t" data-ts="${m.ts}">${ago(m.ts)}</span></div>`);
     th.appendChild(chip);
+    rememberDmRow(c.id,m,i,chip);
     return chip;
   }
 
@@ -3438,14 +3518,11 @@ function appendMsg(th,c,m,animate,i=0){
       ? `<span class="mtime send-state failed">送信失敗</span>`
       : `<span class="mtime" data-ts="${m.ts}">${ago(m.ts)}</span>`;
 
-  const row=el(`<div class="msgrow${m.me?' me':''}${sendClass}" data-mid="${esc(key)}" data-day="${esc(day)}" data-ts="${m.ts}">
+  const row=el(`<div class="msgrow${m.me?' me':''}${sendClass}${animate?' dm-new-message':''}" data-mid="${esc(key)}" data-day="${esc(day)}" data-ts="${m.ts}">
     ${m.me?uav('me',30):uav(c.u,30)}
     <div class="bub${m.media?' has-media':''}">${m.media?mediaHTML(m.media,{forceShow:!!m.me}):''}${m.t?esc(m.t):''}</div>
     ${timeHTML}
   </div>`);
-
-  const bub=row.querySelector('.bub');
-  if(!animate){ bub.style.animationDelay=Math.min(i*38,300)+'ms'; }
 
   if(m.me) holdMenu(row, ()=>{
     /* cloudReloadAll may replace chat/message JS objects, while this DOM node stays alive. */
@@ -3455,6 +3532,11 @@ function appendMsg(th,c,m,animate,i=0){
   });
 
   th.appendChild(row);
+  rememberDmRow(c.id,m,i,row);
+
+  /* Arrival animation is one-shot. Removing the marker after it ends means
+     moving this same cached node on a later DM open can never replay it. */
+  if(animate) setTimeout(()=>row.classList.remove('dm-new-message'),340);
   return row;
 }
 function scrollThread(th){ raf(()=>th.scrollTo({top:th.scrollHeight, behavior:'smooth'})); }
@@ -3860,7 +3942,13 @@ function pushSettings(){
     quiet(()=>{ if($('#feed')) renderFeed(false); refreshPane(S.tab); });
     $$('.screen').forEach(sc=>{                 /* open threads and details too */
       const th=sc.querySelector('.thread');
-      if(th){ const c=S.chats.find(x=>x.id===sc.dataset.chat); if(c) paintThread(th,c); }
+      if(th){
+        const c=S.chats.find(x=>x.id===sc.dataset.chat);
+        if(c){
+          clearDmRowCache(c.id);
+          paintThread(th,c,{reuse:false});
+        }
+      }
       const rl=sc.querySelector('#repList');
       if(rl && sc.dataset.post){
         const p=S.posts.find(x=>x.id===sc.dataset.post);
@@ -4335,7 +4423,7 @@ function mediaHTML(m, opts={}){
 
   const inner = m.kind==='video'
     ? `<video src="${m.src}" playsinline ${mode==='blur'?'':'controls'} preload="metadata"></video>`
-    : `<img src="${m.src}" alt="">`;
+    : `<img src="${m.src}" alt="" decoding="async">`;
 
   if(mode==='blur')
     return `<div class="media blurred" data-reveal data-media-key="${keyAttr}">${inner}
@@ -4799,6 +4887,7 @@ function openChatMenu(cid){
       fn:()=>{
         const deleted={...c,msgs:[...(c.msgs||[])]};
         S.chats=S.chats.filter(x=>x.id!==cid);
+        clearDmRowCache(cid);
         clearRequestedForUser(c.u);
         for(let i=stackEls.length-1;i>=0;i--)
           if(stackEls[i].dataset.chat===cid){ while(stackEls.length>i) pop(); break; }
