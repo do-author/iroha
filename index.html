@@ -1479,7 +1479,7 @@ const SUPABASE_PUBLISHABLE_KEY='sb_publishable_vYapd7Gg_rFLAFkO42BPUQ_GXLge49D';
 /* Public half of the VAPID pair. Safe to ship — it only lets this app ask a
    push service for a subscription. The private half stays in the Edge Function
    and is what actually authorises sending. Paste yours here. */
-const VAPID_PUBLIC_KEY='PASTE_YOUR_VAPID_PUBLIC_KEY';
+const VAPID_PUBLIC_KEY='BGehD2fnT5vQtiEpyagL3xpZgfMMq4K5VkTwxXQecRj75A-JmrSJs_t2JvODKQoIoxE8jvV-AMTLLylYFUVmqSg';
 function pushConfigured(){
   return typeof VAPID_PUBLIC_KEY==='string'
     && VAPID_PUBLIC_KEY.length>80
