@@ -1448,7 +1448,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.33';
+const APP_VER='2.40.32';
 
 
 /* =========================================================
@@ -2220,7 +2220,6 @@ const S = {
   filter:'osusume',
   media:'safety',
   quiet:false,
-  notifyPrefs:{like:'all',reply:'all',dm:'all'}, /* device notification filters */
   who:'all',          /* default: everyone may start/send a conversation with me */
   postCooldowns:{},    /* tag -> optimistic submit time; persisted */
   requestedPosts:[],   /* post ids whose 「話す」 request was already sent on this device */
@@ -2271,11 +2270,6 @@ function loadPrefs(){
     if(['osusume','new','fav'].includes(p.filter)) S.filter=p.filter;
     if(['safety','raw','hide'].includes(p.media)) S.media=p.media;
     if(typeof p.quiet==='boolean') S.quiet=p.quiet;
-    if(p.notifyPrefs && typeof p.notifyPrefs==='object'){
-      for(const k of ['like','reply','dm']){
-        if(['off','all','fav'].includes(p.notifyPrefs[k])) S.notifyPrefs[k]=p.notifyPrefs[k];
-      }
-    }
     if(['all','fav','replied'].includes(p.who)){
       /* v2.40.20/21 used replied as the initial default.
          Move that old default to the new "all" default once. */
@@ -2295,8 +2289,7 @@ function loadPrefs(){
 function savePrefs(){
   try{
     localStorage.setItem(PREF_KEY,JSON.stringify({
-      theme:S.theme, filter:S.filter, media:S.media, quiet:S.quiet,
-      notifyPrefs:{...S.notifyPrefs}, who:S.who,
+      theme:S.theme, filter:S.filter, media:S.media, quiet:S.quiet, who:S.who,
       dmDefaultAllMigrated:true,
       postCooldowns:S.postCooldowns, requestedPosts:S.requestedPosts,
       blocked:S.blocked, muted:S.muted
@@ -2824,7 +2817,7 @@ function postCard(p, opts={}){
               <button class="act${p.liked?' liked':''}" data-like="${p.id}">
                 <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span><span class="num">${p.likes}</span>
               </button>
-              ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'はなしかけています':'はなしかける'}</button>`}
+              ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>`}
             </div>`}
       </div>
     </div>
@@ -3611,8 +3604,6 @@ function updateMessageNode(node,m,c){
   }
 
   if(m.sys){
-    const msg=node.querySelector('.sysmsg') || node.querySelector('span:not(.t)');
-    if(msg) msg.textContent=systemMessageText(m,c);
     const t=node.querySelector('.t');
     if(t){ t.dataset.ts=String(m.ts); t.textContent=ago(m.ts); }
     return;
@@ -3755,24 +3746,12 @@ function syncThread(th,c){
 
   rebuildThreadDayChips(th);
 }
-function systemMessageText(m,c){
-  const raw=String(m?.t||'');
-  const isTalk=raw==='__iroha_talk_start__'
-    || raw==='会話申請を送信しました'
-    || raw==='会話の申請が届きました';
-  if(!isTalk) return raw;
-
-  const other=S.users[c?.u];
-  const name=other?.name ? `${other.name}さん` : '相手';
-  return m.me ? `${name}にはなしかけています` : `${name}がはなしかけています`;
-}
-
 function appendMsg(th,c,m,animate,i=0){
   const key=threadMessageKey(m,i);
   const day=threadDayKey(m.ts);
 
   if(m.sys){
-    const chip=el(`<div class="syschip${animate?' dm-new-message':''}" data-mid="${esc(key)}" data-day="${esc(day)}" data-msg-ts="${m.ts}">${I.check}<span class="sysmsg">${esc(systemMessageText(m,c))}</span><span class="t" data-ts="${m.ts}">${ago(m.ts)}</span></div>`);
+    const chip=el(`<div class="syschip${animate?' dm-new-message':''}" data-mid="${esc(key)}" data-day="${esc(day)}" data-msg-ts="${m.ts}">${I.check}<span>${esc(m.t)}</span><span class="t" data-ts="${m.ts}">${ago(m.ts)}</span></div>`);
     th.appendChild(chip);
     rememberDmRow(c.id,m,i,chip);
     if(animate) setTimeout(()=>{
@@ -3860,7 +3839,7 @@ function pushPostDetail(pid){
           <button class="who" data-user="${u.id}" style="text-align:left">
             <b>${esc(u.name)}${genderTag(u)}</b><span data-ts="${p.ts}">${ago(p.ts)}</span>
           </button>
-          ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'はなしかけています':'はなしかける'}</button>`}
+          ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>`}
         </div>
         <p class="pd-body">${esc(p.t)}</p>
         ${mediaHTML(p.media,{owner:p.u})}
@@ -4169,42 +4148,13 @@ function notificationPermissionLabel(){
   if(p==='unsupported') return 'この端末では利用できません';
   return 'オフ';
 }
-
-const NOTIFY_PREF_OPTS={
-  off:{label:'なし',sub:'この種類の端末通知は出しません'},
-  all:{label:'あり',sub:'この種類の端末通知をすべて受け取ります'},
-  fav:{label:'お気に入りだけ',sub:'自分がお気に入りしている相手だけ通知します'}
-};
-const NOTIFY_KIND_LABEL={like:'いいね',reply:'返信',dm:'DM'};
-
-function notifyPrefLabel(kind){
-  return NOTIFY_PREF_OPTS[S.notifyPrefs?.[kind]||'all']?.label||'あり';
-}
-function currentDeviceNotifyPrefs(){
-  return {
-    quiet:!!S.quiet,
-    like:S.notifyPrefs?.like||'all',
-    reply:S.notifyPrefs?.reply||'all',
-    dm:S.notifyPrefs?.dm||'all'
-  };
-}
-function postNotificationPrefsToWorker(reg=IROHA_SW_REG){
-  try{
-    const worker=reg?.active || navigator.serviceWorker?.controller || reg?.waiting || reg?.installing;
-    if(worker) worker.postMessage({type:'IROHA_NOTIFICATION_PREFS',prefs:currentDeviceNotifyPrefs()});
-  }catch(e){
-    console.warn('[iroha notify] prefs sync',e);
-  }
-}
 async function ensureIrohaServiceWorker(){
   if(!('serviceWorker' in navigator)) return null;
   try{
     const reg=await navigator.serviceWorker.register('./iroha-sw.js',{scope:'./'});
     IROHA_SW_REG=reg;
-    const ready=await navigator.serviceWorker.ready;
-    IROHA_SW_REG=ready||reg;
-    postNotificationPrefsToWorker(IROHA_SW_REG);
-    return IROHA_SW_REG;
+    await navigator.serviceWorker.ready;
+    return reg;
   }catch(e){
     console.warn('[iroha notify] service worker',e);
     return null;
@@ -4243,10 +4193,6 @@ async function requestDeviceNotifications(){
   return false;
 }
 async function showDeviceTestNotification(){
-  if(S.quiet){
-    toast('おやすみモード中です');
-    return false;
-  }
   const ok=await requestDeviceNotifications();
   if(!ok) return false;
 
@@ -4320,18 +4266,6 @@ function pushSettings(){
         <button class="gitem" id="stNotify"><span class="gi">${I.bell}</span>
           <div class="gt"><b>端末通知</b><span id="notifyNow">${notificationPermissionLabel()}</span></div>
           <span class="sw${notificationPermission()==='granted'?' on':''}" id="notifySw"></span></button>
-        <button class="gitem" id="stQuiet"><span class="gi">${I.belloff}</span>
-          <div class="gt"><b>おやすみモード</b><span>端末通知をすべて一時停止します</span></div>
-          <span class="sw${S.quiet?' on':''}" id="quietSw"></span></button>
-        <button class="gitem" data-notify-kind="like"><span class="gi">${I.heart}</span>
-          <div class="gt"><b>いいね</b><span id="notifyLikeNow">${notifyPrefLabel('like')}</span></div>
-          <span class="chev">${I.chev}</span></button>
-        <button class="gitem" data-notify-kind="reply"><span class="gi">${I.reply}</span>
-          <div class="gt"><b>返信</b><span id="notifyReplyNow">${notifyPrefLabel('reply')}</span></div>
-          <span class="chev">${I.chev}</span></button>
-        <button class="gitem" data-notify-kind="dm"><span class="gi">${I.chat}</span>
-          <div class="gt"><b>DM</b><span id="notifyDmNow">${notifyPrefLabel('dm')}</span></div>
-          <span class="chev">${I.chev}</span></button>
         <button class="gitem" id="stNotifyTest"><span class="gi">${I.bell}</span>
           <div class="gt"><b>テスト通知</b><span>ロック画面に通知が出るか確認します</span></div>
           <span class="chev">${I.chev}</span></button>
@@ -4344,6 +4278,9 @@ function pushSettings(){
           <div class="gt"><b>ブロックしたユーザー</b><span>${S.blocked.length?S.blocked.length+'人をブロック中':'表示と会話を制限します'}</span></div><span class="chev">${I.chev}</span></button>
         <button class="gitem" id="stWho"><span class="gi">${I.lock}</span>
           <div class="gt"><b>会話できる相手</b><span id="whoNow">${WHO_OPTS[S.who].label}</span></div><span class="chev">${I.chev}</span></button>
+        <button class="gitem" id="stQuiet"><span class="gi">${I.belloff}</span>
+          <div class="gt"><b>おやすみモード</b><span>通知を一時停止します</span></div>
+          <span class="sw${S.quiet?' on':''}" id="quietSw"></span></button>
       </div>
     </div>
 
@@ -4420,16 +4357,10 @@ function pushSettings(){
   };
 
   $('#stQuiet',body).onclick=()=>{
-    haptic(8);
-    S.quiet=!S.quiet;
-    savePrefs();
-    postNotificationPrefsToWorker();
+    haptic(8); S.quiet=!S.quiet; savePrefs();
     $('#quietSw',body).classList.toggle('on',S.quiet);
     toast(S.quiet?'おやすみモードをオンにしました':'おやすみモードをオフにしました');
   };
-  $$('[data-notify-kind]',body).forEach(b=>b.addEventListener('click',()=>{
-    pushNotificationPreference(b.dataset.notifyKind);
-  }));
   $('#stBlock',body).onclick=()=>pushBlockList();
   $('#stWho',body).onclick=()=>pushWhoCanTalk();
   $('#stGuide',body).onclick=()=>pushDoc('コミュニティガイドライン', GUIDE_TEXT);
@@ -4460,50 +4391,12 @@ function openMessageMenu(c, m, th){
   ]);
 }
 
-
-function pushNotificationPreference(kind){
-  if(!['like','reply','dm'].includes(kind)) return;
-  const label=NOTIFY_KIND_LABEL[kind];
-  const s=screenShell(label+'の通知');
-  const body=s.querySelector('.js-scroll');
-
-  body.innerHTML=`<div class="group" style="margin-top:14px">
-    <div class="gcard">
-      ${Object.entries(NOTIFY_PREF_OPTS).map(([k,v])=>`<button class="gitem" data-notify-pref="${k}">
-        <div class="gt"><b>${v.label}</b><span>${v.sub}</span></div>
-        <span class="radio${S.notifyPrefs[kind]===k?' on':''}"></span>
-      </button>`).join('')}
-    </div>
-    <p class="note" style="text-align:left;margin:12px 6px">
-      「お気に入りだけ」は、あなたがお気に入りしている相手からの${label}だけ端末通知します。
-      おやすみモードをオンにしても、この三択は変更されません。
-    </p>
-  </div>`;
-
-  $$('[data-notify-pref]',body).forEach(b=>b.addEventListener('click',()=>{
-    haptic(8);
-    S.notifyPrefs[kind]=b.dataset.notifyPref;
-    savePrefs();
-    postNotificationPrefsToWorker();
-
-    $$('[data-notify-pref] .radio',body).forEach(r=>r.classList.remove('on'));
-    b.querySelector('.radio').classList.add('on');
-
-    const targetId=kind==='like'?'#notifyLikeNow':kind==='reply'?'#notifyReplyNow':'#notifyDmNow';
-    const target=$(targetId);
-    if(target) target.textContent=notifyPrefLabel(kind);
-    toast(label+'の通知を「'+notifyPrefLabel(kind)+'」にしました');
-  }));
-  $$('.gitem',body).forEach(g=>g.addEventListener('pointerdown',e=>rippleAt(g,e)));
-  push(s);
-}
-
 /* =========================================================
    SETTINGS SUB-SCREENS
    ========================================================= */
 const WHO_OPTS={
   all    :{label:'すべての人',     sub:'誰でも何通でもDMできます'},
-  replied:{label:'返信した相手のみ', sub:'最初の文章は1通だけ。文章を添えずにはなしかけた場合は数えず、あなたが一度返信すると普通のDMになります'},
+  replied:{label:'返信した相手のみ', sub:'最初の文章は1通だけ。文章なしの申請は数えず、あなたが一度返信すると普通のDMになります'},
   fav    :{label:'お気に入りのみ',   sub:'あなたがお気に入りした人だけ新しくDMを始められます'}
 };
 
@@ -4516,7 +4409,7 @@ function pushWhoCanTalk(){
         <div class="gt"><b>${v.label}</b><span>${v.sub}</span></div>
         <span class="radio${S.who===k?' on':''}"></span></button>`).join('')}
     </div><p class="note" style="text-align:left;margin:12px 6px">
-      設定にかかわらず、ブロックした相手からははなしかけられません。既にあるDMは「お気に入りのみ」に変えても開けます。</p></div>`;
+      設定にかかわらず、ブロックした相手からは申請できません。既にあるDMは「お気に入りのみ」に変えても開けます。</p></div>`;
     $$('[data-who]',body).forEach(b=>b.addEventListener('click',()=>{
       haptic(8); S.who=b.dataset.who; if(S.users.me) S.users.me.dmPolicy=S.who; savePrefs();
       cloudSetDmPolicy(S.who).catch(e=>{ cloudErr('dm policy',e); toast('会話設定を保存できませんでした'); });
@@ -4554,7 +4447,7 @@ function pushBlockList(){
       const uid=b.dataset.unblock, u=S.users[uid];
       confirmSheet({
         title:`${u.name}のブロックを解除しますか？`,
-        lead:'相手の投稿がふたたび表示され、またはなしかけられるようになります。',
+        lead:'相手の投稿がふたたび表示され、会話の申請も届くようになります。',
         go:'解除する',
         fn:()=>{
           S.blocked=S.blocked.filter(x=>x!==uid); savePrefs();
@@ -4572,7 +4465,7 @@ const GUIDE_TEXT=[
   ['ここは、話しはじめる場所です',
    'irohaは、まとまっていない気持ちをそのまま置いていける場所として作られています。うまく言えなくても大丈夫です。'],
   ['DMは会話から生まれます',
-   'いきなりメッセージを送ることはできません。投稿への返信や「はなしかける」を通じて、お互いが望んだときだけ会話が始まります。'],
+   'いきなりメッセージを送ることはできません。投稿への返信や「話す」の申請を通じて、お互いが望んだときだけ会話が始まります。'],
   ['写真と動画はお気に入り相互のみ',
    'DMで画像や動画を送れるのは、お互いをお気に入りにしている相手だけです。音声はいつでも送れます。'],
   ['見たくないものは遠ざけられます',
@@ -4585,7 +4478,7 @@ const ABOUT_TEXT=()=>[
   ['このビルドについて',
    CLOUD.enabled?'Supabaseに接続中です。投稿・返信・いいね・プロフィール・DMはクラウドに保存され、別端末にも反映されます。':'Supabase未設定のためオフラインデモとして動作しています。Project URLとPublishable Keyを設定するとクラウド保存が有効になります。'],
   ['デモアカウント',
-   'DEMOと表示される4人は自動で動くアカウントです。いいね・返信・はなしかけるを自分から行います。'],
+   'DEMOと表示される4人は自動で動くアカウントです。いいね・返信・会話の申請を自分から行います。'],
   ['音声について',
    CLOUD.enabled?'録音はブラウザのマイク機能を使います。送信した音声はSupabase Storageに保存されます。DM音声は非公開バケットで扱います。':'録音はブラウザのマイク機能を使います。Supabase未設定時は端末内のデモとして扱われます。']
 ];
@@ -5200,17 +5093,14 @@ function showScrim(on, onTap){
   sc.onclick = on && onTap ? onTap : null;
 }
 
-const REQUEST_IN_FLIGHT=new Set();
-
-/* ---------- はなしかける sheet (drag dismissible) ---------- */
+/* ---------- request-to-talk sheet (drag dismissible) ---------- */
 function openRequest(postId, uidOverride){
   if($('#reqSheet')) return;
   const p = postId ? S.posts.find(x=>x.id===postId) : null;
   const uid = uidOverride || (p && p.u); if(!uid) return;
-  if(REQUEST_IN_FLIGHT.has(uid)){ toast('はなしかけています'); return; }
-  if(p && (p.req||isPostRequested(p.id))){ toast('すでにはなしかけています'); return; }
+  if(p && (p.req||isPostRequested(p.id))){ toast('申請済みです'); return; }
   if(uid==='me'){ toast('自分自身とは会話できません'); return; }
-  if(S.blocked.includes(uid)){ toast('ブロック中の相手にははなしかけられません'); return; }
+  if(S.blocked.includes(uid)){ toast('ブロック中の相手には申請できません'); return; }
 
   const existing=chatWith(uid);
   if(!existing && !canStartNewDm(uid,true)) return;
@@ -5222,12 +5112,12 @@ function openRequest(postId, uidOverride){
   const sheet=el(`<div class="sheet" id="reqSheet">
     <div class="grab"></div>
     <div class="sheet-ico">${I.reply}</div>
-    <h3>${esc(u.name)}さんに<br>はなしかける</h3>
-    <p class="lead">はなしかけるとDM一覧に追加されます。文章を添えると最初のメッセージとして相手に届きます。</p>
-    <div class="obox"><label>メッセージ <i>任意</i></label>
+    <h3>${esc(u.name)}さんに<br>会話を申請</h3>
+    <p class="lead">申請後もこの画面に残ります。DMは一覧へ追加され、文章を添えた場合は最初のメッセージとして相手にも届きます。</p>
+    <div class="obox"><label>申請メッセージ <i>任意</i></label>
       <textarea id="reqMsg" maxlength="120" placeholder="投稿を見て話してみたいと思いました"></textarea>
       <span class="cnt" style="display:block;text-align:right;font-size:11px;color:var(--ink-3);font-weight:700" id="reqCnt">0/120</span></div>
-    <button class="bigbtn" id="reqGo">はなしかける</button>
+    <button class="bigbtn" id="reqGo">会話を申請する</button>
     <button class="textlink" id="reqNo">キャンセル</button>
   </div>`);
   $('#overlays').appendChild(sheet);
@@ -5241,74 +5131,31 @@ function openRequest(postId, uidOverride){
   });
   $('#reqNo',sheet).onclick=close;
   $('#reqGo',sheet).onclick=async()=>{
-    const go=$('#reqGo',sheet);
-    if(go.disabled || REQUEST_IN_FLIGHT.has(uid)) return;
-
     haptic(14);
-    go.disabled=true;
-    go.textContent='はなしかけています';
-    $('#reqNo',sheet).disabled=true;
-    sheet.style.pointerEvents='none';
-
-    const text=ta.value.trim();
-    REQUEST_IN_FLIGHT.add(uid);
-
-    /* 遅い通信でも連打できないよう、押した瞬間に画面を閉じる。 */
-    const postBtn=p ? document.querySelector(`[data-talk="${p.id}"]`) : null;
-    if(postBtn){
-      postBtn.classList.add('done');
-      postBtn.innerHTML=I.reply+'はなしかけています';
-    }
-    close();
-
     let c=S.chats.find(x=>x.u===uid);
-    let ok=false;
+    const text=ta.value.trim();
     try{
       if(!c && cloudUserKeyIsReal(uid)) c=await cloudGetOrCreateChat(uid);
-      if(!c){
-        c={id:'c'+Date.now(),u:uid,unread:0,ts:Date.now(),msgs:[]};
-        S.chats.push(c);
-      }
-      if(dmPolicyOf(uid)==='replied' && !canSendDmNow(c)){
-        notifyDmWait();
-        throw new Error('iroha_request_blocked');
-      }
-
+      if(!c){ c={id:'c'+Date.now(), u:uid, unread:0, ts:Date.now(), msgs:[]}; S.chats.push(c); }
+      if(dmPolicyOf(uid)==='replied' && !canSendDmNow(c)){ notifyDmWait(); return; }
       const m=text
         ? {id:newRowId(),me:true,t:text,ts:Date.now()}
-        : {id:newRowId(),me:true,sys:true,t:'__iroha_talk_start__',ts:Date.now()};
-
-      await cloudSendMessage(c,m);
-      c.msgs.push(m);
-      c.ts=Date.now();
-      ok=true;
+        : {id:newRowId(),me:true,sys:true,t:'会話申請を送信しました',ts:Date.now()};
+      await cloudSendMessage(c,m); c.msgs.push(m); c.ts=Date.now();
     }catch(e){
-      const msg=String(e?.message||e);
-      if(msg==='iroha_request_blocked'){
-        /* reason was already shown */
-      }else if(msg.includes('dm_waiting_for_reply')){
-        notifyDmWait();
-      }else if(msg.includes('dm_favorite_only')){
-        notifyFavOnly();
-      }else{
-        cloudErr('conversation request',e);
-      }
-    }finally{
-      REQUEST_IN_FLIGHT.delete(uid);
-    }
-
-    if(!ok){
-      if(postBtn){
-        postBtn.classList.remove('done');
-        postBtn.innerHTML=I.reply+'はなしかける';
-      }
+      if(String(e?.message||e).includes('dm_waiting_for_reply')) notifyDmWait();
+      else if(String(e?.message||e).includes('dm_favorite_only')) notifyFavOnly();
+      else cloudErr('conversation request',e);
       return;
     }
-
-    if(S.users[uid]?.demo||S.users[uid]?.bot) scheduleReplyTo(c,text);
-    if(p) markPostRequested(p.id);
-    syncNavBadges();
-    setTimeout(()=>toast('はなしかけました'),120);
+    if(S.users[uid]?.demo||S.users[uid]?.bot) scheduleReplyTo(c, text);
+    if(p){
+      markPostRequested(p.id);
+      const btn=document.querySelector(`[data-talk="${p.id}"]`);
+      if(btn){ btn.classList.add('done'); btn.innerHTML=I.reply+'申請済み'; }
+    }
+    close(); syncNavBadges();
+    setTimeout(()=>toast('会話を申請しました'),180);
   };
 
   /* drag to dismiss */
@@ -5787,7 +5634,7 @@ function activeDemos(){
   return S.DEMOS.filter(id => !S.blocked.includes(id));
 }
 function pushNote(kind, uid, t, sub, postId){
-  /* おやすみモードは端末通知だけを止める。アプリ内の通知履歴は残す。 */
+  if(S.quiet) return;                    /* おやすみモード: no new notifications */
   S.notes[kind].unshift({id:'n'+uid4(), u:uid, p:postId, t, s:sub, ts:Date.now()});
   if(S.notes[kind].length>40) S.notes[kind].length=40;
 }
@@ -5825,7 +5672,7 @@ function demoPost(uid){
 function demoRequest(uid){
   if(!VOICE[uid] || S.chats.some(c=>c.u===uid)) return false;
   const c={id:'c'+uid4(), u:uid, unread:1, ts:Date.now(),
-    msgs:[{sys:true, t:'__iroha_talk_start__', ts:Date.now()},
+    msgs:[{sys:true, t:'会話の申請が届きました', ts:Date.now()},
           {me:false, t:VOICE[uid].hello, ts:Date.now()+1}]};
   S.chats.unshift(c);
   return true;
@@ -5856,7 +5703,7 @@ function scheduleReplyTo(c, text){
   setTimeout(()=>{
     if(S.blocked.includes(uid)) return;
     const v=VOICE[uid];
-    const t = v ? pick(v.replies) : 'はなしかけてくれてありがとう。ゆっくり話しましょう。';
+    const t = v ? pick(v.replies) : '申請ありがとうございます。ゆっくり話しましょう。';
     c.msgs.push({me:false, t, ts:Date.now()});
     c.ts=Date.now(); c.hidden=false;
     if(!stackEls.some(x=>x.dataset.chat===c.id)) c.unread++;
