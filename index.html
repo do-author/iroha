@@ -1464,7 +1464,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='3.0.3';
+const APP_VER='3.0.4';
 
 
 /* =========================================================
@@ -4331,21 +4331,84 @@ async function requestDeviceNotifications(){
   }
   return false;
 }
-async function showDeviceTestNotification(){
-  const ok=await requestDeviceNotifications();
-  if(!ok) return false;
-
-  const reg=IROHA_SW_REG || await navigator.serviceWorker.ready;
-  await reg.showNotification('iroha',{
-    body:'端末通知のテストです',
-    tag:'iroha-device-test',
-    renotify:false,
-    data:{url:location.href}
+function urlBase64ToUint8Array(value){
+  const padding='='.repeat((4-value.length%4)%4);
+  const base64=(value+padding).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(base64);
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+async function cloudGetVapidPublicKey(){
+  if(!CLOUD.enabled) throw new Error('cloud_not_ready');
+  const {data,error}=await CLOUD.client.functions.invoke('push-test',{
+    body:{action:'public-key'}
   });
+  if(error) throw error;
+  const key=String(data?.publicKey||'').trim();
+  if(!key) throw new Error('vapid_public_key_missing');
+  return key;
+}
+async function cloudSavePushSubscription(sub){
+  if(!CLOUD.enabled||!CLOUD.userId) throw new Error('cloud_not_ready');
+  const json=sub?.toJSON?.()||{};
+  const p256dh=String(json.keys?.p256dh||'');
+  const auth=String(json.keys?.auth||'');
+  if(!sub?.endpoint||!p256dh||!auth) throw new Error('invalid_push_subscription');
 
-  if(navigator.setAppBadge){
-    try{ await navigator.setAppBadge(1); }catch(_){}
+  const row={
+    user_id:CLOUD.userId,
+    endpoint:String(sub.endpoint),
+    p256dh,
+    auth,
+    user_agent:String(navigator.userAgent||'').slice(0,500),
+    updated_at:new Date().toISOString()
+  };
+  const r=await CLOUD.client.from('push_subscriptions')
+    .upsert(row,{onConflict:'endpoint'});
+  if(r.error) throw r.error;
+  return sub;
+}
+async function ensureRemotePushSubscription(){
+  const ok=await requestDeviceNotifications();
+  if(!ok) return null;
+  if(!('PushManager' in window)){
+    toast('この端末ではプッシュ通知を利用できません');
+    return null;
   }
+  if(!CLOUD.enabled){
+    toast('サーバーに接続してから通知を設定してください');
+    return null;
+  }
+
+  const reg=IROHA_SW_REG || await ensureIrohaServiceWorker();
+  if(!reg) return null;
+
+  let sub=await reg.pushManager.getSubscription();
+  if(!sub){
+    const publicKey=await cloudGetVapidPublicKey();
+    sub=await reg.pushManager.subscribe({
+      userVisibleOnly:true,
+      applicationServerKey:urlBase64ToUint8Array(publicKey)
+    });
+  }
+  await cloudSavePushSubscription(sub);
+  return sub;
+}
+async function syncExistingPushSubscription(){
+  if(notificationPermission()!=='granted' || !CLOUD.enabled || !('PushManager' in window)) return;
+  const reg=IROHA_SW_REG || await ensureIrohaServiceWorker();
+  if(!reg) return;
+  const sub=await reg.pushManager.getSubscription();
+  if(sub) await cloudSavePushSubscription(sub);
+}
+async function showDeviceTestNotification(){
+  const sub=await ensureRemotePushSubscription();
+  if(!sub) return false;
+
+  const {data,error}=await CLOUD.client.functions.invoke('push-test',{
+    body:{action:'send-test'}
+  });
+  if(error) throw error;
+  if(!data?.ok) throw new Error(data?.error||'push_test_failed');
   return true;
 }
 function syncNotificationSettingsUI(root=document){
@@ -4474,14 +4537,15 @@ function pushSettings(){
   }));
   $('#stNotify',body).onclick=async()=>{
     haptic(8);
-    if(notificationPermission()==='granted'){
-      toast('端末通知はオンです。オフにする場合は端末の通知設定から変更できます');
+    try{
+      const sub=await ensureRemotePushSubscription();
       syncNotificationSettingsUI(body);
-      return;
+      if(sub) toast('端末通知をオンにしました');
+    }catch(e){
+      console.warn('[iroha notify] subscribe',e);
+      syncNotificationSettingsUI(body);
+      toast('端末通知の登録に失敗しました');
     }
-    const ok=await requestDeviceNotifications();
-    syncNotificationSettingsUI(body);
-    if(ok) toast('端末通知をオンにしました');
   };
   $('#stNotifyTest',body).onclick=async()=>{
     haptic(8);
@@ -6113,6 +6177,9 @@ async function boot(){
   });
   if(CLOUD.enabled){
     cloudStartRealtime();
+    /* すでに端末側のPushSubscriptionがある場合だけDBへ再同期。
+       新規購読や権限要求はユーザー操作時にしか行わない。 */
+    syncExistingPushSubscription().catch(e=>console.warn('[iroha notify] resync',e));
     /* Realtimeが取りこぼした場合だけ拾う保険。通常同期はRealtime、確認は30秒ごと。 */
     setInterval(()=>{ if(!document.hidden) cloudReloadAll(false,false); }, 30000);
     setTimeout(()=>toast('Supabaseに接続しました'),650);
