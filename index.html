@@ -1453,7 +1453,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.41.34';
+const APP_VER='3.0';
 
 
 /* =========================================================
@@ -1688,6 +1688,74 @@ async function cloudFetchProfileReplies(uid){
     }
   }
   return profileReplies(uid);
+}
+
+
+/* 投稿詳細の返信欄だけを手動更新する。
+   Home全体を差し替えず、開いている投稿オブジェクトをそのまま更新する。 */
+async function cloudRefreshPostReplies(p){
+  if(!CLOUD.enabled || !p?.id || !p.cloud) return p?.rep||[];
+
+  const sb=CLOUD.client, me=CLOUD.userId;
+  const rows=await cloudRows(
+    sb.from('replies')
+      .select('*')
+      .eq('post_id',p.id)
+      .order('created_at',{ascending:true})
+      .limit(1000)
+  );
+
+  /* 更新中に初めて現れた返信者も、その場で表示できるようプロフィールだけ補う。 */
+  const relatedIds=[...new Set(rows.flatMap(r=>[r.author_id,r.reply_to]).filter(Boolean))];
+  const missing=relatedIds.filter(id=>!S.users[localKey(id)]);
+  if(missing.length){
+    const profiles=await cloudRows(sb.from('profiles').select('*').in('id',missing));
+    for(const u of profiles){
+      const key=localKey(u.id);
+      const target=S.users[key]||{
+        id:key,posts:0,replies:0,talks:0,fav:false,favMe:false,dmPolicy:'all'
+      };
+      Object.assign(target,{
+        id:key,cloudId:u.id,name:u.name,handle:u.handle,bio:u.bio||'',
+        av:u.av||'stone',gender:u.gender||'secret',
+        img:u.avatar_url||null,banner:u.banner_url||null,
+        isActive:u.is_active!==false,
+        dmPolicy:['all','replied','fav'].includes(u.dm_policy)?u.dm_policy:'all'
+      });
+      S.users[key]=target;
+      if(key!=='me') CLOUD.remoteUserIds.add(key);
+    }
+  }
+
+  const replyIds=rows.map(r=>r.id);
+  const replyLikes=replyIds.length
+    ? await cloudRows(sb.from('reply_likes').select('*').in('reply_id',replyIds))
+    : [];
+
+  const likesByReply=new Map(), myReplyLikes=new Set();
+  replyLikes.forEach(x=>{
+    likesByReply.set(x.reply_id,(likesByReply.get(x.reply_id)||0)+1);
+    if(x.user_id===me) myReplyLikes.add(x.reply_id);
+  });
+
+  const reps=[];
+  for(const row of rows){
+    reps.push({
+      id:row.id,
+      u:localKey(row.author_id),
+      t:row.body||'',
+      to:row.reply_to?localKey(row.reply_to):null,
+      media:await cloudHydrateMedia(row.media),
+      ts:new Date(row.created_at).getTime(),
+      likes:likesByReply.get(row.id)||0,
+      liked:myReplyLikes.has(row.id),
+      cloud:true
+    });
+  }
+
+  p.rep=reps;
+  p.replies=reps.length;
+  return reps;
 }
 
 /* Supabaseの定期確認で、実データが変わっていないならDOMを作り直さない。 */
@@ -3930,6 +3998,21 @@ function pushPostDetail(pid){
 
   const list=$('#repList',s);
   paintReplies();
+
+  /* 投稿詳細の返信欄も、ほかの画面と同じ下方向の引っ張り更新に対応。 */
+  const detailScroller=s.querySelector('.js-scroll');
+  attachPTR(detailScroller,s,async()=>{
+    if(CLOUD.enabled){
+      await cloudRefreshPostReplies(p);
+    }else{
+      demoStep(true);
+    }
+    if(!s.isConnected) return;
+    paintReplies();
+    const repNum=$('#pdRepCount',s)?.querySelector('.num');
+    if(repNum) repNum.textContent=p.replies+'件の返信';
+    syncCard(p);
+  });
 
   /* composer — same mechanics as the DM bar */
   const openReply=(toReply=null)=>openReplyCompose(p, toReply, r=>{
