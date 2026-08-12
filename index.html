@@ -1464,7 +1464,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='3.0.4';
+const APP_VER='3.0.5';
 
 
 /* =========================================================
@@ -4267,6 +4267,7 @@ function syncCard(p){
    DEVICE NOTIFICATIONS / PWA
    ========================================================= */
 let IROHA_SW_REG=null;
+const IROHA_VAPID_PUBLIC_KEY='BGehD2fnT5vQtiEpyagL3xpZgfMMq4K5VkTwxXQecRj75A-JmrSJs_t2JvODKQoIoxE8jvV-AMTLLylYFUVmqSg';
 
 function isStandaloneWebApp(){
   return !!(
@@ -4313,23 +4314,25 @@ async function requestDeviceNotifications(){
     return false;
   }
 
-  const reg=await ensureIrohaServiceWorker();
-  if(!reg){
-    toast('通知の準備に失敗しました');
-    return false;
-  }
-
+  /* iOSは通知許可をユーザー操作の直後に要求する必要がある。
+     Service Worker待ちより先に permission を確定させる。 */
   let permission=Notification.permission;
   if(permission==='default'){
     permission=await Notification.requestPermission();
   }
 
-  if(permission==='granted') return true;
   if(permission==='denied'){
     toast('通知が拒否されています。端末の通知設定から変更できます');
     return false;
   }
-  return false;
+  if(permission!=='granted') return false;
+
+  const reg=IROHA_SW_REG || await ensureIrohaServiceWorker();
+  if(!reg){
+    toast('通知の準備に失敗しました');
+    return false;
+  }
+  return true;
 }
 function urlBase64ToUint8Array(value){
   const padding='='.repeat((4-value.length%4)%4);
@@ -4337,43 +4340,37 @@ function urlBase64ToUint8Array(value){
   const raw=atob(base64);
   return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
 }
-async function cloudGetVapidPublicKey(){
-  if(!CLOUD.enabled) throw new Error('cloud_not_ready');
-  const {data,error}=await CLOUD.client.functions.invoke('push-test',{
-    body:{action:'public-key'}
-  });
-  if(error) throw error;
-  const key=String(data?.publicKey||'').trim();
-  if(!key) throw new Error('vapid_public_key_missing');
-  return key;
+function pushErrorMessage(e){
+  const raw=String(e?.context?.body?.error||e?.message||e?.error_description||e||'unknown');
+  if(raw.includes('NotAllowedError')) return '通知が許可されていません';
+  if(raw.includes('AbortError')) return 'iPhoneで通知先を作れませんでした';
+  if(raw.includes('InvalidAccessError')) return '通知用の公開鍵を読み込めませんでした';
+  if(raw.includes('push_manager_unavailable')) return 'この端末ではプッシュ通知を利用できません';
+  if(raw.includes('subscription_save_failed')) return '通知先をSupabaseへ保存できませんでした';
+  return raw.slice(0,90);
 }
 async function cloudSavePushSubscription(sub){
   if(!CLOUD.enabled||!CLOUD.userId) throw new Error('cloud_not_ready');
   const json=sub?.toJSON?.()||{};
+  const endpoint=String(sub?.endpoint||json.endpoint||'');
   const p256dh=String(json.keys?.p256dh||'');
   const auth=String(json.keys?.auth||'');
-  if(!sub?.endpoint||!p256dh||!auth) throw new Error('invalid_push_subscription');
+  if(!endpoint||!p256dh||!auth) throw new Error('invalid_push_subscription');
 
-  const row={
-    user_id:CLOUD.userId,
-    endpoint:String(sub.endpoint),
-    p256dh,
-    auth,
-    user_agent:String(navigator.userAgent||'').slice(0,500),
-    updated_at:new Date().toISOString()
-  };
-  const r=await CLOUD.client.from('push_subscriptions')
-    .upsert(row,{onConflict:'endpoint'});
-  if(r.error) throw r.error;
+  const {data,error}=await CLOUD.client.functions.invoke('push-test',{
+    body:{
+      action:'save-subscription',
+      subscription:{endpoint,keys:{p256dh,auth}},
+      userAgent:String(navigator.userAgent||'').slice(0,500)
+    }
+  });
+  if(error) throw error;
+  if(!data?.ok) throw new Error(data?.error||'subscription_save_failed');
   return sub;
 }
 async function ensureRemotePushSubscription(){
   const ok=await requestDeviceNotifications();
   if(!ok) return null;
-  if(!('PushManager' in window)){
-    toast('この端末ではプッシュ通知を利用できません');
-    return null;
-  }
   if(!CLOUD.enabled){
     toast('サーバーに接続してから通知を設定してください');
     return null;
@@ -4382,22 +4379,31 @@ async function ensureRemotePushSubscription(){
   const reg=IROHA_SW_REG || await ensureIrohaServiceWorker();
   if(!reg) return null;
 
-  let sub=await reg.pushManager.getSubscription();
+  /* WebKitの従来Web Pushでは ServiceWorkerRegistration.pushManager が本体。
+     window.PushManager の有無だけでは判定しない。 */
+  const pm=reg.pushManager || window.pushManager;
+  if(!pm || typeof pm.subscribe!=='function'){
+    throw new Error('push_manager_unavailable');
+  }
+
+  let sub=typeof pm.getSubscription==='function' ? await pm.getSubscription() : null;
   if(!sub){
-    const publicKey=await cloudGetVapidPublicKey();
-    sub=await reg.pushManager.subscribe({
+    sub=await pm.subscribe({
       userVisibleOnly:true,
-      applicationServerKey:urlBase64ToUint8Array(publicKey)
+      applicationServerKey:urlBase64ToUint8Array(IROHA_VAPID_PUBLIC_KEY)
     });
   }
+
   await cloudSavePushSubscription(sub);
   return sub;
 }
 async function syncExistingPushSubscription(){
-  if(notificationPermission()!=='granted' || !CLOUD.enabled || !('PushManager' in window)) return;
+  if(notificationPermission()!=='granted' || !CLOUD.enabled) return;
   const reg=IROHA_SW_REG || await ensureIrohaServiceWorker();
   if(!reg) return;
-  const sub=await reg.pushManager.getSubscription();
+  const pm=reg.pushManager || window.pushManager;
+  if(!pm || typeof pm.getSubscription!=='function') return;
+  const sub=await pm.getSubscription();
   if(sub) await cloudSavePushSubscription(sub);
 }
 async function showDeviceTestNotification(){
@@ -4544,7 +4550,7 @@ function pushSettings(){
     }catch(e){
       console.warn('[iroha notify] subscribe',e);
       syncNotificationSettingsUI(body);
-      toast('端末通知の登録に失敗しました');
+      toast('通知登録エラー: '+pushErrorMessage(e));
     }
   };
   $('#stNotifyTest',body).onclick=async()=>{
@@ -4555,7 +4561,7 @@ function pushSettings(){
       if(ok) toast('テスト通知を送信しました');
     }catch(e){
       console.warn('[iroha notify] test',e);
-      toast('テスト通知を送れませんでした');
+      toast('通知エラー: '+pushErrorMessage(e));
     }
   };
 
