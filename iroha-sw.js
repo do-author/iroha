@@ -1,5 +1,5 @@
 /* iroha v2.40.32 - notification service worker */
-const SW_VER='2.40.32';
+const SW_VER='3.1.0';
 
 self.addEventListener('install',event=>{
   self.skipWaiting();
@@ -30,6 +30,11 @@ self.addEventListener('push',event=>{
 
   event.waitUntil((async()=>{
     await self.registration.showNotification(title,options);
+
+    /* An open tab should refresh rather than wait for the next poll. */
+    const open=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+    for(const c of open){ try{ c.postMessage({type:'iroha-push',data:options.data}); }catch(_){} }
+
     if(self.navigator?.setAppBadge && Number.isFinite(Number(data.badge))){
       try{ await self.navigator.setAppBadge(Number(data.badge)); }catch(_){}
     }
