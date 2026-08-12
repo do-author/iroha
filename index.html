@@ -1464,7 +1464,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='3.0.6';
+const APP_VER='3.0.7';
 
 
 /* =========================================================
@@ -4340,8 +4340,28 @@ function urlBase64ToUint8Array(value){
   const raw=atob(base64);
   return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
 }
+async function unwrapFunctionError(error){
+  if(!error) return new Error('unknown_function_error');
+  const ctx=error.context;
+  if(ctx && typeof ctx.json==='function'){
+    const status=Number(ctx.status||0);
+    try{
+      const source=typeof ctx.clone==='function' ? ctx.clone() : ctx;
+      const body=await source.json();
+      const code=String(body?.error||body?.code||'').trim();
+      const detail=String(body?.detail||body?.message||'').trim();
+      const parts=[];
+      if(status) parts.push('HTTP '+status);
+      if(code) parts.push(code);
+      if(detail && detail!==code) parts.push(detail);
+      if(parts.length) return new Error(parts.join(': '));
+    }catch(_){}
+    if(status) return new Error('HTTP '+status+': '+String(error.message||'Edge Function error'));
+  }
+  return error instanceof Error ? error : new Error(String(error?.message||error||'unknown_function_error'));
+}
 function pushErrorMessage(e){
-  const raw=String(e?.context?.body?.error||e?.message||e?.error_description||e||'unknown');
+  const raw=String(e?.message||e?.error_description||e||'unknown');
   if(raw.includes('NotAllowedError')) return '通知が許可されていません';
   if(raw.includes('AbortError')) return 'iPhoneで通知先を作れませんでした';
   if(raw.includes('InvalidAccessError')) return '通知用の公開鍵を読み込めませんでした';
@@ -4364,8 +4384,8 @@ async function cloudSavePushSubscription(sub){
       userAgent:String(navigator.userAgent||'').slice(0,500)
     }
   });
-  if(error) throw error;
-  if(!data?.ok) throw new Error(data?.error||'subscription_save_failed');
+  if(error) throw await unwrapFunctionError(error);
+  if(!data?.ok) throw new Error([data?.error,data?.detail].filter(Boolean).join(': ')||'subscription_save_failed');
   return sub;
 }
 async function ensureRemotePushSubscription(){
@@ -4413,8 +4433,8 @@ async function showDeviceTestNotification(){
   const {data,error}=await CLOUD.client.functions.invoke('push-test',{
     body:{action:'send-test'}
   });
-  if(error) throw error;
-  if(!data?.ok) throw new Error(data?.error||'push_test_failed');
+  if(error) throw await unwrapFunctionError(error);
+  if(!data?.ok) throw new Error([data?.error,data?.detail].filter(Boolean).join(': ')||'push_test_failed');
   return true;
 }
 function syncNotificationSettingsUI(root=document){
