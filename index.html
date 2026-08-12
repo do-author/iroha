@@ -1464,7 +1464,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='3.0.8';
+const APP_VER='3.1.4';
 
 
 /* =========================================================
@@ -1475,6 +1475,16 @@ const APP_VER='3.0.8';
 const SUPABASE_API_URL='https://cwwvhzpcnrkmjbykgwcq.supabase.co/rest/v1/';
 const SUPABASE_URL=SUPABASE_API_URL.replace(/\/rest\/v1\/?$/,'').replace(/\/+$/,'');
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_vYapd7Gg_rFLAFkO42BPUQ_GXLge49D';
+
+/* Public half of the VAPID pair. Safe to ship — it only lets this app ask a
+   push service for a subscription. The private half stays in the Edge Function
+   and is what actually authorises sending. Paste yours here. */
+const VAPID_PUBLIC_KEY='BGehD2fnT5vQtiEpyagL3xpZgfMMq4K5VkTwxXQecRj75A-JmrSJs_t2JvODKQoIoxE8jvV-AMTLLylYFUVmqSg';
+function pushConfigured(){
+  return typeof VAPID_PUBLIC_KEY==='string'
+    && VAPID_PUBLIC_KEY.length>80
+    && !VAPID_PUBLIC_KEY.startsWith('PASTE_');
+}
 
 const CLOUD={
   enabled:false, client:null, userId:null, channel:null,
@@ -4267,7 +4277,6 @@ function syncCard(p){
    DEVICE NOTIFICATIONS / PWA
    ========================================================= */
 let IROHA_SW_REG=null;
-const IROHA_VAPID_PUBLIC_KEY='BGehD2fnT5vQtiEpyagL3xpZgfMMq4K5VkTwxXQecRj75A-JmrSJs_t2JvODKQoIoxE8jvV-AMTLLylYFUVmqSg';
 
 function isStandaloneWebApp(){
   return !!(
@@ -4314,8 +4323,8 @@ async function requestDeviceNotifications(){
     return false;
   }
 
-  /* iOSは通知許可をユーザー操作の直後に要求する必要がある。
-     Service Worker待ちより先に permission を確定させる。 */
+  /* iOSでは許可ダイアログをユーザー操作の直後に出す。
+     Service Worker待ちを先に挟むと、操作由来と見なされにくい端末がある。 */
   let permission=Notification.permission;
   if(permission==='default'){
     permission=await Notification.requestPermission();
@@ -4334,109 +4343,101 @@ async function requestDeviceNotifications(){
   }
   return true;
 }
-function urlBase64ToUint8Array(value){
-  const padding='='.repeat((4-value.length%4)%4);
-  const base64=(value+padding).replace(/-/g,'+').replace(/_/g,'/');
-  const raw=atob(base64);
-  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
-}
-async function unwrapFunctionError(error){
-  if(!error) return new Error('unknown_function_error');
-  const ctx=error.context;
-  if(ctx && typeof ctx.json==='function'){
-    const status=Number(ctx.status||0);
-    try{
-      const source=typeof ctx.clone==='function' ? ctx.clone() : ctx;
-      const body=await source.json();
-      const code=String(body?.error||body?.code||'').trim();
-      const detail=String(body?.detail||body?.message||'').trim();
-      const parts=[];
-      if(status) parts.push('HTTP '+status);
-      if(code) parts.push(code);
-      if(detail && detail!==code) parts.push(detail);
-      if(parts.length) return new Error(parts.join(': '));
-    }catch(_){}
-    if(status) return new Error('HTTP '+status+': '+String(error.message||'Edge Function error'));
-  }
-  return error instanceof Error ? error : new Error(String(error?.message||error||'unknown_function_error'));
-}
-function pushErrorMessage(e){
-  const raw=String(e?.message||e?.error_description||e||'unknown');
-  if(raw.includes('NotAllowedError')) return '通知が許可されていません';
-  if(raw.includes('AbortError')) return 'iPhoneで通知先を作れませんでした';
-  if(raw.includes('InvalidAccessError')) return '通知用の公開鍵を読み込めませんでした';
-  if(raw.includes('push_manager_unavailable')) return 'この端末ではプッシュ通知を利用できません';
-  if(raw.includes('subscription_save_failed')) return '通知先をSupabaseへ保存できませんでした';
-  return raw.slice(0,90);
-}
-async function cloudSavePushSubscription(sub){
-  if(!CLOUD.enabled||!CLOUD.userId) throw new Error('cloud_not_ready');
-  const json=sub?.toJSON?.()||{};
-  const endpoint=String(sub?.endpoint||json.endpoint||'');
-  const p256dh=String(json.keys?.p256dh||'');
-  const auth=String(json.keys?.auth||'');
-  if(!endpoint||!p256dh||!auth) throw new Error('invalid_push_subscription');
-
-  const {data,error}=await CLOUD.client.functions.invoke('push-test',{
-    body:{
-      action:'save-subscription',
-      subscription:{endpoint,keys:{p256dh,auth}},
-      userAgent:String(navigator.userAgent||'').slice(0,500)
-    }
-  });
-  if(error) throw await unwrapFunctionError(error);
-  if(!data?.ok) throw new Error([data?.error,data?.detail].filter(Boolean).join(': ')||'subscription_save_failed');
-  return sub;
-}
-async function ensureRemotePushSubscription(){
-  const ok=await requestDeviceNotifications();
-  if(!ok) return null;
-  if(!CLOUD.enabled){
-    toast('サーバーに接続してから通知を設定してください');
-    return null;
-  }
-
-  const reg=IROHA_SW_REG || await ensureIrohaServiceWorker();
-  if(!reg) return null;
-
-  /* WebKitの従来Web Pushでは ServiceWorkerRegistration.pushManager が本体。
-     window.PushManager の有無だけでは判定しない。 */
-  const pm=reg.pushManager || window.pushManager;
-  if(!pm || typeof pm.subscribe!=='function'){
-    throw new Error('push_manager_unavailable');
-  }
-
-  let sub=typeof pm.getSubscription==='function' ? await pm.getSubscription() : null;
-  if(!sub){
-    sub=await pm.subscribe({
-      userVisibleOnly:true,
-      applicationServerKey:urlBase64ToUint8Array(IROHA_VAPID_PUBLIC_KEY)
-    });
-  }
-
-  await cloudSavePushSubscription(sub);
-  return sub;
-}
-async function syncExistingPushSubscription(){
-  if(notificationPermission()!=='granted' || !CLOUD.enabled) return;
-  const reg=IROHA_SW_REG || await ensureIrohaServiceWorker();
-  if(!reg) return;
-  const pm=reg.pushManager || window.pushManager;
-  if(!pm || typeof pm.getSubscription!=='function') return;
-  const sub=await pm.getSubscription();
-  if(sub) await cloudSavePushSubscription(sub);
-}
 async function showDeviceTestNotification(){
-  const sub=await ensureRemotePushSubscription();
-  if(!sub) return false;
+  const ok=await requestDeviceNotifications();
+  if(!ok) return false;
 
-  const {data,error}=await CLOUD.client.functions.invoke('push-test',{
-    body:{action:'send-test'}
+  const reg=IROHA_SW_REG || await navigator.serviceWorker.ready;
+  await reg.showNotification('iroha',{
+    body:'端末通知のテストです',
+    tag:'iroha-device-test',
+    renotify:false,
+    data:{url:location.href}
   });
-  if(error) throw await unwrapFunctionError(error);
-  if(!data?.ok) throw new Error([data?.error,data?.detail].filter(Boolean).join(': ')||'push_test_failed');
+
+  if(navigator.setAppBadge){
+    try{ await navigator.setAppBadge(1); }catch(_){}
+  }
   return true;
 }
+
+/* ---------- Web Push ----------
+   A subscription is this device's mailbox address plus the keys that let the
+   server encrypt for it. We hand it to Supabase so the Edge Function can find
+   it later. Anything else about the person stays out of it. */
+function urlBase64ToUint8Array(base64){
+  const padded=(base64+'='.repeat((4-base64.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(padded);
+  const out=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) out[i]=raw.charCodeAt(i);
+  return out;
+}
+function abToB64(buf){
+  return btoa(String.fromCharCode(...new Uint8Array(buf)));
+}
+
+async function pushSubscribe(){
+  if(!pushConfigured() || !CLOUD.enabled) return false;
+  const reg=IROHA_SW_REG || await ensureIrohaServiceWorker();
+  const pm=reg?.pushManager;
+  if(!pm || typeof pm.subscribe!=='function') return false;
+
+  try{
+    let sub=await pm.getSubscription();
+    if(sub){
+      /* A key rotation leaves stale subscriptions behind; start clean. */
+      const current=abToB64(sub.options?.applicationServerKey||new ArrayBuffer(0));
+      const wanted=abToB64(urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer);
+      if(current && wanted && current!==wanted){ await sub.unsubscribe(); sub=null; }
+    }
+    if(!sub){
+      sub=await pm.subscribe({
+        userVisibleOnly:true,
+        applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+
+    const j=sub.toJSON();
+    if(!j?.endpoint || !j.keys?.p256dh || !j.keys?.auth) return false;
+
+    await cloudNeedProfile();
+    const q=await CLOUD.client.from('push_subscriptions').upsert({
+      endpoint:j.endpoint,
+      user_id:CLOUD.userId,
+      p256dh:j.keys.p256dh,
+      auth:j.keys.auth,
+      user_agent:navigator.userAgent.slice(0,200),
+      last_seen_at:new Date().toISOString(),
+      failed_at:null
+    },{onConflict:'endpoint'});
+    if(q.error) throw q.error;
+    return true;
+  }catch(e){
+    console.warn('[iroha push] subscribe',e);
+    return false;
+  }
+}
+
+async function pushUnsubscribe(){
+  try{
+    const reg=IROHA_SW_REG || (('serviceWorker' in navigator) ? await navigator.serviceWorker.ready : null);
+    const sub=reg && await reg.pushManager?.getSubscription();
+    if(!sub) return;
+    const endpoint=sub.endpoint;
+    await sub.unsubscribe();
+    if(CLOUD.enabled && endpoint){
+      await CLOUD.client.from('push_subscriptions').delete().eq('endpoint',endpoint);
+    }
+  }catch(e){ console.warn('[iroha push] unsubscribe',e); }
+}
+
+/* Keep the row warm on every launch, so a subscription that the browser
+   quietly renewed does not go stale in the table. */
+async function pushRefresh(){
+  if(notificationPermission()!=='granted') return;
+  await pushSubscribe();
+}
+
 function syncNotificationSettingsUI(root=document){
   const sw=$('#notifySw',root);
   const sub=$('#notifyNow',root);
@@ -4563,15 +4564,20 @@ function pushSettings(){
   }));
   $('#stNotify',body).onclick=async()=>{
     haptic(8);
-    try{
-      const sub=await ensureRemotePushSubscription();
+    if(notificationPermission()==='granted'){
+      toast('端末通知はオンです。オフにする場合は端末の通知設定から変更できます');
       syncNotificationSettingsUI(body);
-      if(sub) toast('端末通知をオンにしました');
-    }catch(e){
-      console.warn('[iroha notify] subscribe',e);
-      syncNotificationSettingsUI(body);
-      toast('通知登録エラー: '+pushErrorMessage(e));
+      return;
     }
+    const ok=await requestDeviceNotifications();
+    if(ok){
+      const pushed=await pushSubscribe();
+      syncNotificationSettingsUI(body);
+      toast(pushed ? '端末通知をオンにしました'
+                   : 'この端末では通知を受け取れますが、アプリを閉じている間は届きません');
+      return;
+    }
+    syncNotificationSettingsUI(body);
   };
   $('#stNotifyTest',body).onclick=async()=>{
     haptic(8);
@@ -4581,7 +4587,7 @@ function pushSettings(){
       if(ok) toast('テスト通知を送信しました');
     }catch(e){
       console.warn('[iroha notify] test',e);
-      toast('通知エラー: '+pushErrorMessage(e));
+      toast('テスト通知を送れませんでした');
     }
   };
 
@@ -6203,9 +6209,10 @@ async function boot(){
   });
   if(CLOUD.enabled){
     cloudStartRealtime();
-    /* すでに端末側のPushSubscriptionがある場合だけDBへ再同期。
-       新規購読や権限要求はユーザー操作時にしか行わない。 */
-    syncExistingPushSubscription().catch(e=>console.warn('[iroha notify] resync',e));
+    pushRefresh();                     /* renewals happen quietly in the browser */
+    navigator.serviceWorker?.addEventListener('message',ev=>{
+      if(ev.data?.type==='iroha-push') cloudReloadAll(false,false);
+    });
     /* Realtimeが取りこぼした場合だけ拾う保険。通常同期はRealtime、確認は30秒ごと。 */
     setInterval(()=>{ if(!document.hidden) cloudReloadAll(false,false); }, 30000);
     setTimeout(()=>toast('Supabaseに接続しました'),650);
