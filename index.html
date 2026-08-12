@@ -1365,6 +1365,11 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .obox label i{font-style:normal; color:var(--ink-3); font-weight:700; font-size:11px; margin-left:4px}
 .obox textarea{width:100%; margin-top:6px; min-height:62px; resize:none; font-size:15.5px; font-weight:600; line-height:1.6}
 .obox textarea::placeholder{color:var(--ink-3)}
+/* the notes stay centred; inside the box every line starts at the same edge */
+.request-sheet .req-note{margin-top:5px; font-size:11.5px}
+.request-sheet .obox{padding:12px 15px 8px}
+.request-sheet .obox label,
+.request-sheet .obox textarea{display:block; margin-left:0; padding-left:0; text-indent:0}
 
 /* action menu */
 .menu{
@@ -1448,7 +1453,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.34';
+const APP_VER='2.41.34';
 
 
 /* =========================================================
@@ -3079,7 +3084,8 @@ function renderChatList(){
   chatSig=sig;
   host.innerHTML = list.length ? list.map(c=>{
     const u=S.users[c.u], last=c.msgs[c.msgs.length-1];
-    const preview = last ? (last.media && !last.t ? MEDIA_LABEL[last.media.kind]+'を送信しました' : last.t) : '';
+    const preview = last ? (last.sys ? dmSystemText(c,last)
+      : last.media && !last.t ? MEDIA_LABEL[last.media.kind]+'を送信しました' : last.t) : '';
     return `<div class="row stagger" data-chat="${c.id}">
       <button class="avhit" data-user="${c.u}" aria-label="${esc(u.name)}のプロフィール">${uav(c.u,52)}</button>
       <div class="row-main">
@@ -3605,6 +3611,16 @@ function rebuildThreadDayChips(th){
     }
   });
 }
+/* System lines are stored as plain text, so old rows keep their original
+   wording. Rendering through here means both sides read the new way. */
+function dmSystemText(c,m){
+  const raw=String(m?.t||'');
+  const isGreeting = raw==='会話申請を送信しました' || raw==='会話の申請が届きました' || raw==='はなしかけました';
+  if(!isGreeting) return raw;
+  if(m?.me) return `${honor(S.users[c?.u]?.name||'相手')}に話しかけています`;
+  return `${honor(S.users[c?.u]?.name||'相手')}が話したがっています`;
+}
+
 function updateMessageNode(node,m,c){
   if(!node||!m) return;
   node.dataset.day=threadDayKey(m.ts);
@@ -3626,6 +3642,8 @@ function updateMessageNode(node,m,c){
   }
 
   if(m.sys){
+    const label=node.querySelector('span:not(.t)');
+    if(label) label.textContent=dmSystemText(c,m);
     const t=node.querySelector('.t');
     if(t){ t.dataset.ts=String(m.ts); t.textContent=ago(m.ts); }
     return;
@@ -3773,7 +3791,7 @@ function appendMsg(th,c,m,animate,i=0){
   const day=threadDayKey(m.ts);
 
   if(m.sys){
-    const chip=el(`<div class="syschip${animate?' dm-new-message':''}" data-mid="${esc(key)}" data-day="${esc(day)}" data-msg-ts="${m.ts}">${I.check}<span>${esc(m.t)}</span><span class="t" data-ts="${m.ts}">${ago(m.ts)}</span></div>`);
+    const chip=el(`<div class="syschip${animate?' dm-new-message':''}" data-mid="${esc(key)}" data-day="${esc(day)}" data-msg-ts="${m.ts}">${I.check}<span>${esc(dmSystemText(c,m))}</span><span class="t" data-ts="${m.ts}">${ago(m.ts)}</span></div>`);
     th.appendChild(chip);
     rememberDmRow(c.id,m,i,chip);
     if(animate) setTimeout(()=>{
@@ -5123,9 +5141,9 @@ function openRequest(postId, uidOverride){
   const p = postId ? S.posts.find(x=>x.id===postId) : null;
   const uid = uidOverride || (p && p.u); if(!uid) return;
   if(REQUEST_IN_FLIGHT.has(uid)){ toast('送信中です'); return; }
-  if(p && (p.req||isPostRequested(p.id))){ toast('申請済みです'); return; }
+  if(p && (p.req||isPostRequested(p.id))){ toast('すでに話しかけています'); return; }
   if(uid==='me'){ toast('自分自身とは会話できません'); return; }
-  if(S.blocked.includes(uid)){ toast('ブロック中の相手には申請できません'); return; }
+  if(S.blocked.includes(uid)){ toast('ブロック中の相手には話しかけられません'); return; }
 
   const existing=chatWith(uid);
   if(!existing && !canStartNewDm(uid,true)) return;
@@ -5134,15 +5152,16 @@ function openRequest(postId, uidOverride){
   }
   const u=S.users[uid];
 
-  const sheet=el(`<div class="sheet" id="reqSheet">
+  const sheet=el(`<div class="sheet request-sheet" id="reqSheet">
     <div class="grab"></div>
     <div class="sheet-ico">${I.reply}</div>
-    <h3>${esc(u.name)}さんに<br>会話を申請</h3>
-    <p class="lead">申請後もこの画面に残ります。DMは一覧へ追加され、文章を添えた場合は最初のメッセージとして相手にも届きます。</p>
-    <div class="obox"><label>申請メッセージ <i>任意</i></label>
+    <h3>${esc(honor(u.name))}に<br>話しかける</h3>
+    <p class="lead">メッセージを書くと返信してもらいやすくなります。</p>
+    <p class="lead req-note">出会い募集・連絡先・金銭要求のメッセージは禁止です。</p>
+    <div class="obox"><label>メッセージ <i>任意</i></label>
       <textarea id="reqMsg" maxlength="120" placeholder="投稿を見て話してみたいと思いました"></textarea>
       <span class="cnt" style="display:block;text-align:right;font-size:11px;color:var(--ink-3);font-weight:700" id="reqCnt">0/120</span></div>
-    <button class="bigbtn" id="reqGo">会話を申請する</button>
+    <button class="bigbtn" id="reqGo">話したいことを伝える</button>
     <button class="textlink" id="reqNo">キャンセル</button>
   </div>`);
   $('#overlays').appendChild(sheet);
@@ -5201,7 +5220,7 @@ function openRequest(postId, uidOverride){
 
         if(S.users[uid]?.demo||S.users[uid]?.bot) scheduleReplyTo(c, text);
         syncNavBadges();
-        toast('会話を申請しました');
+        toast('話しかけました');
       }catch(e){
         if(optimisticallyMarked){
           unmarkPostRequested(p.id);
@@ -5219,7 +5238,7 @@ function openRequest(postId, uidOverride){
         else if(String(e?.message||e).includes('dm_favorite_only')) notifyFavOnly();
         else{
           cloudErr('conversation request',e);
-          toast('会話を申請できませんでした');
+          toast('話しかけられませんでした');
         }
       }finally{
         REQUEST_IN_FLIGHT.delete(uid);
