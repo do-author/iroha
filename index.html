@@ -366,7 +366,18 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   transition:transform var(--dur-2) var(--spring), background-color var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out);
 }
 .talkbtn:active{transform:scale(.92); background:var(--field)}
-.talkbtn.done{border-color:var(--accent); background:var(--accent); color:var(--accent-ink)}
+.talkbtn.done{
+  border-color:#E1E2E5;
+  background:#F1F2F4;
+  color:#777B82;
+  box-shadow:none;
+}
+[data-theme="dark"] .talkbtn.done{
+  border-color:#343434;
+  background:#242424;
+  color:#A8A8AA;
+  box-shadow:none;
+}
 
 /* entrance stagger */
 .stagger{opacity:0; transform:translate3d(0,16px,0)}
@@ -1453,7 +1464,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='3.0.1';
+const APP_VER='3.0.3';
 
 
 /* =========================================================
@@ -2409,10 +2420,15 @@ function unmarkPostRequested(pid){
   const p=S.posts.find(x=>String(x.id)===pid); if(p) p.req=false;
   savePrefs();
 }
+function resetRequestedPostsForRestart(){
+  S.requestedPosts=[];
+  S.posts.forEach(p=>{ p.req=false; });
+  savePrefs();
+}
 function syncRequestButtons(pid,requested){
   document.querySelectorAll(`[data-talk="${String(pid)}"]`).forEach(btn=>{
     btn.classList.toggle('done',!!requested);
-    btn.innerHTML=I.reply+(requested?'申請済み':'話す');
+    btn.innerHTML=I.reply+(requested?'済み':'話す');
   });
 }
 function clearRequestedForUser(uid){
@@ -2912,7 +2928,7 @@ function postCard(p, opts={}){
               <button class="act${p.liked?' liked':''}" data-like="${p.id}">
                 <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span><span class="num">${p.likes}</span>
               </button>
-              ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>`}
+              ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'済み':'話す'}</button>`}
             </div>`}
       </div>
     </div>
@@ -3947,7 +3963,7 @@ function pushPostDetail(pid){
           <button class="who" data-user="${u.id}" style="text-align:left">
             <b>${esc(u.name)}${genderTag(u)}</b><span data-ts="${p.ts}">${ago(p.ts)}</span>
           </button>
-          ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'申請済み':'話す'}</button>`}
+          ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'済み':'話す'}</button>`}
         </div>
         <p class="pd-body">${esc(p.t)}</p>
         ${mediaHTML(p.media,{owner:p.u})}
@@ -5224,6 +5240,10 @@ function openRequest(postId, uidOverride){
   const p = postId ? S.posts.find(x=>x.id===postId) : null;
   const uid = uidOverride || (p && p.u); if(!uid) return;
   if(REQUEST_IN_FLIGHT.has(uid)){ toast('送信中です'); return; }
+  if(p && isPostRequested(p.id) && !chatWith(uid)){
+    /* Visible state is 「話す」 and no conversation exists: discard an old local marker. */
+    unmarkPostRequested(p.id);
+  }
   if(p && (p.req||isPostRequested(p.id))){ toast('すでに話しかけています'); return; }
   if(uid==='me'){ toast('自分自身とは会話できません'); return; }
   if(S.blocked.includes(uid)){ toast('ブロック中の相手には話しかけられません'); return; }
@@ -6037,6 +6057,10 @@ async function boot(){
           S.users.me.av=pickFreshAvatar();
           S.users.me.img=null;
           S.users.me.banner=null;
+        }else if(existingProfile.is_active===false){
+          /* The profile UUID is intentionally reused after account deletion.
+             「話す」履歴は新しく始めたアカウントへ持ち越さない。 */
+          resetRequestedPostsForRestart();
         }
 
         firstSetup=await openFirstSetup(existingProfile||{});
