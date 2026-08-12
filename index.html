@@ -1464,7 +1464,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='3.1.5';
+const APP_VER='3.1.3';
 
 
 /* =========================================================
@@ -1479,7 +1479,7 @@ const SUPABASE_PUBLISHABLE_KEY='sb_publishable_vYapd7Gg_rFLAFkO42BPUQ_GXLge49D';
 /* Public half of the VAPID pair. Safe to ship — it only lets this app ask a
    push service for a subscription. The private half stays in the Edge Function
    and is what actually authorises sending. Paste yours here. */
-const VAPID_PUBLIC_KEY='BGehD2fnT5vQtiEpyagL3xpZgfMMq4K5VkTwxXQecRj75A-JmrSJs_t2JvODKQoIoxE8jvV-AMTLLylYFUVmqSg';
+const VAPID_PUBLIC_KEY='PASTE_YOUR_VAPID_PUBLIC_KEY';
 function pushConfigured(){
   return typeof VAPID_PUBLIC_KEY==='string'
     && VAPID_PUBLIC_KEY.length>80
@@ -4323,25 +4323,23 @@ async function requestDeviceNotifications(){
     return false;
   }
 
-  /* iOSでは許可ダイアログをユーザー操作の直後に出す。
-     Service Worker待ちを先に挟むと、操作由来と見なされにくい端末がある。 */
+  const reg=await ensureIrohaServiceWorker();
+  if(!reg){
+    toast('通知の準備に失敗しました');
+    return false;
+  }
+
   let permission=Notification.permission;
   if(permission==='default'){
     permission=await Notification.requestPermission();
   }
 
+  if(permission==='granted') return true;
   if(permission==='denied'){
     toast('通知が拒否されています。端末の通知設定から変更できます');
     return false;
   }
-  if(permission!=='granted') return false;
-
-  const reg=IROHA_SW_REG || await ensureIrohaServiceWorker();
-  if(!reg){
-    toast('通知の準備に失敗しました');
-    return false;
-  }
-  return true;
+  return false;
 }
 async function showDeviceTestNotification(){
   const ok=await requestDeviceNotifications();
@@ -4378,12 +4376,12 @@ function abToB64(buf){
 
 async function pushSubscribe(){
   if(!pushConfigured() || !CLOUD.enabled) return false;
+  if(!('PushManager' in window)) return false;
   const reg=IROHA_SW_REG || await ensureIrohaServiceWorker();
-  const pm=reg?.pushManager;
-  if(!pm || typeof pm.subscribe!=='function') return false;
+  if(!reg) return false;
 
   try{
-    let sub=await pm.getSubscription();
+    let sub=await reg.pushManager.getSubscription();
     if(sub){
       /* A key rotation leaves stale subscriptions behind; start clean. */
       const current=abToB64(sub.options?.applicationServerKey||new ArrayBuffer(0));
@@ -4391,7 +4389,7 @@ async function pushSubscribe(){
       if(current && wanted && current!==wanted){ await sub.unsubscribe(); sub=null; }
     }
     if(!sub){
-      sub=await pm.subscribe({
+      sub=await reg.pushManager.subscribe({
         userVisibleOnly:true,
         applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
       });
