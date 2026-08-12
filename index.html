@@ -1448,7 +1448,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='2.40.32';
+const APP_VER='2.40.34';
 
 
 /* =========================================================
@@ -2210,8 +2210,18 @@ const TAGS = {
 
 /* ---------- state ---------- */
 /* a brand-new account: no handle chosen yet, colour drawn at random */
+function pickFreshAvatar(){
+  const keys=Object.keys(AV_COLORS);
+  if(!keys.length) return 'stone';
+  if(globalThis.crypto?.getRandomValues){
+    const n=new Uint32Array(1);
+    crypto.getRandomValues(n);
+    return keys[n[0]%keys.length];
+  }
+  return keys[Math.floor(Math.random()*keys.length)];
+}
 const FRESH_HANDLE = 'u' + Math.random().toString(36).slice(2,9);
-const FRESH_AV = Object.keys(AV_COLORS)[Math.floor(Math.random()*Object.keys(AV_COLORS).length)];
+const FRESH_AV = pickFreshAvatar();
 
 const now = Date.now();
 const S = {
@@ -2319,6 +2329,18 @@ function markPostRequested(pid){
   if(!S.requestedPosts.includes(pid)) S.requestedPosts.push(pid);
   const p=S.posts.find(x=>x.id===pid); if(p) p.req=true;
   savePrefs();
+}
+function unmarkPostRequested(pid){
+  pid=String(pid||''); if(!pid) return;
+  S.requestedPosts=S.requestedPosts.filter(id=>String(id)!==pid);
+  const p=S.posts.find(x=>String(x.id)===pid); if(p) p.req=false;
+  savePrefs();
+}
+function syncRequestButtons(pid,requested){
+  document.querySelectorAll(`[data-talk="${String(pid)}"]`).forEach(btn=>{
+    btn.classList.toggle('done',!!requested);
+    btn.innerHTML=I.reply+(requested?'申請済み':'話す');
+  });
 }
 function clearRequestedForUser(uid){
   const ids=new Set(S.posts.filter(p=>p.u===uid).map(p=>String(p.id)));
@@ -5094,10 +5116,13 @@ function showScrim(on, onTap){
 }
 
 /* ---------- request-to-talk sheet (drag dismissible) ---------- */
+const REQUEST_IN_FLIGHT=new Set();
+
 function openRequest(postId, uidOverride){
   if($('#reqSheet')) return;
   const p = postId ? S.posts.find(x=>x.id===postId) : null;
   const uid = uidOverride || (p && p.u); if(!uid) return;
+  if(REQUEST_IN_FLIGHT.has(uid)){ toast('送信中です'); return; }
   if(p && (p.req||isPostRequested(p.id))){ toast('申請済みです'); return; }
   if(uid==='me'){ toast('自分自身とは会話できません'); return; }
   if(S.blocked.includes(uid)){ toast('ブロック中の相手には申請できません'); return; }
@@ -5125,37 +5150,82 @@ function openRequest(postId, uidOverride){
   raf(()=>sheet.classList.add('on'));
 
   const ta=$('#reqMsg',sheet);
+  const reqNo=$('#reqNo',sheet);
+  const reqGo=$('#reqGo',sheet);
+  let requestSubmitting=false;
   ta.addEventListener('input',()=>{
     $('#reqCnt',sheet).textContent=[...ta.value].length+'/120';
     ta.style.height='auto'; ta.style.height=Math.max(62,ta.scrollHeight)+'px';
   });
-  $('#reqNo',sheet).onclick=close;
-  $('#reqGo',sheet).onclick=async()=>{
+  reqNo.onclick=close;
+  reqGo.onclick=()=>{
+    if(requestSubmitting || REQUEST_IN_FLIGHT.has(uid)) return;
+    requestSubmitting=true;
+    REQUEST_IN_FLIGHT.add(uid);
+    reqGo.disabled=true;
+    reqGo.setAttribute('aria-busy','true');
     haptic(14);
-    let c=S.chats.find(x=>x.u===uid);
+
     const text=ta.value.trim();
-    try{
-      if(!c && cloudUserKeyIsReal(uid)) c=await cloudGetOrCreateChat(uid);
-      if(!c){ c={id:'c'+Date.now(), u:uid, unread:0, ts:Date.now(), msgs:[]}; S.chats.push(c); }
-      if(dmPolicyOf(uid)==='replied' && !canSendDmNow(c)){ notifyDmWait(); return; }
-      const m=text
-        ? {id:newRowId(),me:true,t:text,ts:Date.now()}
-        : {id:newRowId(),me:true,sys:true,t:'会話申請を送信しました',ts:Date.now()};
-      await cloudSendMessage(c,m); c.msgs.push(m); c.ts=Date.now();
-    }catch(e){
-      if(String(e?.message||e).includes('dm_waiting_for_reply')) notifyDmWait();
-      else if(String(e?.message||e).includes('dm_favorite_only')) notifyFavOnly();
-      else cloudErr('conversation request',e);
-      return;
-    }
-    if(S.users[uid]?.demo||S.users[uid]?.bot) scheduleReplyTo(c, text);
+    let c=S.chats.find(x=>x.u===uid);
+    const optimisticallyMarked=!!p;
+
+    /* Same feel as post submit: finish this sheet immediately.
+       The DM request continues in the background; this does NOT navigate to DM. */
     if(p){
       markPostRequested(p.id);
-      const btn=document.querySelector(`[data-talk="${p.id}"]`);
-      if(btn){ btn.classList.add('done'); btn.innerHTML=I.reply+'申請済み'; }
+      syncRequestButtons(p.id,true);
     }
-    close(); syncNavBadges();
-    setTimeout(()=>toast('会話を申請しました'),180);
+    close();
+
+    void (async()=>{
+      let sent=false;
+      try{
+        if(!c && cloudUserKeyIsReal(uid)) c=await cloudGetOrCreateChat(uid);
+        if(!c){
+          c={id:'c'+Date.now(), u:uid, unread:0, ts:Date.now(), msgs:[]};
+          S.chats.push(c);
+        }
+        if(dmPolicyOf(uid)==='replied' && !canSendDmNow(c)){
+          throw new Error('dm_waiting_for_reply');
+        }
+
+        const m=text
+          ? {id:newRowId(),me:true,t:text,ts:Date.now()}
+          : {id:newRowId(),me:true,sys:true,t:'会話申請を送信しました',ts:Date.now()};
+
+        await cloudSendMessage(c,m);
+        c.msgs.push(m);
+        c.ts=Date.now();
+        sent=true;
+
+        if(S.users[uid]?.demo||S.users[uid]?.bot) scheduleReplyTo(c, text);
+        syncNavBadges();
+        toast('会話を申請しました');
+      }catch(e){
+        if(optimisticallyMarked){
+          unmarkPostRequested(p.id);
+          syncRequestButtons(p.id,false);
+        }
+
+        /* If we created only a temporary local empty chat and sending failed,
+           remove it so a failed request does not look like a real conversation. */
+        if(c && !c.msgs?.length && !c.cloud){
+          const i=S.chats.indexOf(c);
+          if(i>=0) S.chats.splice(i,1);
+        }
+
+        if(String(e?.message||e).includes('dm_waiting_for_reply')) notifyDmWait();
+        else if(String(e?.message||e).includes('dm_favorite_only')) notifyFavOnly();
+        else{
+          cloudErr('conversation request',e);
+          toast('会話を申請できませんでした');
+        }
+      }finally{
+        REQUEST_IN_FLIGHT.delete(uid);
+        requestSubmitting=false;
+      }
+    })();
   };
 
   /* drag to dismiss */
@@ -5859,6 +5929,14 @@ async function boot(){
       const needsSetup=!existingProfile || existingProfile.is_active===false;
 
       if(needsSetup){
+        /* A truly new profiles row gets a fresh random avatar colour here.
+           Reactivating an existing/withdrawn profile keeps its previous colour. */
+        if(!existingProfile){
+          S.users.me.av=pickFreshAvatar();
+          S.users.me.img=null;
+          S.users.me.banner=null;
+        }
+
         firstSetup=await openFirstSetup(existingProfile||{});
 
         /* A truly new profile is created only after the user presses a start button. */
