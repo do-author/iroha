@@ -2154,6 +2154,41 @@ const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
 const el = (h)=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstElementChild;};
 const raf = (fn)=>requestAnimationFrame(()=>requestAnimationFrame(fn));
 const esc = (s='')=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const SUPABASE_ORIGIN = new URL(SUPABASE_URL).origin;
+
+function safeAssetUrl(raw, { allowLocal = false } = {}) {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+
+  if (allowLocal && s.startsWith('blob:')) {
+    return s;
+  }
+
+  if (
+    allowLocal &&
+    /^data:(image|video|audio)\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/i.test(s)
+  ) {
+    return s;
+  }
+
+  try {
+    const u = new URL(s);
+
+    if (u.protocol !== 'https:') return '';
+    if (u.origin !== SUPABASE_ORIGIN) return '';
+    if (!u.pathname.startsWith('/storage/v1/object/')) return '';
+
+    return u.href;
+  } catch {
+    return '';
+  }
+}
+
+function escAttr(s = '') {
+  return esc(String(s)).replace(/'/g, '&#39;');
+}
+
 const haptic = (ms=8)=>{try{navigator.vibrate&&navigator.vibrate(ms)}catch(e){}};
 
 /* Give every outgoing row its final UUID before the network request starts.
@@ -2223,11 +2258,15 @@ const AV_COLORS = {
   clay  : {bg:'#EFDCD2', head:'#B0654A', body:'#F7EBE3'}
 };
 function avatar(key, size, img){
-  if(img) return `<span class="av" style="width:${size}px;height:${size}px">
-    <img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
+  const safeImg = safeAssetUrl(img, { allowLocal: true });
+
+  if(safeImg) return `<span class="av" style="width:${size}px;height:${size}px">
+    <img src="${escAttr(safeImg)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
   </span>`;
+
   const c = AV_COLORS[key] || AV_COLORS.stone;
   const id = 'c'+Math.random().toString(36).slice(2,8);
+
   return `<span class="av" style="width:${size}px;height:${size}px">
     <svg viewBox="0 0 48 48" aria-hidden="true">
       <defs><clipPath id="${id}"><circle cx="24" cy="24" r="24"/></clipPath></defs>
@@ -2240,16 +2279,23 @@ function avatar(key, size, img){
     </svg></span>`;
 }
 
-
 /* avatar for a known user — uses their uploaded photo when present */
 function uav(uid, size, fallbackKey){
   const u=S.users[uid];
   return avatar(fallbackKey || (u && u.av) || 'stone', size, u && u.img);
 }
+  
 /* header background: uploaded image, else a wash built from the chosen colour */
+  
 function bannerCSS(u){
-  if(u.banner) return `background-image:url(${u.banner})`;
+  const safeBanner = safeAssetUrl(u.banner, { allowLocal: true });
+
+  if(safeBanner) {
+    return `background-image:url("${escAttr(safeBanner)}")`;
+  }
+
   const c = AV_COLORS[u.av] || AV_COLORS.stone;
+
   return `background-image:
       radial-gradient(115% 150% at 10% -20%, ${c.head}99 0%, transparent 58%),
       radial-gradient(95% 130% at 95% 118%, ${c.body}CC 0%, transparent 62%),
@@ -5059,22 +5105,31 @@ function mediaKeyAttr(m){ return encodeURIComponent(mediaKey(m)); }
 
 function mediaHTML(m, opts={}){
   if(!m) return '';
+
+  const safeSrc = safeAssetUrl(m.src, { allowLocal: true });
+  if(!safeSrc) return '';
+
+  m = {...m, src:safeSrc};
+
   if(m.kind==='audio') return audioHTML(m);
+
   let mode=mediaMode(m);
+
   /* A just-selected upload is always previewed raw. My own posted media also skips safety blur. */
   if(opts.forceShow) mode='show';
   else if(opts.owner==='me' && mode==='blur') mode='show';
 
   const key=mediaKey(m), keyAttr=mediaKeyAttr(m);
   const wasRevealed=!!key && REVEALED_MEDIA.has(key);
+
   if(mode==='blur' && wasRevealed) mode='show';
 
   if(mode==='off')
     return `<div class="media-off">${I.eyeoff}<span>${MEDIA_LABEL[m.kind]}は非表示に設定されています</span></div>`;
 
   const inner = m.kind==='video'
-    ? `<video src="${m.src}" playsinline ${mode==='blur'?'':'controls'} preload="metadata"></video>`
-    : `<img src="${m.src}" alt="" decoding="async">`;
+    ? `<video src="${escAttr(m.src)}" playsinline ${mode==='blur'?'':'controls'} preload="metadata"></video>`
+    : `<img src="${escAttr(m.src)}" alt="" decoding="async">`;
 
   if(mode==='blur')
     return `<div class="media blurred" data-reveal data-media-key="${keyAttr}">${inner}
@@ -5083,7 +5138,9 @@ function mediaHTML(m, opts={}){
   /* Only media that was manually revealed gets X-style “restore filter”. */
   const restore = wasRevealed && S.media==='safety' && !opts.forceShow && opts.owner!=='me'
     ? `<button class="media-filter-restore" data-restore-filter type="button">${I.eyeoff}<span>フィルターを戻す</span></button>` : '';
+
   const keyData = restore ? ` data-media-key="${keyAttr}"` : '';
+
   return `<div class="media"${keyData}>${inner}${restore}</div>`;
 }
 
@@ -5147,16 +5204,21 @@ function handleMediaSafetyClick(e){
 }
 
 function audioHTML(m){
+  const safeSrc = safeAssetUrl(m?.src, { allowLocal: true });
+  if(!safeSrc) return '';
+
   const bars=Array.from({length:26},()=>{
     const h=6+Math.round(Math.random()*16);
     return `<i style="height:${h}px"></i>`;
   }).join('');
-  return `<div class="aplayer" data-audio="${m.src}">
+
+  return `<div class="aplayer" data-audio="${escAttr(safeSrc)}">
     <button class="apbtn">${I.play}</button>
     <div class="apwave">${bars}</div>
     <span class="aptime">${fmtDur(m.dur||0)}</span>
   </div>`;
 }
+  
 function fmtDur(sec){
   sec=Math.max(0,Math.round(sec));
   return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');
