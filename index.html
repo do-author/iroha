@@ -4421,19 +4421,45 @@ function abToB64(buf){
 }
 
 async function pushSubscribe(){
-  if(!pushConfigured() || !CLOUD.enabled) return false;
-  if(!('PushManager' in window)) return false;
+  if(!pushConfigured()){
+    alert('Push登録失敗: VAPID_PUBLIC_KEY');
+    return false;
+  }
+
+  if(!CLOUD.enabled){
+    alert('Push登録失敗: Supabase未接続');
+    return false;
+  }
+
+  if(!('PushManager' in window)){
+    alert('Push登録失敗: PushManagerなし');
+    return false;
+  }
+
   const reg=IROHA_SW_REG || await ensureIrohaServiceWorker();
-  if(!reg) return false;
+
+  if(!reg){
+    alert('Push登録失敗: Service Worker');
+    return false;
+  }
 
   try{
     let sub=await reg.pushManager.getSubscription();
+
     if(sub){
-      /* A key rotation leaves stale subscriptions behind; start clean. */
-      const current=abToB64(sub.options?.applicationServerKey||new ArrayBuffer(0));
-      const wanted=abToB64(urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer);
-      if(current && wanted && current!==wanted){ await sub.unsubscribe(); sub=null; }
+      const current=abToB64(
+        sub.options?.applicationServerKey || new ArrayBuffer(0)
+      );
+      const wanted=abToB64(
+        urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer
+      );
+
+      if(current && wanted && current!==wanted){
+        await sub.unsubscribe();
+        sub=null;
+      }
     }
+
     if(!sub){
       sub=await reg.pushManager.subscribe({
         userVisibleOnly:true,
@@ -4442,22 +4468,38 @@ async function pushSubscribe(){
     }
 
     const j=sub.toJSON();
-    if(!j?.endpoint || !j.keys?.p256dh || !j.keys?.auth) return false;
+
+    if(!j?.endpoint || !j.keys?.p256dh || !j.keys?.auth){
+      alert('Push登録失敗: 購読情報が不完全');
+      return false;
+    }
 
     await cloudNeedProfile();
-    const q=await CLOUD.client.from('push_subscriptions').upsert({
-      endpoint:j.endpoint,
-      user_id:CLOUD.userId,
-      p256dh:j.keys.p256dh,
-      auth:j.keys.auth,
-      user_agent:navigator.userAgent.slice(0,200),
-      last_seen_at:new Date().toISOString(),
-      failed_at:null
-    },{onConflict:'endpoint'});
+
+    const q=await CLOUD.client
+      .from('push_subscriptions')
+      .upsert({
+        endpoint:j.endpoint,
+        user_id:CLOUD.userId,
+        p256dh:j.keys.p256dh,
+        auth:j.keys.auth,
+        user_agent:navigator.userAgent.slice(0,200),
+        last_seen_at:new Date().toISOString(),
+        failed_at:null
+      },{onConflict:'endpoint'});
+
     if(q.error) throw q.error;
+
     return true;
+
   }catch(e){
     console.warn('[iroha push] subscribe',e);
+
+    alert(
+      'Push登録失敗:\n' +
+      (e?.message || JSON.stringify(e) || String(e))
+    );
+
     return false;
   }
 }
