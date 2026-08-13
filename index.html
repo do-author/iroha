@@ -1960,6 +1960,13 @@ function cloudRefreshUI(refreshFeed=true){
       const c=S.chats.find(x=>x.id===sc.dataset.chat), th=$('#thread',sc);
       if(c&&th){
         const near=th.scrollHeight-th.scrollTop-th.clientHeight<100;
+      
+        /* このDMを開いているなら、届いた瞬間に既読 */
+        if(c.unread>0){
+          c.unread=0;
+          cloudMarkChatRead(c.id);
+        }
+
         syncThread(th,c);
         if(near) raf(()=>scrollThread(th));
       }
@@ -3159,8 +3166,13 @@ function paneBell(p){
   }));
   wireScroll($('#noteScroll',p), $('#bellBar',p));
   attachPTR($('#noteScroll',p), p, refreshNotes);
+
+  
+  openNoteSegment(noteSeg);
   renderNotes();
   raf(()=>moveSeg($('#noteSeg',p),$('#noteInd',p),false));
+
+  
 }
 function moveSeg(seg, ind, animate=true){
   const on=seg.querySelector('.segbtn.on'); if(!on) return;
