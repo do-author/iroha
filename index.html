@@ -6323,13 +6323,14 @@ function openFirstSetup(prefill={}){
     };
 
     start.onclick=async()=>{
+
       const name=nm.value.trim();
       if(!name){ toast('名前を入力してください'); return; }
 
-      await prepareNotifications();
-
       layer.classList.add('busy');
       start.textContent='はじめています';
+
+      await prepareNotifications();
 
       resolve({
         layer,
@@ -6340,10 +6341,11 @@ function openFirstSetup(prefill={}){
     };
 
     skip.onclick=async()=>{
-      await prepareNotifications();
-
+      
       layer.classList.add('busy');
       start.textContent='はじめています';
+
+      await prepareNotifications();
 
       resolve({
         layer,
