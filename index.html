@@ -2850,18 +2850,52 @@ function openNoteSegment(kind){
 function syncNavBadges(){
   $$('#nav .navbtn').forEach(b=>{
     b.classList.toggle('on', b.dataset.tab===S.tab);
+
     const dotTab = b.dataset.tab==='bell';
     let n=0;
-    if(b.dataset.tab==='chat') n=S.chats.reduce((a,c)=>a+c.unread,0);
-    if(dotTab) n=unseenNotes();
+
+    if(b.dataset.tab==='chat'){
+      n=S.chats.reduce(
+        (a,c)=>a+(Number(c.unread)||0),
+        0
+      );
+    }
+
+    if(dotTab){
+      n=unseenNotes();
+    }
+
     let bdg=b.querySelector('.bdg');
+
     if(n>0){
       if(!bdg){
-        bdg=el(`<span class="bdg${dotTab?' soft':''}">${n}</span>`);
-        b.appendChild(bdg);                                   /* animates in once */
-      }else if(bdg.textContent!==String(n)) bdg.textContent=n;  /* silent update */
-    }else if(bdg) bdg.remove();
+        bdg=el(
+          `<span class="bdg${dotTab?' soft':''}">${n}</span>`
+        );
+        b.appendChild(bdg);
+      }else if(bdg.textContent!==String(n)){
+        bdg.textContent=n;
+      }
+    }else if(bdg){
+      bdg.remove();
+    }
   });
+
+  /* アプリ内未読数 = ホーム画面アイコンのバッジ数 */
+  const appUnread =
+    unseenNotes() +
+    S.chats.reduce(
+      (a,c)=>a+(Number(c.unread)||0),
+      0
+    );
+
+  try{
+    if(appUnread>0 && 'setAppBadge' in navigator){
+      navigator.setAppBadge(appUnread).catch(()=>{});
+    }else if(appUnread===0 && 'clearAppBadge' in navigator){
+      navigator.clearAppBadge().catch(()=>{});
+    }
+  }catch(_){}
 }
 
 /* =========================================================
@@ -3587,7 +3621,9 @@ function cachedDmRow(cid,m,i=0){
 
 function pushThread(cid){
   const c=S.chats.find(x=>x.id===cid); if(!c) return;
-  c.unread=0; cloudMarkChatRead(c.id);
+  c.unread=0;
+  cloudMarkChatRead(c.id);
+  syncNavBadges();
   const u=S.users[c.u];
   const s=el(`<section class="screen" data-chat="${c.id}" data-owner="${c.u}">
     <header class="navbar">
