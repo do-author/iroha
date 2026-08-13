@@ -2380,6 +2380,7 @@ const S = {
   filter:'osusume',
   media:'safety',
   quiet:false,
+  notifyWanted:true,
   who:'all',          /* default: everyone may start/send a conversation with me */
   postCooldowns:{},    /* tag -> optimistic submit time; persisted */
   requestedPosts:[],   /* post ids whose 「話す」 request was already sent on this device */
@@ -2430,6 +2431,7 @@ function loadPrefs(){
     if(['osusume','new','fav'].includes(p.filter)) S.filter=p.filter;
     if(['safety','raw','hide'].includes(p.media)) S.media=p.media;
     if(typeof p.quiet==='boolean') S.quiet=p.quiet;
+    if(typeof p.notifyWanted==='boolean') S.notifyWanted=p.notifyWanted;
     if(['all','fav','replied'].includes(p.who)){
       /* v2.40.20/21 used replied as the initial default.
          Move that old default to the new "all" default once. */
@@ -2449,7 +2451,8 @@ function loadPrefs(){
 function savePrefs(){
   try{
     localStorage.setItem(PREF_KEY,JSON.stringify({
-      theme:S.theme, filter:S.filter, media:S.media, quiet:S.quiet, who:S.who,
+      theme:S.theme, filter:S.filter, media:S.media,
+      quiet:S.quiet, notifyWanted:S.notifyWanted, who:S.who,
       dmDefaultAllMigrated:true,
       postCooldowns:S.postCooldowns, requestedPosts:S.requestedPosts,
       blocked:S.blocked, muted:S.muted
@@ -4454,57 +4457,51 @@ function abToB64(buf){
   return btoa(String.fromCharCode(...new Uint8Array(buf)));
 }
 
-async function pushSubscribe(){
-  if(!pushConfigured()){
-    alert('Push登録失敗: VAPID_PUBLIC_KEY');
-    return false;
-  }
-
-  if(!CLOUD.enabled){
-    alert('Push登録失敗: Supabase未接続');
-    return false;
-  }
-
-  if(!('PushManager' in window)){
-    alert('Push登録失敗: PushManagerなし');
-    return false;
-  }
+async function ensureBrowserPushSubscription(){
+  if(!pushConfigured()) return null;
+  if(notificationPermission()!=='granted') return null;
+  if(!('PushManager' in window)) return null;
 
   const reg=IROHA_SW_REG || await ensureIrohaServiceWorker();
+  if(!reg) return null;
 
-  if(!reg){
-    alert('Push登録失敗: Service Worker');
-    return false;
+  let sub=await reg.pushManager.getSubscription();
+
+  if(sub){
+    const current=abToB64(
+      sub.options?.applicationServerKey || new ArrayBuffer(0)
+    );
+
+    const wanted=abToB64(
+      urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer
+    );
+
+    if(current && wanted && current!==wanted){
+      await sub.unsubscribe();
+      sub=null;
+    }
   }
 
+  if(!sub){
+    sub=await reg.pushManager.subscribe({
+      userVisibleOnly:true,
+      applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+  }
+
+  return sub;
+}
+
+async function pushSubscribe(){
+  if(!CLOUD.enabled) return false;
+
   try{
-    let sub=await reg.pushManager.getSubscription();
-
-    if(sub){
-      const current=abToB64(
-        sub.options?.applicationServerKey || new ArrayBuffer(0)
-      );
-      const wanted=abToB64(
-        urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer
-      );
-
-      if(current && wanted && current!==wanted){
-        await sub.unsubscribe();
-        sub=null;
-      }
-    }
-
-    if(!sub){
-      sub=await reg.pushManager.subscribe({
-        userVisibleOnly:true,
-        applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-      });
-    }
+    const sub=await ensureBrowserPushSubscription();
+    if(!sub) return false;
 
     const j=sub.toJSON();
 
     if(!j?.endpoint || !j.keys?.p256dh || !j.keys?.auth){
-      alert('Push登録失敗: 購読情報が不完全');
       return false;
     }
 
@@ -4528,12 +4525,6 @@ async function pushSubscribe(){
 
   }catch(e){
     console.warn('[iroha push] subscribe',e);
-
-    alert(
-      'Push登録失敗:\n' +
-      (e?.message || JSON.stringify(e) || String(e))
-    );
-
     return false;
   }
 }
@@ -4554,15 +4545,62 @@ async function pushUnsubscribe(){
 /* Keep the row warm on every launch, so a subscription that the browser
    quietly renewed does not go stale in the table. */
 async function pushRefresh(){
+  if(!S.notifyWanted) return;
   if(notificationPermission()!=='granted') return;
   await pushSubscribe();
 }
 
-function syncNotificationSettingsUI(root=document){
+async function pushIsActive(){
+  if(!S.notifyWanted) return false;
+  if(notificationPermission()!=='granted') return false;
+  if(!CLOUD.enabled) return false;
+
+  try{
+    const reg=IROHA_SW_REG || await ensureIrohaServiceWorker();
+    if(!reg) return false;
+
+    const sub=await reg.pushManager.getSubscription();
+    if(!sub) return false;
+
+    const q=await CLOUD.client
+      .from('push_subscriptions')
+      .select('endpoint')
+      .eq('endpoint',sub.endpoint)
+      .eq('user_id',CLOUD.userId)
+      .maybeSingle();
+
+    return !q.error && !!q.data;
+
+  }catch(_){
+    return false;
+  }
+}
+
+async function syncNotificationSettingsUI(root=document){
   const sw=$('#notifySw',root);
-  const sub=$('#notifyNow',root);
-  if(sw) sw.classList.toggle('on',notificationPermission()==='granted');
-  if(sub) sub.textContent=notificationPermissionLabel();
+  const label=$('#notifyNow',root);
+
+  const active=await pushIsActive();
+
+  if(sw){
+    sw.classList.toggle('on',active);
+  }
+
+  if(label){
+    const p=notificationPermission();
+
+    if(active){
+      label.textContent='オン';
+    }else if(p==='denied'){
+      label.textContent='端末設定でオフ';
+    }else if(p==='unsupported'){
+      label.textContent='この端末では利用できません';
+    }else{
+      label.textContent='オフ';
+    }
+  }
+
+  return active;
 }
 
 /* Register silently on normal launches.
@@ -4613,8 +4651,8 @@ function pushSettings(){
     <div class="group"><h4>通知</h4>
       <div class="gcard">
         <button class="gitem" id="stNotify"><span class="gi">${I.bell}</span>
-          <div class="gt"><b>端末通知</b><span id="notifyNow">${notificationPermissionLabel()}</span></div>
-          <span class="sw${notificationPermission()==='granted'?' on':''}" id="notifySw"></span></button>
+          <div class="gt"><b>端末通知</b><span id="notifyNow">確認中</span></div>
+          <span class="sw" id="notifySw"></span></button>
       
       </div>
     </div>
@@ -4681,29 +4719,60 @@ function pushSettings(){
     toast(b.querySelector('b').textContent+'に変更しました');
   }));
   $('#stNotify',body).onclick=async()=>{
-  haptic(8);
+    haptic(8);
 
-  let ok = notificationPermission()==='granted';
+    const active=await pushIsActive();
 
-  if(!ok){
-    ok=await requestDeviceNotifications();
-  }
+    /* iroha側でOFF */
+    if(active){
+      S.notifyWanted=false;
+      savePrefs();
 
-  if(ok){
+      await pushUnsubscribe();
+      await syncNotificationSettingsUI(body);
+
+      toast('端末通知をオフにしました');
+      return;
+    }
+
+    /* iPhone側で拒否済み */
+    if(notificationPermission()==='denied'){
+      S.notifyWanted=false;
+      savePrefs();
+
+      await syncNotificationSettingsUI(body);
+
+      toast('iPhoneの設定からirohaの通知を許可してください');
+      return;
+    }
+
+    let ok=notificationPermission()==='granted';
+
+    if(!ok){
+      ok=await requestDeviceNotifications();
+    }
+
+    if(!ok){
+      S.notifyWanted=false;
+      savePrefs();
+
+      await syncNotificationSettingsUI(body);
+      return;
+    }
+
+    S.notifyWanted=true;
+    savePrefs();
+
     const pushed=await pushSubscribe();
-    syncNotificationSettingsUI(body);
+
+    await syncNotificationSettingsUI(body);
 
     toast(
       pushed
         ? '端末通知をオンにしました'
         : 'Push通知の登録に失敗しました'
     );
-    return;
-  }
-
-  syncNotificationSettingsUI(body);
-};
-
+  };
 
   $('#stQuiet',body).onclick=()=>{
     haptic(8); S.quiet=!S.quiet; savePrefs();
@@ -4714,6 +4783,7 @@ function pushSettings(){
   $('#stWho',body).onclick=()=>pushWhoCanTalk();
   $('#stGuide',body).onclick=()=>pushDoc('コミュニティガイドライン', GUIDE_TEXT);
   $('#stAbout',body).onclick=()=>pushDoc('irohaについて', ABOUT_TEXT());
+  syncNotificationSettingsUI(body);
   push(s);
 }
 
@@ -6229,21 +6299,58 @@ function openFirstSetup(prefill={}){
       $$('.gopt',layer).forEach(x=>x.classList.toggle('on',x===b));
     }));
 
-    start.onclick=()=>{
-      const name=nm.value.trim();
-      if(!name){ toast('名前を入力してください'); return; }
-      layer.classList.add('busy');
-      start.textContent='はじめています';
-      resolve({layer,name,gender,skipped:false});
+    const prepareNotifications=async()=>{
+      let ok=notificationPermission()==='granted';
+
+      if(notificationPermission()==='default'){
+        ok=await requestDeviceNotifications();
+      }
+
+      if(!ok){
+        S.notifyWanted=false;
+        savePrefs();
+        return;
+      }
+
+      S.notifyWanted=true;
+      savePrefs();
+
+      try{
+        await ensureBrowserPushSubscription();
+      }catch(e){
+        console.warn('[iroha push] first subscription',e);
+      }
     };
 
-    skip.onclick=()=>{
+    start.onclick=async()=>{
+      const name=nm.value.trim();
+      if(!name){ toast('名前を入力してください'); return; }
+
+      await prepareNotifications();
+
       layer.classList.add('busy');
       start.textContent='はじめています';
+
+      resolve({
+        layer,
+        name,
+        gender,
+        skipped:false
+      });
+    };
+
+    skip.onclick=async()=>{
+      await prepareNotifications();
+
+      layer.classList.add('busy');
+      start.textContent='はじめています';
+
       resolve({
         layer,
         name:initialName||'妖精さん',
-        gender:['male','female','secret'].includes(prefill.gender)?prefill.gender:'secret',
+        gender:['male','female','secret'].includes(prefill.gender)
+          ? prefill.gender
+          : 'secret',
         skipped:true
       });
     };
