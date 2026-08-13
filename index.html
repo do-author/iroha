@@ -6344,7 +6344,7 @@ async function boot(){
     });
     /* Realtimeが取りこぼした場合だけ拾う保険。通常同期はRealtime、確認は30秒ごと。 */
     setInterval(()=>{ if(!document.hidden) cloudReloadAll(false,false); }, 30000);
-    setTimeout(()=>toast('Supabaseに接続しました'),650);
+    
   }else{
     setTimeout(demoTick, 6000);
   }
