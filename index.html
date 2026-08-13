@@ -4389,23 +4389,6 @@ async function requestDeviceNotifications(){
   }
   return false;
 }
-async function showDeviceTestNotification(){
-  const ok=await requestDeviceNotifications();
-  if(!ok) return false;
-
-  const reg=IROHA_SW_REG || await navigator.serviceWorker.ready;
-  await reg.showNotification('iroha',{
-    body:'端末通知のテストです',
-    tag:'iroha-device-test',
-    renotify:false,
-    data:{url:location.href}
-  });
-
-  if(navigator.setAppBadge){
-    try{ await navigator.setAppBadge(1); }catch(_){}
-  }
-  return true;
-}
 
 /* ---------- Web Push ----------
    A subscription is this device's mailbox address plus the keys that let the
@@ -4583,9 +4566,7 @@ function pushSettings(){
         <button class="gitem" id="stNotify"><span class="gi">${I.bell}</span>
           <div class="gt"><b>端末通知</b><span id="notifyNow">${notificationPermissionLabel()}</span></div>
           <span class="sw${notificationPermission()==='granted'?' on':''}" id="notifySw"></span></button>
-        <button class="gitem" id="stNotifyTest"><span class="gi">${I.bell}</span>
-          <div class="gt"><b>テスト通知</b><span>ロック画面に通知が出るか確認します</span></div>
-          <span class="chev">${I.chev}</span></button>
+      
       </div>
     </div>
 
@@ -4673,17 +4654,7 @@ function pushSettings(){
 
   syncNotificationSettingsUI(body);
 };
-  $('#stNotifyTest',body).onclick=async()=>{
-    haptic(8);
-    try{
-      const ok=await showDeviceTestNotification();
-      syncNotificationSettingsUI(body);
-      if(ok) toast('テスト通知を送信しました');
-    }catch(e){
-      console.warn('[iroha notify] test',e);
-      toast('テスト通知を送れませんでした');
-    }
-  };
+
 
   $('#stQuiet',body).onclick=()=>{
     haptic(8); S.quiet=!S.quiet; savePrefs();
