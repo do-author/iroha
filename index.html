@@ -1633,7 +1633,9 @@ async function cloudInit(){
       session=r.data.session;
     }
     CLOUD.userId=session.user.id; CLOUD.enabled=true;
+    
     await cloudEnsureProfile();
+    
     await cloudReloadAll(true);
     return true;
   }catch(e){
@@ -4474,7 +4476,7 @@ async function pushSubscribe(){
       return false;
     }
 
-    await cloudNeedProfile();
+    await cloudEnsureProfile();
 
     const q=await CLOUD.client
       .from('push_subscriptions')
