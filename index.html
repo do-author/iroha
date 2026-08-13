@@ -4607,22 +4607,28 @@ function pushSettings(){
     toast(b.querySelector('b').textContent+'に変更しました');
   }));
   $('#stNotify',body).onclick=async()=>{
-    haptic(8);
-    if(notificationPermission()==='granted'){
-      toast('端末通知はオンです。オフにする場合は端末の通知設定から変更できます');
-      syncNotificationSettingsUI(body);
-      return;
-    }
-    const ok=await requestDeviceNotifications();
-    if(ok){
-      const pushed=await pushSubscribe();
-      syncNotificationSettingsUI(body);
-      toast(pushed ? '端末通知をオンにしました'
-                   : 'この端末では通知を受け取れますが、アプリを閉じている間は届きません');
-      return;
-    }
+  haptic(8);
+
+  let ok = notificationPermission()==='granted';
+
+  if(!ok){
+    ok=await requestDeviceNotifications();
+  }
+
+  if(ok){
+    const pushed=await pushSubscribe();
     syncNotificationSettingsUI(body);
-  };
+
+    toast(
+      pushed
+        ? '端末通知をオンにしました'
+        : 'Push通知の登録に失敗しました'
+    );
+    return;
+  }
+
+  syncNotificationSettingsUI(body);
+};
   $('#stNotifyTest',body).onclick=async()=>{
     haptic(8);
     try{
