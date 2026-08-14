@@ -4911,18 +4911,6 @@ function pushSettings(){
       toast('おやすみモードの設定を保存できませんでした');
     }
   };
-  if(S.quiet && S.quietUntil>Date.now()){
-    setTimeout(()=>{
-      if(S.quiet && S.quietUntil<=Date.now()){
-        S.quiet=false;
-        S.quietUntil=0;
-        savePrefs();
-        const quietSw=$('#quietSw',body);
-        if(quietSw) quietSw.classList.remove('on');
-      }
-    },Math.max(0,S.quietUntil-Date.now())+250);
-  }
-
   $('#stBlock',body).onclick=()=>pushBlockList();
   $('#stWho',body).onclick=()=>pushWhoCanTalk();
   $('#stGuide',body).onclick=()=>pushDoc('コミュニティガイドライン', GUIDE_TEXT);
