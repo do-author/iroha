@@ -1465,7 +1465,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.0';
+const APP_VER='4.1';
 
 
 /* =========================================================
@@ -2083,6 +2083,9 @@ async function cloudSetNotificationPrefs(){
   const r=await CLOUD.client.from('push_subscriptions').update({
     notify_dm:!!S.notifyDM,
     notify_activity:!!S.notifyActivity,
+    quiet_until:(S.quiet && S.quietUntil>Date.now())
+      ? new Date(S.quietUntil).toISOString()
+      : null,
     last_seen_at:new Date().toISOString()
   })
     .eq('endpoint',sub.endpoint)
@@ -2400,6 +2403,7 @@ const S = {
   filter:'osusume',
   media:'safety',
   quiet:false,
+  quietUntil:0,
   notifyWanted:true,
   notifyDM:true,
   notifyActivity:true,
@@ -2452,7 +2456,9 @@ function loadPrefs(){
     if(p.theme==='light'||p.theme==='dark') S.theme=p.theme;
     if(['osusume','new','fav'].includes(p.filter)) S.filter=p.filter;
     if(['safety','raw','hide'].includes(p.media)) S.media=p.media;
-    if(typeof p.quiet==='boolean') S.quiet=p.quiet;
+    const savedQuietUntil=Number(p.quietUntil)||0;
+    S.quietUntil=savedQuietUntil>Date.now()?savedQuietUntil:0;
+    S.quiet=S.quietUntil>Date.now();
     if(typeof p.notifyWanted==='boolean') S.notifyWanted=p.notifyWanted;
     if(typeof p.notifyDM==='boolean') S.notifyDM=p.notifyDM;
     if(typeof p.notifyActivity==='boolean') S.notifyActivity=p.notifyActivity;
@@ -2476,7 +2482,7 @@ function savePrefs(){
   try{
     localStorage.setItem(PREF_KEY,JSON.stringify({
       theme:S.theme, filter:S.filter, media:S.media,
-      quiet:S.quiet, notifyWanted:S.notifyWanted,
+      quiet:S.quiet, quietUntil:S.quietUntil, notifyWanted:S.notifyWanted,
       notifyDM:S.notifyDM, notifyActivity:S.notifyActivity, who:S.who,
       dmDefaultAllMigrated:true,
       postCooldowns:S.postCooldowns, requestedPosts:S.requestedPosts,
@@ -4550,6 +4556,9 @@ async function pushSubscribe(){
         user_agent:navigator.userAgent.slice(0,200),
         notify_dm:!!S.notifyDM,
         notify_activity:!!S.notifyActivity,
+        quiet_until:(S.quiet && S.quietUntil>Date.now())
+          ? new Date(S.quietUntil).toISOString()
+          : null,
         last_seen_at:new Date().toISOString(),
         failed_at:null
       },{onConflict:'endpoint'});
@@ -4648,6 +4657,12 @@ if('serviceWorker' in navigator){
    SETTINGS
    ========================================================= */
 function pushSettings(){
+  if(S.quiet && S.quietUntil<=Date.now()){
+    S.quiet=false;
+    S.quietUntil=0;
+    savePrefs();
+  }
+
   const s=screenShell('設定');
   const body=s.querySelector('.js-scroll');
   const u=S.users.me;
@@ -4705,7 +4720,7 @@ function pushSettings(){
         <button class="gitem" id="stWho"><span class="gi">${I.lock}</span>
           <div class="gt"><b>会話できる相手</b><span id="whoNow">${WHO_OPTS[S.who].label}</span></div><span class="chev">${I.chev}</span></button>
         <button class="gitem" id="stQuiet"><span class="gi">${I.belloff}</span>
-          <div class="gt"><b>おやすみモード</b><span>通知を一時停止します</span></div>
+          <div class="gt"><b>おやすみモード</b><span>12時間だけ通知を停止します</span></div>
           <span class="sw${S.quiet?' on':''}" id="quietSw"></span></button>
       </div>
     </div>
@@ -4862,11 +4877,52 @@ function pushSettings(){
     }
   };
 
-  $('#stQuiet',body).onclick=()=>{
-    haptic(8); S.quiet=!S.quiet; savePrefs();
+  $('#stQuiet',body).onclick=async()=>{
+    haptic(8);
+
+    const beforeQuiet=S.quiet;
+    const beforeUntil=S.quietUntil;
+    const active=S.quiet && S.quietUntil>Date.now();
+
+    if(active){
+      S.quiet=false;
+      S.quietUntil=0;
+    }else{
+      S.quiet=true;
+      S.quietUntil=Date.now()+(12*60*60*1000);
+    }
+
+    savePrefs();
     $('#quietSw',body).classList.toggle('on',S.quiet);
-    toast(S.quiet?'おやすみモードをオンにしました':'おやすみモードをオフにしました');
+
+    try{
+      await cloudSetNotificationPrefs();
+      toast(
+        S.quiet
+          ? 'おやすみモードを12時間オンにしました'
+          : 'おやすみモードをオフにしました'
+      );
+    }catch(e){
+      S.quiet=beforeQuiet;
+      S.quietUntil=beforeUntil;
+      savePrefs();
+      $('#quietSw',body).classList.toggle('on',S.quiet);
+      cloudErr('quiet mode',e);
+      toast('おやすみモードの設定を保存できませんでした');
+    }
   };
+  if(S.quiet && S.quietUntil>Date.now()){
+    setTimeout(()=>{
+      if(S.quiet && S.quietUntil<=Date.now()){
+        S.quiet=false;
+        S.quietUntil=0;
+        savePrefs();
+        const quietSw=$('#quietSw',body);
+        if(quietSw) quietSw.classList.remove('on');
+      }
+    },Math.max(0,S.quietUntil-Date.now())+250);
+  }
+
   $('#stBlock',body).onclick=()=>pushBlockList();
   $('#stWho',body).onclick=()=>pushWhoCanTalk();
   $('#stGuide',body).onclick=()=>pushDoc('コミュニティガイドライン', GUIDE_TEXT);
