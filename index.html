@@ -1583,6 +1583,7 @@ async function cloudEnsureProfile(){
       isActive:r.data.is_active!==false,
       dmPolicy:['all','replied','fav'].includes(r.data.dm_policy)?r.data.dm_policy:S.who});
     if(['all','replied','fav'].includes(r.data.dm_policy)) S.who=r.data.dm_policy;
+    savePrefs();
     return;
   }
   let handle=me.handle;
@@ -1830,7 +1831,9 @@ async function cloudReloadAll(initial=false, applyPosts=true){
         img:u.avatar_url||null,banner:u.banner_url||null,isActive:u.is_active!==false,
         dmPolicy:['all','replied','fav'].includes(u.dm_policy)?u.dm_policy:(key==='me'?S.who:'all'),
         posts:0,replies:0,talks:0,fav:false,favMe:false});
-      if(key==='me' && ['all','replied','fav'].includes(u.dm_policy)) S.who=u.dm_policy;
+      if(key==='me'){
+        if(['all','replied','fav'].includes(u.dm_policy)) S.who=u.dm_policy;
+      }
       S.users[key]=target; if(key!=='me') CLOUD.remoteUserIds.add(key);
     }
     const outSet=new Set(favOut.map(x=>x.target_id)), inSet=new Set(favIn.map(x=>x.owner_id));
@@ -2069,6 +2072,23 @@ async function cloudSetDmPolicy(policy){
   const r=await CLOUD.client.from('profiles').update({dm_policy:policy,updated_at:new Date().toISOString()}).eq('id',CLOUD.userId);
   if(r.error) throw r.error;
   if(S.users.me) S.users.me.dmPolicy=policy;
+}
+async function cloudSetNotificationPrefs(){
+  if(!CLOUD.enabled) return;
+
+  const reg=IROHA_SW_REG || (('serviceWorker' in navigator) ? await navigator.serviceWorker.ready : null);
+  const sub=reg && await reg.pushManager?.getSubscription();
+  if(!sub?.endpoint) return;
+
+  const r=await CLOUD.client.from('push_subscriptions').update({
+    notify_dm:!!S.notifyDM,
+    notify_activity:!!S.notifyActivity,
+    last_seen_at:new Date().toISOString()
+  })
+    .eq('endpoint',sub.endpoint)
+    .eq('user_id',CLOUD.userId);
+
+  if(r.error) throw r.error;
 }
 async function cloudSetProfileActive(active){
   if(!CLOUD.enabled) return;
@@ -4520,6 +4540,8 @@ async function pushSubscribe(){
         p256dh:j.keys.p256dh,
         auth:j.keys.auth,
         user_agent:navigator.userAgent.slice(0,200),
+        notify_dm:!!S.notifyDM,
+        notify_activity:!!S.notifyActivity,
         last_seen_at:new Date().toISOString(),
         failed_at:null
       },{onConflict:'endpoint'});
@@ -4785,18 +4807,38 @@ function pushSettings(){
     );
   };
 
-  $('#stNotifyDM',body).onclick=()=>{
+  $('#stNotifyDM',body).onclick=async()=>{
     haptic(8);
+    const before=S.notifyDM;
     S.notifyDM=!S.notifyDM;
     savePrefs();
     $('#notifyDmSw',body).classList.toggle('on',S.notifyDM);
+    try{
+      await cloudSetNotificationPrefs();
+    }catch(e){
+      S.notifyDM=before;
+      savePrefs();
+      $('#notifyDmSw',body).classList.toggle('on',S.notifyDM);
+      cloudErr('notify dm',e);
+      toast('DM通知の設定を保存できませんでした');
+    }
   };
 
-  $('#stNotifyActivity',body).onclick=()=>{
+  $('#stNotifyActivity',body).onclick=async()=>{
     haptic(8);
+    const before=S.notifyActivity;
     S.notifyActivity=!S.notifyActivity;
     savePrefs();
     $('#notifyActivitySw',body).classList.toggle('on',S.notifyActivity);
+    try{
+      await cloudSetNotificationPrefs();
+    }catch(e){
+      S.notifyActivity=before;
+      savePrefs();
+      $('#notifyActivitySw',body).classList.toggle('on',S.notifyActivity);
+      cloudErr('notify activity',e);
+      toast('いいね・返信通知の設定を保存できませんでした');
+    }
   };
 
   $('#stQuiet',body).onclick=()=>{
