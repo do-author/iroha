@@ -159,10 +159,6 @@ html[data-theme="night"] body{
     linear-gradient(180deg,#171326 0%,#121223 47%,#0F1220 100%);
 }
 
-html[data-theme="night"] body{
-  position:relative;
-  overflow:hidden;
-}
 
 /* stars */
 html[data-theme="night"] body::before{
@@ -214,7 +210,6 @@ html[data-theme="night"] body::after{
 /* shooting stars: one layer on app, another on tabs root */
 [data-theme="night"] #app{
   background:transparent;
-  isolation:isolate;
 }
 [data-theme="night"] #app::before,
 [data-theme="night"] .tabs-root::before{
@@ -257,13 +252,6 @@ html[data-theme="night"] body::after{
 [data-theme="night"] .screen,
 [data-theme="night"] .tabs-root{
   background:transparent;
-}
-[data-theme="night"] .tabpane,
-[data-theme="night"] .screen,
-[data-theme="night"] .navwrap,
-[data-theme="night"] .appbar,
-[data-theme="night"] .navbar{
-  z-index:2;
 }
 
 /* Ultra-transparent glass post cards */
@@ -2207,11 +2195,8 @@ html[data-theme="night"] body,
   background:transparent !important;
   filter:none !important;
   box-shadow:none !important;
-  isolation:isolate;
 }
 [data-theme="night"] .nav{
-  overflow:hidden !important;
-  isolation:isolate;
   background:rgba(255,255,255,.014) !important;
   border:1px solid rgba(242,239,255,.085) !important;
   -webkit-backdrop-filter:saturate(112%) blur(13px) !important;
@@ -2983,7 +2968,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.8.3';
+const APP_VER='4.8.4';
 
 
 /* =========================================================
