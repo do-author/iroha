@@ -1259,7 +1259,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 .first-name-label{
   display:block;
-  margin:0 0 7px 3px;
+  margin:0 0 7px 0;
   color:var(--ink-3);
   font-size:11px;
   font-weight:800;
@@ -1465,7 +1465,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.2';
+const APP_VER='4.3';
 
 
 /* =========================================================
@@ -6429,7 +6429,6 @@ function openFirstSetup(prefill={}){
     let gender=['male','female','secret'].includes(prefill.gender)?prefill.gender:'secret';
     const layer=el(`<section class="first-setup" id="firstSetup" aria-label="初回設定">
       <div class="first-setup-inner">
-        <div class="first-setup-brand"><span class="dot"></span><span>iroha</span></div>
         <h1>irohaをはじめる</h1>
 
         <label class="first-name-label" for="firstName">name</label>
@@ -6438,7 +6437,7 @@ function openFirstSetup(prefill={}){
           <span class="first-name-count" id="firstNameCount">${[...initialName].length}/10</span>
         </div>
 
-        <h4 class="pick-h">性別</h4>
+        <h4 class="pick-h">gender</h4>
         <div class="genderpick" id="firstGender">
           ${Object.entries(GENDERS).map(([k,v])=>`<button class="gopt${k===gender?' on':''}" data-g="${k}">
             ${v.sym?`<span class="gtag ${v.cls}">${v.sym}</span>`:`<span class="gtag g-secret">${I.lockS}</span>`}
