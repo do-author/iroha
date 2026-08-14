@@ -1465,7 +1465,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.1';
+const APP_VER='4.2';
 
 
 /* =========================================================
@@ -4698,6 +4698,20 @@ function pushSettings(){
       </div>
     </div>
 
+    <div class="group"><h4>安心・安全</h4>
+      <div class="gcard">
+        <button class="gitem" id="stQuiet"><span class="gi">${I.belloff}</span>
+          <div class="gt"><b>おやすみモード</b><span>12時間だけ通知を停止します</span></div>
+          <span class="sw${S.quiet?' on':''}" id="quietSw"></span></button>
+        <button class="gitem" id="stWho"><span class="gi">${I.lock}</span>
+          <div class="gt"><b>会話できる相手</b><span id="whoNow">${WHO_OPTS[S.who].label}</span></div><span class="chev">${I.chev}</span></button>
+        <button class="gitem" id="stBlock"><span class="gi">${I.ban}</span>
+          <div class="gt"><b>ブロックしたユーザー</b><span>${S.blocked.length?S.blocked.length+'人をブロック中':'表示と会話を制限します'}</span></div><span class="chev">${I.chev}</span></button>
+        <button class="gitem" id="stMute"><span class="gi">${I.eyeoff}</span>
+          <div class="gt"><b>ミュートしたユーザー</b><span>${S.muted.length?S.muted.length+'人をミュート中':'おすすめへの表示を減らします'}</span></div><span class="chev">${I.chev}</span></button>
+      </div>
+    </div>
+
     <div class="group"><h4>通知</h4>
       <div class="gcard">
         <button class="gitem" id="stNotify"><span class="gi">${I.bell}</span>
@@ -4709,19 +4723,7 @@ function pushSettings(){
         <button class="gitem" id="stNotifyActivity"><span class="gi">${I.heart}</span>
           <div class="gt"><b>いいね・返信</b><span>投稿への反応を通知します</span></div>
           <span class="sw${S.notifyActivity?' on':''}" id="notifyActivitySw"></span></button>
-      
-      </div>
-    </div>
 
-    <div class="group"><h4>安心・安全</h4>
-      <div class="gcard">
-        <button class="gitem" id="stBlock"><span class="gi">${I.ban}</span>
-          <div class="gt"><b>ブロックしたユーザー</b><span>${S.blocked.length?S.blocked.length+'人をブロック中':'表示と会話を制限します'}</span></div><span class="chev">${I.chev}</span></button>
-        <button class="gitem" id="stWho"><span class="gi">${I.lock}</span>
-          <div class="gt"><b>会話できる相手</b><span id="whoNow">${WHO_OPTS[S.who].label}</span></div><span class="chev">${I.chev}</span></button>
-        <button class="gitem" id="stQuiet"><span class="gi">${I.belloff}</span>
-          <div class="gt"><b>おやすみモード</b><span>12時間だけ通知を停止します</span></div>
-          <span class="sw${S.quiet?' on':''}" id="quietSw"></span></button>
       </div>
     </div>
 
@@ -4912,6 +4914,7 @@ function pushSettings(){
     }
   };
   $('#stBlock',body).onclick=()=>pushBlockList();
+  $('#stMute',body).onclick=()=>pushMuteList();
   $('#stWho',body).onclick=()=>pushWhoCanTalk();
   $('#stGuide',body).onclick=()=>pushDoc('コミュニティガイドライン', GUIDE_TEXT);
   $('#stAbout',body).onclick=()=>pushDoc('irohaについて', ABOUT_TEXT());
@@ -5006,6 +5009,39 @@ function pushBlockList(){
           toast('ブロックを解除しました');
         }
       });
+    }));
+    $$('.row',body).forEach(r=>r.addEventListener('pointerdown',e=>rippleAt(r,e)));
+  };
+  paint(); push(s);
+}
+
+
+function pushMuteList(){
+  const s=screenShell('ミュートしたユーザー');
+  const body=s.querySelector('.js-scroll');
+  const paint=()=>{
+    if(!S.muted.length){
+      body.innerHTML=`<div class="empty"><h3>ミュート中のユーザーはいません</h3>
+        <p>投稿や通知の「…」からミュートすると、ここにまとまります</p></div>`;
+      return;
+    }
+    body.innerHTML=S.muted.map(uid=>{
+      const u=S.users[uid]; if(!u) return '';
+      return `<div class="row">
+        ${uav(uid,48)}
+        <div class="row-main">
+          <div class="row-t">${esc(u.name)}${genderTag(u)}${accountTag(u)}</div>
+          <div class="row-s">@${esc(u.handle)}</div>
+        </div>
+        <button class="obtn" data-unmute="${uid}" style="padding:9px 16px;font-size:13px">解除</button>
+      </div>`;
+    }).join('');
+    $$('[data-unmute]',body).forEach(b=>b.addEventListener('click',()=>{
+      const uid=b.dataset.unmute;
+      S.muted=S.muted.filter(x=>x!==uid);
+      savePrefs();
+      haptic(10); paint(); refreshInPlace();
+      toast('ミュートを解除しました');
     }));
     $$('.row',body).forEach(r=>r.addEventListener('pointerdown',e=>rippleAt(r,e)));
   };
