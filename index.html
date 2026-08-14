@@ -2898,12 +2898,6 @@ html[data-theme="night"] body,
   z-index:0 !important;
   pointer-events:none !important;
 }
-[data-theme="night"] .screen[data-chat] > .navbar,
-[data-theme="night"] .screen[data-chat] > .thread,
-[data-theme="night"] .screen[data-chat] > .composer-bar{
-  position:relative;
-  z-index:2;
-}
 [data-theme="night"] .screen[data-chat] > .thread{
   background:transparent !important;
 }
@@ -2969,6 +2963,23 @@ html[data-theme="night"] body,
     ) !important;
 }
 
+
+
+/* ============================================================
+   iroha 4.8.2 — night DM layout parity
+   Keep Home sky behind the chat without changing chat geometry.
+   ============================================================ */
+[data-theme="night"] .screen[data-chat] > .navbar{
+  z-index:2;
+}
+[data-theme="night"] .screen[data-chat] > .thread{
+  position:relative;
+  z-index:2;
+}
+[data-theme="night"] .screen[data-chat] > .composer-bar{
+  z-index:6;
+}
+
 </style>
 </head>
 <body>
@@ -2986,7 +2997,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.8.1';
+const APP_VER='4.8.2';
 
 
 /* =========================================================
