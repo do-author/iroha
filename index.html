@@ -2914,6 +2914,61 @@ html[data-theme="night"] body,
   display:none !important;
 }
 
+
+
+/* ============================================================
+   iroha 4.8.1 — local text blur + darker lower night sky
+   ============================================================ */
+
+/* 投稿カード全体では夜空をぼかさない。
+   星・雲・流れ星はカード越しでもそのままシャープに見せる。 */
+[data-theme="night"] .tabpane[data-pane="home"] .card{
+  background:rgba(255,255,255,.006) !important;
+  border:1px solid rgba(244,241,255,.09) !important;
+  -webkit-backdrop-filter:none !important;
+  backdrop-filter:none !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.025) !important;
+}
+
+/* 本文の文字のすぐ後ろだけ、ほんの少しぼかす。
+   カード全体には広げない。 */
+[data-theme="night"] .tabpane[data-pane="home"] .p-body{
+  position:relative;
+  width:fit-content;
+  max-width:100%;
+  isolation:isolate;
+}
+[data-theme="night"] .tabpane[data-pane="home"] .p-body::before{
+  content:"";
+  position:absolute;
+  inset:-2px -5px;
+  z-index:-1;
+  border-radius:7px;
+  background:rgba(8,8,22,.055);
+  -webkit-backdrop-filter:blur(2px);
+  backdrop-filter:blur(2px);
+  pointer-events:none;
+}
+
+/* 上の暗い夜空を下まで少し長くする。
+   中～下部の紫・青の明るさも控えめに。HomeとDMで共通。 */
+[data-theme="night"] .home-sky{
+  background:
+    radial-gradient(ellipse at 78% 15%, rgba(29,44,105,.14) 0%, transparent 38%),
+    radial-gradient(ellipse at 53% 78%, rgba(44,34,86,.10) 0%, transparent 43%),
+    radial-gradient(ellipse at 12% 88%, rgba(34,49,104,.085) 0%, transparent 36%),
+    linear-gradient(
+      180deg,
+      #03050E 0%,
+      #040615 24%,
+      #050817 45%,
+      #070B20 67%,
+      #0A0D2A 84%,
+      #070817 100%
+    ) !important;
+}
+
 </style>
 </head>
 <body>
@@ -2931,7 +2986,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.8';
+const APP_VER='4.8.1';
 
 
 /* =========================================================
