@@ -186,7 +186,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   animation:dotIn 900ms var(--spring) both;
 }
 @keyframes dotIn{0%{transform:scale(.2) rotate(-90deg);opacity:0}100%{transform:none;opacity:1}}
-.brand-name{font-size:26px; font-weight:800; letter-spacing:-.035em; line-height:1}
+.brand-name{font-family:"Snell Roundhand","Segoe Script","Brush Script MT",cursive; font-size:28px; font-weight:600; letter-spacing:.01em; line-height:1}
 .brand-ver{font-size:11px; font-weight:700; color:var(--ink-3); letter-spacing:.02em}
 .iconbtn{
   width:42px;height:42px;border-radius:50%;
@@ -1244,14 +1244,11 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   padding:8px 0 16px;
 }
 .first-setup-brand{
-  display:flex; align-items:center; gap:9px;
   margin-bottom:34px;
-  font-size:20px; font-weight:800; letter-spacing:-.03em;
-}
-.first-setup-brand .dot{
-  width:22px; height:22px; border-radius:50%;
-  background:radial-gradient(circle at 34% 32%,#FFF0B4,var(--accent) 62%,var(--accent-deep));
-  box-shadow:var(--glow);
+  font-family:"Snell Roundhand","Segoe Script","Brush Script MT",cursive;
+  font-size:28px; font-weight:600; letter-spacing:.01em;
+  line-height:1;
+  text-align:center;
 }
 .first-setup h1{
   margin:0 0 28px;
@@ -1465,7 +1462,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.3';
+const APP_VER='4.6';
 
 
 /* =========================================================
@@ -3005,7 +3002,7 @@ function paneHome(p){
   p.innerHTML=`
     <header class="appbar" id="homeBar">
       <div class="appbar-row">
-        <div class="brand"><span class="brand-dot"></span><span class="brand-name">iroha</span><span class="brand-ver">v${APP_VER}</span></div>
+        <div class="brand"><span class="brand-name">iroha</span><span class="brand-ver">v${APP_VER}</span></div>
         <button class="iconbtn" id="toSearch" aria-label="検索">${I.search}</button>
         <button class="iconbtn" id="toSettings" aria-label="設定">${I.gear}</button>
       </div>
@@ -3189,7 +3186,7 @@ function paneBell(p){
   p.innerHTML=`
     <header class="appbar" id="bellBar">
       <div class="appbar-row">
-        <div class="brand"><span class="brand-dot"></span><span class="brand-name">iroha</span><span class="brand-ver">v${APP_VER}</span></div>
+        <div class="brand"><span class="brand-name">iroha</span><span class="brand-ver">v${APP_VER}</span></div>
         <button class="iconbtn js-settings" aria-label="設定">${I.gear}</button>
       </div>
       <div class="seg" id="noteSeg" style="margin:13px 0 12px">
@@ -3287,7 +3284,7 @@ function paneChat(p){
   p.innerHTML=`
     <header class="appbar" id="chatBar" style="padding-bottom:12px">
       <div class="appbar-row">
-        <div class="brand"><span class="brand-dot"></span><span class="brand-name">iroha</span><span class="brand-ver">v${APP_VER}</span></div>
+        <div class="brand"><span class="brand-name">iroha</span><span class="brand-ver">v${APP_VER}</span></div>
         <button class="iconbtn js-settings" aria-label="設定">${I.gear}</button>
       </div>
       <div class="appbar-row" style="margin-top:13px"><div class="searchbar">${I.search}<input id="chatQ" placeholder="チャットを検索"></div></div>
@@ -3350,7 +3347,7 @@ function paneMe(p){
   p.innerHTML=`
     <header class="appbar" id="meBar">
       <div class="appbar-row">
-        <div class="brand"><span class="brand-dot"></span><span class="brand-name">iroha</span><span class="brand-ver">v${APP_VER}</span></div>
+        <div class="brand"><span class="brand-name">iroha</span><span class="brand-ver">v${APP_VER}</span></div>
         <button class="iconbtn" id="meSettings" aria-label="設定">${I.gear}</button>
       </div>
     </header>
@@ -6429,6 +6426,7 @@ function openFirstSetup(prefill={}){
     let gender=['male','female','secret'].includes(prefill.gender)?prefill.gender:'secret';
     const layer=el(`<section class="first-setup" id="firstSetup" aria-label="初回設定">
       <div class="first-setup-inner">
+        <div class="first-setup-brand">iroha</div>
         <h1>irohaをはじめる</h1>
 
         <label class="first-name-label" for="firstName">name</label>
