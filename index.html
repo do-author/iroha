@@ -2381,6 +2381,8 @@ const S = {
   media:'safety',
   quiet:false,
   notifyWanted:true,
+  notifyDM:true,
+  notifyActivity:true,
   who:'all',          /* default: everyone may start/send a conversation with me */
   postCooldowns:{},    /* tag -> optimistic submit time; persisted */
   requestedPosts:[],   /* post ids whose 「話す」 request was already sent on this device */
@@ -2432,6 +2434,8 @@ function loadPrefs(){
     if(['safety','raw','hide'].includes(p.media)) S.media=p.media;
     if(typeof p.quiet==='boolean') S.quiet=p.quiet;
     if(typeof p.notifyWanted==='boolean') S.notifyWanted=p.notifyWanted;
+    if(typeof p.notifyDM==='boolean') S.notifyDM=p.notifyDM;
+    if(typeof p.notifyActivity==='boolean') S.notifyActivity=p.notifyActivity;
     if(['all','fav','replied'].includes(p.who)){
       /* v2.40.20/21 used replied as the initial default.
          Move that old default to the new "all" default once. */
@@ -2452,7 +2456,8 @@ function savePrefs(){
   try{
     localStorage.setItem(PREF_KEY,JSON.stringify({
       theme:S.theme, filter:S.filter, media:S.media,
-      quiet:S.quiet, notifyWanted:S.notifyWanted, who:S.who,
+      quiet:S.quiet, notifyWanted:S.notifyWanted,
+      notifyDM:S.notifyDM, notifyActivity:S.notifyActivity, who:S.who,
       dmDefaultAllMigrated:true,
       postCooldowns:S.postCooldowns, requestedPosts:S.requestedPosts,
       blocked:S.blocked, muted:S.muted
@@ -4653,6 +4658,12 @@ function pushSettings(){
         <button class="gitem" id="stNotify"><span class="gi">${I.bell}</span>
           <div class="gt"><b>端末通知</b><span id="notifyNow">確認中</span></div>
           <span class="sw" id="notifySw"></span></button>
+        <button class="gitem" id="stNotifyDM"><span class="gi">${I.chat}</span>
+          <div class="gt"><b>DM</b><span>DMの通知を受け取ります</span></div>
+          <span class="sw${S.notifyDM?' on':''}" id="notifyDmSw"></span></button>
+        <button class="gitem" id="stNotifyActivity"><span class="gi">${I.heart}</span>
+          <div class="gt"><b>いいね・返信</b><span>投稿への反応を通知します</span></div>
+          <span class="sw${S.notifyActivity?' on':''}" id="notifyActivitySw"></span></button>
       
       </div>
     </div>
@@ -4772,6 +4783,20 @@ function pushSettings(){
         ? '端末通知をオンにしました'
         : 'Push通知の登録に失敗しました'
     );
+  };
+
+  $('#stNotifyDM',body).onclick=()=>{
+    haptic(8);
+    S.notifyDM=!S.notifyDM;
+    savePrefs();
+    $('#notifyDmSw',body).classList.toggle('on',S.notifyDM);
+  };
+
+  $('#stNotifyActivity',body).onclick=()=>{
+    haptic(8);
+    S.notifyActivity=!S.notifyActivity;
+    savePrefs();
+    $('#notifyActivitySw',body).classList.toggle('on',S.notifyActivity);
   };
 
   $('#stQuiet',body).onclick=()=>{
@@ -6323,13 +6348,14 @@ function openFirstSetup(prefill={}){
     };
 
     start.onclick=async()=>{
+
       const name=nm.value.trim();
       if(!name){ toast('名前を入力してください'); return; }
 
-      await prepareNotifications();
-
       layer.classList.add('busy');
       start.textContent='はじめています';
+
+      await prepareNotifications();
 
       resolve({
         layer,
@@ -6340,10 +6366,11 @@ function openFirstSetup(prefill={}){
     };
 
     skip.onclick=async()=>{
-      await prepareNotifications();
-
+      
       layer.classList.add('busy');
       start.textContent='はじめています';
+
+      await prepareNotifications();
 
       resolve({
         layer,
