@@ -2951,6 +2951,33 @@ html[data-theme="night"] body,
 
 
 
+
+
+/* ============================================================
+   iroha 4.8.5 — smooth DM return transition
+   ============================================================ */
+
+/* 戻る420msだけ背景アニメーションを止める。
+   見た目の位置は固定したままなので、星が消えたり跳ねたりはしない。 */
+[data-theme="night"] .screen[data-chat].out .sky-star,
+[data-theme="night"] .screen[data-chat].out .sky-cloud,
+[data-theme="night"] .screen[data-chat].out .sky-meteor{
+  -webkit-animation-play-state:paused !important;
+  animation-play-state:paused !important;
+}
+
+/* transform中のbackdrop-filter再計算を避ける。背景色自体は維持。 */
+[data-theme="night"] .screen[data-chat].out .navbar,
+[data-theme="night"] .screen[data-chat].out .composer-bar{
+  -webkit-backdrop-filter:none !important;
+  backdrop-filter:none !important;
+}
+
+/* 複雑な夜空レイヤーの再描画範囲をDM画面内に限定。 */
+[data-theme="night"] .screen[data-chat] > .home-sky{
+  contain:paint;
+}
+
 </style>
 </head>
 <body>
@@ -2968,7 +2995,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.8.4';
+const APP_VER='4.8.5';
 
 
 /* =========================================================
@@ -4816,7 +4843,7 @@ function paneChat(p){
   renderChatList();
 }
 let chatSig=null;
-function renderChatList(){
+function renderChatList(instant=false){
   const host=$('#chatList'); if(!host) return;
   const q=QUIET;
   const qq=($('#chatQ')?.value||'').trim();
@@ -4845,7 +4872,16 @@ function renderChatList(){
       </div>
     </div>`;}).join('')
     : `<div class="empty"><h3>${qq?'見つかりませんでした':'会話はまだありません'}</h3><p>${qq?'別のことばで探してみてください':'気になる投稿から「話す」を押すと、ここに会話が並びます'}</p></div>`;
-  revealAll(host,0,q);
+  if(instant){
+    $$('.stagger',host).forEach(n=>{
+      n.classList.add('in');
+      n.style.animation='none';
+      n.style.opacity='1';
+      n.style.transform='none';
+    });
+  }else{
+    revealAll(host,0,q);
+  }
   $$('.row[data-chat]',host).forEach(r=>{
     r.addEventListener('pointerdown',e=>rippleAt(r,e));
     r.addEventListener('click',e=>{
@@ -4996,14 +5032,52 @@ function push(node){
 }
 function pop(){
   const node=stackEls.pop(); if(!node) return;
-  node.classList.remove('in'); node.classList.add('out');
+  const leavingChat=!!node.dataset.chat;
+
+  node.classList.remove('in');
+  node.classList.add('out');
+
   if(!stackEls.length){
     $('#tabsRoot').classList.remove('pushed');
     $('#navwrap').classList.remove('hide');
     navMorph.expand();          /* the bar is back, so the "+" rejoins it */
   }
+
+  /* DMだけは、戻る420msの途中で背面リストを再描画しない。
+     夜空DOMを動かしている最中のreflow/repaint競合を避ける。 */
+  if(leavingChat){
+    let finished=false;
+    let fallback=0;
+
+    const finish=()=>{
+      if(finished) return;
+      finished=true;
+      node.removeEventListener('transitionend',onEnd);
+      if(fallback) clearTimeout(fallback);
+      node.remove();
+
+      if(S.tab==='chat'){
+        chatSig=null;
+        renderChatList(true);   /* 戻り切った後、アニメーションなしで1回だけ */
+      }else{
+        refreshPane(S.tab);
+      }
+      syncNavBadges();
+    };
+
+    const onEnd=e=>{
+      if(e.target===node && e.propertyName==='transform') finish();
+    };
+
+    node.addEventListener('transitionend',onEnd);
+    fallback=setTimeout(finish,500);
+    syncNavBadges();
+    return;
+  }
+
   setTimeout(()=>node.remove(),430);
-  refreshPane(S.tab); syncNavBadges();
+  refreshPane(S.tab);
+  syncNavBadges();
 }
 /* edge swipe back */
 function wireEdgeBack(node){
