@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
-<meta name="theme-color" content="#FFFFFF">
+<meta name="theme-color" content="#151225">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="iroha">
@@ -16,7 +16,7 @@ try{
   if(p && (p.theme==='light'||p.theme==='dark')){
     document.documentElement.dataset.theme=p.theme;
     document.querySelector('meta[name="theme-color"]').content =
-      p.theme==='dark' ? '#0B0B0B' : '#FFFFFF';
+      p.theme==='dark' ? '#0B0B0B' : '#151225';
   }
 }catch(_){}
 </script>
@@ -97,6 +97,311 @@ try{
   --toast-bg:#F3EFE6; --toast-ink:#171614;
 }
 
+
+/* ============================================================
+   v4.7 TEST — LIGHT MODE: violet night / moon-glass theme
+   Dark mode remains unchanged.
+   ============================================================ */
+[data-theme="light"]{
+  --accent:#AFA7C9;
+  --accent-deep:#C7C1DA;
+  --accent-ink:#181425;
+
+  --bg:#151225;
+  --bg-elev:rgba(27,22,46,.62);
+  --bar:rgba(24,19,43,.28);
+  --card:rgba(40,31,66,.18);
+  --card-2:rgba(46,37,70,.28);
+  --line:rgba(231,225,248,.12);
+  --line-soft:rgba(231,225,248,.07);
+
+  --ink:#F4F0FB;
+  --ink-2:#C8C1D9;
+  --ink-3:#91889E;
+
+  --field:rgba(230,224,247,.065);
+  --nav:rgba(30,24,52,.20);
+  --nav-ring:rgba(24,19,43,.24);
+  --nav-pill:rgba(219,213,235,.10);
+  --nav-pill-ink:#EEEAF7;
+
+  --shadow-card:0 16px 44px rgba(3,2,18,.18);
+  --shadow-nav:0 18px 48px rgba(2,2,14,.24), inset 0 1px 0 rgba(255,255,255,.10);
+  --shadow-pop:0 26px 72px rgba(2,1,14,.42);
+  --glow:0 0 26px rgba(206,199,229,.10);
+
+  --skel:linear-gradient(90deg,
+    rgba(255,255,255,.025) 0%,
+    rgba(255,255,255,.075) 40%,
+    rgba(255,255,255,.025) 80%);
+
+  --glass:saturate(145%) blur(34px);
+  --glass-edge:rgba(255,255,255,.10);
+  --glass-line:rgba(255,255,255,.085);
+  --fresh-wash:rgba(180,168,210,.05);
+
+  --toast-bg:rgba(240,236,248,.94);
+  --toast-ink:#171321;
+}
+
+/* Night-sky canvas. #app and screen layers become transparent so it shows through. */
+html[data-theme="light"],
+html[data-theme="light"] body{
+  background:
+    radial-gradient(circle at 18% 13%, rgba(124,105,174,.18), transparent 34%),
+    radial-gradient(circle at 82% 8%, rgba(76,92,151,.16), transparent 30%),
+    radial-gradient(circle at 52% 82%, rgba(91,69,130,.15), transparent 42%),
+    linear-gradient(180deg,#171326 0%,#121223 47%,#0F1220 100%);
+}
+
+html[data-theme="light"] body{
+  position:relative;
+  overflow:hidden;
+}
+
+/* stars */
+html[data-theme="light"] body::before{
+  content:"";
+  position:fixed;
+  inset:-8%;
+  z-index:0;
+  pointer-events:none;
+  background-image:
+    radial-gradient(circle, rgba(255,255,255,.88) 0 1px, transparent 1.4px),
+    radial-gradient(circle, rgba(226,220,245,.66) 0 1px, transparent 1.5px),
+    radial-gradient(circle, rgba(207,200,232,.42) 0 .9px, transparent 1.3px);
+  background-size:91px 91px, 137px 137px, 63px 63px;
+  background-position:13px 23px, 51px 7px, 19px 44px;
+  opacity:.58;
+  animation:irohaStarDrift 52s linear infinite;
+}
+
+/* moving clouds */
+html[data-theme="light"] body::after{
+  content:"";
+  position:fixed;
+  left:-35%;
+  right:-35%;
+  top:8%;
+  bottom:4%;
+  z-index:0;
+  pointer-events:none;
+  background:
+    radial-gradient(ellipse at 17% 28%, rgba(185,177,211,.08) 0 9%, transparent 25%),
+    radial-gradient(ellipse at 31% 35%, rgba(185,177,211,.055) 0 12%, transparent 27%),
+    radial-gradient(ellipse at 68% 18%, rgba(166,158,196,.065) 0 10%, transparent 24%),
+    radial-gradient(ellipse at 82% 45%, rgba(183,177,207,.055) 0 11%, transparent 27%),
+    radial-gradient(ellipse at 47% 74%, rgba(161,153,190,.05) 0 12%, transparent 27%);
+  filter:blur(22px);
+  opacity:.72;
+  animation:irohaCloudDrift 46s ease-in-out infinite alternate;
+}
+
+@keyframes irohaStarDrift{
+  from{transform:translate3d(0,0,0)}
+  to{transform:translate3d(-22px,18px,0)}
+}
+@keyframes irohaCloudDrift{
+  from{transform:translate3d(-4%,0,0) scale(1)}
+  to{transform:translate3d(7%,2%,0) scale(1.06)}
+}
+
+/* shooting stars: one layer on app, another on tabs root */
+[data-theme="light"] #app{
+  background:transparent;
+  isolation:isolate;
+}
+[data-theme="light"] #app::before,
+[data-theme="light"] .tabs-root::before{
+  content:"";
+  position:absolute;
+  z-index:0;
+  pointer-events:none;
+  width:92px;
+  height:1px;
+  border-radius:999px;
+  opacity:0;
+  background:linear-gradient(90deg,transparent,rgba(240,237,250,.88));
+  box-shadow:0 0 8px rgba(225,219,243,.42);
+  transform:rotate(-28deg);
+}
+[data-theme="light"] #app::before{
+  top:15%;
+  left:70%;
+  animation:irohaMeteorOne 8.8s ease-in infinite;
+}
+[data-theme="light"] .tabs-root::before{
+  top:35%;
+  left:16%;
+  animation:irohaMeteorTwo 13.5s 4.2s ease-in infinite;
+}
+@keyframes irohaMeteorOne{
+  0%,78%,100%{opacity:0;transform:translate3d(0,0,0) rotate(-28deg)}
+  80%{opacity:.85}
+  86%{opacity:0;transform:translate3d(-170px,105px,0) rotate(-28deg)}
+}
+@keyframes irohaMeteorTwo{
+  0%,83%,100%{opacity:0;transform:translate3d(0,0,0) rotate(-24deg)}
+  85%{opacity:.62}
+  90%{opacity:0;transform:translate3d(-135px,80px,0) rotate(-24deg)}
+}
+
+/* Keep content above sky effects. */
+[data-theme="light"] .layer,
+[data-theme="light"] .tabpane,
+[data-theme="light"] .screen,
+[data-theme="light"] .tabs-root{
+  background:transparent;
+}
+[data-theme="light"] .tabpane,
+[data-theme="light"] .screen,
+[data-theme="light"] .navwrap,
+[data-theme="light"] .appbar,
+[data-theme="light"] .navbar{
+  z-index:2;
+}
+
+/* Ultra-transparent glass post cards */
+[data-theme="light"] .card,
+[data-theme="light"] .pd-card,
+[data-theme="light"] .rep,
+[data-theme="light"] .row{
+  background:rgba(35,28,58,.16);
+  border-color:rgba(236,231,249,.10);
+  -webkit-backdrop-filter:saturate(140%) blur(18px);
+  backdrop-filter:saturate(140%) blur(18px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.055),0 14px 38px rgba(2,2,16,.11);
+}
+[data-theme="light"] .pd-card{background:rgba(30,24,51,.13)}
+[data-theme="light"] .row:active{background:rgba(230,225,245,.055)}
+
+/* Headers also blend into the night. */
+[data-theme="light"] .appbar,
+[data-theme="light"] .navbar,
+[data-theme="light"] .composer-bar,
+[data-theme="light"] .reply-dock{
+  background:rgba(21,18,37,.22);
+  -webkit-backdrop-filter:saturate(145%) blur(28px);
+  backdrop-filter:saturate(145%) blur(28px);
+  border-color:rgba(255,255,255,.06);
+}
+
+/* Bottom bar: deliberately very transparent glass */
+[data-theme="light"] .nav{
+  background:rgba(40,32,64,.12);
+  border:1px solid rgba(240,235,252,.11);
+  -webkit-backdrop-filter:saturate(150%) blur(30px);
+  backdrop-filter:saturate(150%) blur(30px);
+  box-shadow:
+    0 18px 45px rgba(2,2,16,.20),
+    inset 0 1px 0 rgba(255,255,255,.10);
+}
+[data-theme="light"] .nav-ind{
+  background:rgba(229,224,241,.11);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
+}
+
+/* Category chips: no yellow blocks, just quiet translucent emphasis */
+[data-theme="light"] .chip{
+  background:rgba(226,220,244,.045);
+  color:var(--ink-2);
+  border:1px solid rgba(232,227,247,.055);
+}
+[data-theme="light"] .chip.on{
+  background:rgba(192,183,216,.13);
+  color:#F3EFFA;
+  border-color:rgba(229,224,242,.12);
+  box-shadow:none;
+}
+
+/* Moon-like + button */
+[data-theme="light"] .fab-core{
+  position:relative;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 34% 30%, rgba(255,255,255,.96) 0 7%, transparent 8%),
+    radial-gradient(circle at 67% 63%, rgba(120,112,143,.18) 0 9%, transparent 10%),
+    radial-gradient(circle at 42% 67%, rgba(125,116,149,.13) 0 6%, transparent 7%),
+    radial-gradient(circle at 35% 28%,#F2EEF8 0%,#DCD6E8 48%,#B8B0CA 100%);
+  color:#312B3C;
+  box-shadow:
+    0 0 22px rgba(222,216,238,.22),
+    0 8px 24px rgba(2,2,15,.28),
+    inset -7px -8px 14px rgba(92,81,116,.15),
+    inset 4px 4px 10px rgba(255,255,255,.34);
+}
+[data-theme="light"] .fab-core::after{
+  content:"";
+  position:absolute;
+  width:9px;height:9px;
+  right:13px;top:17px;
+  border-radius:50%;
+  background:rgba(98,89,119,.11);
+  box-shadow:-20px 18px 0 1px rgba(100,91,122,.085);
+  pointer-events:none;
+}
+
+/* Remove yellow / accent focus rings in light test theme. */
+[data-theme="light"] :focus,
+[data-theme="light"] :focus-visible,
+[data-theme="light"] .searchbar:focus-within,
+[data-theme="light"] .replyfield:focus,
+[data-theme="light"] .field input:focus,
+[data-theme="light"] .field textarea:focus,
+[data-theme="light"] input:focus,
+[data-theme="light"] textarea:focus{
+  outline:none !important;
+  box-shadow:none !important;
+  border-color:rgba(235,230,247,.13) !important;
+}
+
+/* Other accent-yellow surfaces become quiet moon/lavender glass. */
+[data-theme="light"] .obtn.on,
+[data-theme="light"] .pill-official,
+[data-theme="light"] .newchip,
+[data-theme="light"] .tag,
+[data-theme="light"] .replysend.live,
+[data-theme="light"] .sendbtn.live{
+  background:rgba(192,183,216,.16);
+  color:#F1EDF8;
+  border-color:rgba(232,226,245,.12);
+  box-shadow:none;
+}
+[data-theme="light"] .segdot{
+  background:#B9B1CD;
+  box-shadow:0 0 8px rgba(197,188,219,.18);
+}
+[data-theme="light"] .uind{
+  background:rgba(211,204,229,.68);
+}
+[data-theme="light"] .segbtn.on small,
+[data-theme="light"] .mention,
+[data-theme="light"] .txtbtn.accent{
+  color:#D1CAE1;
+}
+
+/* In light test mode, keep text legible over the sky while preserving glass. */
+[data-theme="light"] .media-off,
+[data-theme="light"] .replying,
+[data-theme="light"] .daychip,
+[data-theme="light"] .syschip,
+[data-theme="light"] .aplayer{
+  background:rgba(50,40,73,.24);
+  border-color:rgba(235,230,248,.09);
+  -webkit-backdrop-filter:blur(14px);
+  backdrop-filter:blur(14px);
+}
+
+/* Reduce motion if the OS requests it. */
+@media (prefers-reduced-motion:reduce){
+  html[data-theme="light"] body::before,
+  html[data-theme="light"] body::after,
+  [data-theme="light"] #app::before,
+  [data-theme="light"] .tabs-root::before{
+    animation:none !important;
+  }
+}
+
 *,*::before,*::after{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 
 /* iOS/スマホ: 表示中の文字や画像を長押ししても選択・コールアウトへ入らない。
@@ -117,7 +422,7 @@ html{
   transition:background-color var(--dur-3) var(--ease-out);
 }
 html[data-theme="dark"]{background:#0B0B0B}
-html[data-theme="light"]{background:#FFFFFF}
+html[data-theme="light"]{background:#151225}
 body{
   margin:0;
   background:var(--bg);
@@ -1462,7 +1767,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.6';
+const APP_VER='4.7-test';
 
 
 /* =========================================================
@@ -2592,7 +2897,7 @@ function setTheme(t, animate=true){
   S.theme=t;
   document.documentElement.dataset.theme=t;
   const meta=document.querySelector('meta[name=theme-color]');
-  if(meta) meta.content = t==='dark' ? '#0B0B0B' : '#FFFFFF';
+  if(meta) meta.content = t==='dark' ? '#0B0B0B' : '#151225';
   savePrefs();
 }
 
