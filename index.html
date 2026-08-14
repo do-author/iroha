@@ -1465,7 +1465,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='3.1.3';
+const APP_VER='4.0';
 
 
 /* =========================================================
@@ -4762,7 +4762,16 @@ function pushSettings(){
   $('#stNotify',body).onclick=async()=>{
     haptic(8);
 
-    const active=await pushIsActive();
+    /* 通信待ちより先に、他のスイッチと同じく見た目だけ即反応させる */
+    const activePromise=pushIsActive();
+    const notifySw=$('#notifySw',body);
+    const notifyNow=$('#notifyNow',body);
+    const visualOn=!(notifySw?.classList.contains('on'));
+
+    if(notifySw) notifySw.classList.toggle('on',visualOn);
+    if(notifyNow) notifyNow.textContent=visualOn?'オン':'オフ';
+
+    const active=await activePromise;
 
     /* iroha側でOFF */
     if(active){
