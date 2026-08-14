@@ -2917,13 +2917,21 @@ function syncNavBadges(){
     }
   });
 
-  /* アプリ内未読数 = ホーム画面アイコンのバッジ数 */
-  const appUnread =
-    unseenNotes() +
-    S.chats.reduce(
-      (a,c)=>a+(Number(c.unread)||0),
-      0
-    );
+  /* ホーム画面アイコンのバッジ数
+     通知OFFの種類は数えない */
+  const dmUnread=S.chats.reduce(
+    (a,c)=>a+(Number(c.unread)||0),
+    0
+  );
+
+  const activityUnread=unseenNotes();
+
+  const appUnread=S.notifyWanted
+    ? (
+        (S.notifyDM ? dmUnread : 0) +
+        (S.notifyActivity ? activityUnread : 0)
+      )
+    : 0;
 
   try{
     if(appUnread>0 && 'setAppBadge' in navigator){
@@ -4813,12 +4821,14 @@ function pushSettings(){
     S.notifyDM=!S.notifyDM;
     savePrefs();
     $('#notifyDmSw',body).classList.toggle('on',S.notifyDM);
+    syncNavBadges();
     try{
       await cloudSetNotificationPrefs();
     }catch(e){
       S.notifyDM=before;
       savePrefs();
       $('#notifyDmSw',body).classList.toggle('on',S.notifyDM);
+      syncNavBadges();
       cloudErr('notify dm',e);
       toast('DM通知の設定を保存できませんでした');
     }
@@ -4830,12 +4840,14 @@ function pushSettings(){
     S.notifyActivity=!S.notifyActivity;
     savePrefs();
     $('#notifyActivitySw',body).classList.toggle('on',S.notifyActivity);
+    syncNavBadges();
     try{
       await cloudSetNotificationPrefs();
     }catch(e){
       S.notifyActivity=before;
       savePrefs();
       $('#notifyActivitySw',body).classList.toggle('on',S.notifyActivity);
+      syncNavBadges();
       cloudErr('notify activity',e);
       toast('いいね・返信通知の設定を保存できませんでした');
     }
