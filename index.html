@@ -3046,7 +3046,7 @@ html[data-theme="night"] body,
 
 /* 4.9.2 切り分け実験:
    夜空テーマの投稿→投稿詳細だけ、背面の投稿一覧を左へ動かさない */
-[data-theme="night"] .tabs-root.post-detail-no-bg-slide.pushed{
+.tabs-root.pushed{
   transform:translate3d(0,0,0) !important;
 }
 
@@ -3067,7 +3067,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.9.2';
+const APP_VER='4.9.4';
 
 
 /* =========================================================
@@ -6016,7 +6016,7 @@ function pushPostDetail(pid){
         setTimeout(()=>lk.classList.remove('pop'),700); }
     };
   }
-  if(S.theme==='night') $('#tabsRoot').classList.add('post-detail-no-bg-slide');
+  $('#tabsRoot').classList.add('post-detail-no-bg-slide');
   push(s);
 }
 
