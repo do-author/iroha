@@ -3075,6 +3075,41 @@ html[data-theme="night"] body,
   contain:layout paint;
 }
 
+
+
+/* ============================================================
+   v4.9.6 — プロフィールタブ下バーの外側の光を完全に除去
+   他タブ・バー形状・透明感・位置は変更しない
+   ============================================================ */
+#navwrap:has(.navbtn[data-tab="me"].on){
+  background:transparent !important;
+  box-shadow:none !important;
+  filter:none !important;
+}
+#nav:has(.navbtn[data-tab="me"].on){
+  box-shadow:none !important;
+  filter:none !important;
+  overflow:hidden;
+  isolation:isolate;
+}
+#nav:has(.navbtn[data-tab="me"].on)::before,
+#nav:has(.navbtn[data-tab="me"].on)::after,
+#navwrap:has(.navbtn[data-tab="me"].on)::before,
+#navwrap:has(.navbtn[data-tab="me"].on)::after{
+  content:none !important;
+  display:none !important;
+  box-shadow:none !important;
+  filter:none !important;
+}
+#nav:has(.navbtn[data-tab="me"].on) .nav-ind{
+  box-shadow:none !important;
+  filter:none !important;
+}
+#nav:has(.navbtn[data-tab="me"].on) .navbtn.on{
+  text-shadow:none !important;
+  filter:none !important;
+}
+
 </style>
 </head>
 <body>
@@ -3092,7 +3127,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.9.5';
+const APP_VER='4.9.6';
 
 
 /* =========================================================
