@@ -956,9 +956,30 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 .screen.in{transform:none}
 .screen.out{transform:translate3d(100%,0,0)}
-.tabs-root{transition:transform 420ms var(--ease-out), filter 420ms var(--ease-out)}
-.tabs-root.pushed{transform:translate3d(-22%,0,0) ; filter:brightness(.94)}
-[data-theme="dark"] .tabs-root.pushed{filter:brightness(.7)}
+.tabs-root{transition:transform 420ms var(--ease-out)}
+.tabs-root.pushed{transform:translate3d(-22%,0,0)}
+/* the dim that used to come from filter:brightness(), now composited */
+.tabs-root::after{
+  content:""; position:absolute; inset:0; z-index:60; pointer-events:none;
+  background:#000; opacity:0;
+  transition:opacity 420ms var(--ease-out);
+}
+.tabs-root.pushed::after{opacity:.07}
+[data-theme="dark"] .tabs-root.pushed::after{opacity:.3}
+
+/* While a screen or sheet is moving, hold the sky still. Its animation sits
+   under every glass surface, so each repaint re-blurs all of them. Pausing for
+   the length of the slide is invisible and costs nothing. */
+#app.anim .home-sky *,
+#app.anim .sky-stars *,
+#app.anim .sky-cloud{animation-play-state:paused !important}
+
+/* Panes that are not the current tab should not be blurring anything. */
+.tabpane:not(.on):not(.leaving){content-visibility:hidden}
+
+/* The sliding panel is opaque, so give it its own layer and let the browser
+   stop looking inside it while it moves. */
+.screen,.modal{contain:layout paint}
 
 .navbar{
   position:absolute; top:0; left:0; right:0; z-index:6;
@@ -1016,6 +1037,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .obtn:active{transform:scale(.93)}
 .obtn.on{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
 .obtn.on svg{fill:var(--accent-ink); stroke:var(--accent-ink)}
+[data-theme="night"] .obtn.on svg{fill:#F1EDF8; stroke:#F1EDF8}
 .obtn.wide{width:100%; justify-content:center; padding:12px}
 .note{margin:11px 0 0; font-size:11.5px; color:var(--ink-3); font-weight:600}
 .stats{
@@ -3039,76 +3061,6 @@ html[data-theme="night"] body,
 }
 
 
-
-
-/* ============================================================
-   iroha 4.8.9 — NIGHT transition performance audit
-   Visual motion stays identical; only expensive background work is isolated.
-   ============================================================ */
-
-/* The Home sky is one paint island. Descendant stars no longer invalidate
-   unrelated app chrome while a screen/tab is moving. */
-[data-theme="night"] .home-sky{
-  contain:paint;
-  -webkit-backface-visibility:hidden;
-  backface-visibility:hidden;
-  transform:translateZ(0);
-}
-
-/* brightness(.94) on the entire 250-star tabs tree is expensive to animate.
-   This overlay reproduces the same ~6% dimming without filtering the whole tree. */
-[data-theme="night"] .tabs-root{
-  filter:none !important;
-}
-[data-theme="night"] .tabs-root.pushed{
-  filter:none !important;
-}
-[data-theme="night"] .tabs-root::after{
-  content:"";
-  position:absolute;
-  inset:0;
-  z-index:30;
-  pointer-events:none;
-  background:rgba(0,0,0,.06);
-  opacity:0;
-  transition:opacity 420ms var(--ease-out);
-}
-[data-theme="night"] .tabs-root.pushed::after{
-  opacity:1;
-}
-
-/* Keep the exact same transform animations, but freeze decorative animation
-   while another full-size layer is being composited. */
-html[data-theme="night"]:has(#stack .screen:not(.in)) .home-sky .sky-star.twinkle,
-html[data-theme="night"]:has(#stack .screen:not(.in)) .home-sky .sky-meteor,
-html[data-theme="night"]:has(.tabpane.leaving) .home-sky .sky-star.twinkle,
-html[data-theme="night"]:has(.tabpane.leaving) .home-sky .sky-meteor,
-html[data-theme="night"]:has(#overlays .modal:not(.on)) .home-sky .sky-star.twinkle,
-html[data-theme="night"]:has(#overlays .modal:not(.on)) .home-sky .sky-meteor,
-html[data-theme="night"]:has(#overlays .sheet:not(.on)) .home-sky .sky-star.twinkle,
-html[data-theme="night"]:has(#overlays .sheet:not(.on)) .home-sky .sky-meteor,
-html[data-theme="night"]:has(#overlays .menu:not(.on)) .home-sky .sky-star.twinkle,
-html[data-theme="night"]:has(#overlays .menu:not(.on)) .home-sky .sky-meteor,
-html[data-theme="night"]:has(#overlays .crop:not(.on)) .home-sky .sky-star.twinkle,
-html[data-theme="night"]:has(#overlays .crop:not(.on)) .home-sky .sky-meteor{
-  -webkit-animation-play-state:paused !important;
-  animation-play-state:paused !important;
-}
-
-/* Pure compositor hints; no geometry, duration or easing changes. */
-[data-theme="night"] .screen,
-[data-theme="night"] .modal,
-[data-theme="night"] .sheet,
-[data-theme="night"] .menu,
-[data-theme="night"] .crop,
-[data-theme="night"] .scrim{
-  -webkit-backface-visibility:hidden;
-  backface-visibility:hidden;
-}
-[data-theme="night"] .scrim{
-  will-change:opacity;
-}
-
 </style>
 </head>
 <body>
@@ -3126,7 +3078,7 @@ html[data-theme="night"]:has(#overlays .crop:not(.on)) .home-sky .sky-meteor{
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.8.9';
+const APP_VER='4.9.8';
 
 
 /* =========================================================
@@ -4284,78 +4236,18 @@ function toast(msg){
 
 /* press and hold — used for the chat row actions */
 function holdMenu(node, fn, ms=460){
-  let t=null, sx=0, sy=0, active=false, pid=null, fired=false;
-
-  const detachGlobal=()=>{
-    document.removeEventListener('pointerup',globalEnd,true);
-    document.removeEventListener('pointercancel',globalEnd,true);
-  };
-  const cancel=()=>{
-    if(t){ clearTimeout(t); t=null; }
-    active=false; pid=null;
-    detachGlobal();
-  };
-  const globalEnd=e=>{
-    if(pid!==null && e.pointerId!==pid) return;
-    cancel();
-  };
-
+  let t=null, sx=0, sy=0;
+  const cancel=()=>{ if(t){ clearTimeout(t); t=null; } };
   node.addEventListener('pointerdown',e=>{
-    if(e.button!==0 || e.isPrimary===false) return;
+    if(e.button) return;
+    sx=e.clientX; sy=e.clientY;
     cancel();
-    sx=e.clientX; sy=e.clientY; active=true; pid=e.pointerId; fired=false;
-
-    /* iOSではpointerupが元の行へ戻らないことがある。
-       capture phaseのdocumentでも必ず解除する。 */
-    document.addEventListener('pointerup',globalEnd,true);
-    document.addEventListener('pointercancel',globalEnd,true);
-
-    t=setTimeout(()=>{
-      if(!active) return;
-      t=null; fired=true;
-      node.dataset.longpressed='1';
-      haptic(16);
-      fn();
-
-      /* 長押し後にsynthetic clickが来た場合だけ抑止。
-         click自体が来なかった場合、次の普通のタップまで印を残さない。 */
-      setTimeout(()=>{
-        if(node.dataset.longpressed==='1') delete node.dataset.longpressed;
-      },700);
-    },ms);
+    t=setTimeout(()=>{ t=null; node.dataset.longpressed='1'; haptic(16); fn(); }, ms);
   });
-
   node.addEventListener('pointermove',e=>{
-    if(!active || e.pointerId!==pid) return;
-    if(Math.abs(e.clientX-sx)>8 || Math.abs(e.clientY-sy)>8) cancel();
+    if(t && (Math.abs(e.clientX-sx)>8 || Math.abs(e.clientY-sy)>8)) cancel();
   });
-  node.addEventListener('pointerleave',e=>{
-    if(active && e.pointerId===pid) cancel();
-  });
-  node.addEventListener('lostpointercapture',cancel);
-  node.addEventListener('contextmenu',e=>{
-    if(active || fired) e.preventDefault();
-    cancel();
-  });
-}
-
-
-/* Night mode transition helper.
-   It never changes timings/easing; it only keeps repaint work out of the moving frames. */
-function afterTransformTransition(node, fallback, fn){
-  let done=false, timer=0;
-  const finish=()=>{
-    if(done) return;
-    done=true;
-    node?.removeEventListener('transitionend',onEnd);
-    if(timer) clearTimeout(timer);
-    fn&&fn();
-  };
-  const onEnd=e=>{
-    if(e.target===node && e.propertyName==='transform') finish();
-  };
-  node?.addEventListener('transitionend',onEnd);
-  timer=setTimeout(finish,fallback);
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>node.addEventListener(ev,cancel));
 }
 
 /* ---------- ripple ---------- */
@@ -4389,7 +4281,6 @@ function revealAll(root, base=0, q=false){
 
 /* ---------- scroll shadow + nav autohide ---------- */
 /* the bars float above the scroller, so the scroller needs their heights */
-const NIGHT_BAR_STATE=new WeakMap();
 function fitBars(root){
   const top=root.querySelector('.appbar,.navbar');
   const bot=root.querySelector('.reply-dock,.composer-bar,.reply-bar');
@@ -4397,41 +4288,6 @@ function fitBars(root){
     if(top && top.offsetHeight) root.style.setProperty('--barH', top.offsetHeight+'px');
     if(bot && bot.offsetHeight) root.style.setProperty('--barB', bot.offsetHeight+'px');
   };
-
-  if(S.theme==='night'){
-    let st=NIGHT_BAR_STATE.get(root);
-    if(!st){
-      st={raf:0,ro:null};
-      NIGHT_BAR_STATE.set(root,st);
-    }
-
-    if(st.raf){
-      cancelAnimationFrame(st.raf);
-      st.raf=0;
-    }
-
-    /* wireScroll() may call this while the screen is still detached.
-       push() calls it again after mounting; cancel the detached rAF there and
-       settle the final bar geometry before the transform starts. */
-    if(root.isConnected){
-      set();
-    }else{
-      st.raf=requestAnimationFrame(()=>{
-        st.raf=0;
-        if(root.isConnected) set();
-      });
-    }
-
-    if(window.ResizeObserver && !st.ro){
-      st.ro=new ResizeObserver(()=>{
-        if(root.isConnected) set();
-      });
-      if(top) st.ro.observe(top);
-      if(bot) st.ro.observe(bot);
-    }
-    return;
-  }
-
   set(); raf(set);
   if(window.ResizeObserver){
     const ro=new ResizeObserver(set);
@@ -4727,31 +4583,9 @@ function goTab(id){
     if(sc) sc.scrollTo({top:0,behavior:'smooth'});
     return;
   }
-
-  if(S.theme==='night'){
-    const prev=PANES[S.tab];
-    S.tab=id;
-    const existed=!!PANES[id];
-    const pane=PANES[id]||buildPane(id);
-
-    /* destination DOM is settled before opacity/transform starts */
-    if(existed) quiet(()=>refreshPane(id));
-
-    if(prev){
-      prev.classList.add('leaving');
-      prev.classList.remove('on');
-      setTimeout(()=>prev.classList.remove('leaving'),180);
-    }
-    raf(()=>pane.classList.add('on'));
-    moveNavInd(true);
-    syncNavBadges();
-    $('#navwrap').classList.remove('hide');
-    navMorph.expand();
-    return;
-  }
-
   const prev=PANES[S.tab];
   S.tab=id;
+  beginAnim(340);
   if(prev){ prev.classList.add('leaving'); prev.classList.remove('on');
     setTimeout(()=>prev.classList.remove('leaving'),180); }
   const existed=!!PANES[id];
@@ -5270,7 +5104,22 @@ function replyCard(entry,uid='me'){
    STACK NAVIGATION
    ========================================================= */
 const stackEls=[];
+
+/* Transitions are the one moment this interface has real work to do: an
+   opaque panel slides over a stack of blurred glass sitting on a moving sky.
+   Marking the window lets the CSS above stand the sky down until it lands. */
+let ANIM_DEPTH=0, animTimer=0;
+function beginAnim(ms=460){
+  const app=document.getElementById('app');
+  if(!app) return;
+  ANIM_DEPTH++;
+  app.classList.add('anim');
+  clearTimeout(animTimer);
+  animTimer=setTimeout(()=>{ ANIM_DEPTH=0; app.classList.remove('anim'); }, ms);
+}
+
 function push(node){
+  beginAnim();
   $('#stack').appendChild(node);
   fitBars(node);                       /* heights are only real once attached */
   stackEls.push(node);
@@ -5282,35 +5131,8 @@ function push(node){
 }
 function pop(){
   const node=stackEls.pop(); if(!node) return;
+  beginAnim();
   const leavingChat=!!node.dataset.chat;
-
-  if(S.theme==='night'){
-    const returningToTab=!stackEls.length;
-
-    /* The underlying tab is fully prepared while the outgoing screen is still
-       stationary. No list/feed repaint is allowed during the 420ms transform. */
-    if(returningToTab){
-      if(leavingChat && S.tab==='chat'){
-        chatSig=null;
-        renderChatList(true);
-      }else{
-        quiet(()=>refreshPane(S.tab));
-      }
-    }
-
-    node.classList.remove('in');
-    node.classList.add('out');
-
-    if(returningToTab){
-      $('#tabsRoot').classList.remove('pushed');
-      $('#navwrap').classList.remove('hide');
-      navMorph.expand();
-    }
-
-    afterTransformTransition(node,500,()=>node.remove());
-    syncNavBadges();
-    return;
-  }
 
   node.classList.remove('in');
   node.classList.add('out');
@@ -6283,6 +6105,7 @@ function openReplyCompose(p, toReply, done){
       <p class="safety" style="margin-top:22px">${I.shield}<span>出会い募集・連絡先・金銭要求の投稿は禁止です</span></p>
     </div>
   </div>`);
+  beginAnim(560);
   $('#overlays').appendChild(m);
   fitBars(m);
   void m.offsetHeight;
@@ -6325,15 +6148,10 @@ function openReplyCompose(p, toReply, done){
     try{ await cloudCreateReply(p,r); }
     catch(e){ sending=false; sync(); cloudErr('reply',e); toast('返信を送れませんでした'); return; }
     haptic(13);
-    if(S.theme==='night'){
-      afterTransformTransition(m,560,()=>{ done(r); toast('返信しました'); });
-      close();
-    }else{
-      close();
-      setTimeout(()=>{ done(r); toast('返信しました'); },240);
-    }
+    close();
+    setTimeout(()=>{ done(r); toast('返信しました'); },240);
   }
-  function close(){ stopAudio(); m.classList.remove('on'); setTimeout(()=>m.remove(),520); }
+  function close(){ beginAnim(560); stopAudio(); m.classList.remove('on'); setTimeout(()=>m.remove(),520); }
 }
 
 /* keep a feed card's counters in step with the detail screen */
@@ -7235,13 +7053,7 @@ function pushSearch(){
   q.addEventListener('input',()=>{ clearTimeout(t); t=setTimeout(paint,140); });
   paint();
   push(s);
-  if(S.theme==='night'){
-    afterTransformTransition(s,500,()=>{
-      try{ q.focus({preventScroll:true}); }catch(_){ q.focus(); }
-    });
-  }else{
-    setTimeout(()=>q.focus(),420);
-  }
+  setTimeout(()=>q.focus(),420);
 }
 
 
@@ -7298,6 +7110,7 @@ function openCropper(src, {aspect=1, round=false, out=512, title='切り抜き'}
       </div>
     </div>
   </div>`);
+  beginAnim(560);
   $('#overlays').appendChild(m);
   raf(()=>m.classList.add('on'));
 
@@ -7364,15 +7177,9 @@ function openCropper(src, {aspect=1, round=false, out=512, title='切り抜き'}
     let url;
     try{ url=cv.toDataURL('image/jpeg',0.88); }
     catch(err){ toast('画像を書き出せませんでした'); return; }
-    haptic(12);
-    if(S.theme==='night'){
-      afterTransformTransition(m,520,()=>done(url));
-      close();
-    }else{
-      close(); setTimeout(()=>done(url),200);
-    }
+    haptic(12); close(); setTimeout(()=>done(url),200);
   };
-  function close(){ m.classList.remove('on'); setTimeout(()=>m.remove(),500); }
+  function close(){ beginAnim(560); m.classList.remove('on'); setTimeout(()=>m.remove(),500); }
 }
 
 
@@ -7588,6 +7395,7 @@ function openRecorder(done){
     <button class="bigbtn" id="recSend" style="opacity:.4;pointer-events:none">送信する</button>
     <button class="textlink" id="recNo">キャンセル</button>
   </div>`);
+  beginAnim(560);
   $('#overlays').appendChild(sheet);
   showScrim(true, close);
   raf(()=>sheet.classList.add('on'));
@@ -7602,12 +7410,7 @@ function openRecorder(done){
     haptic(12);
     const m={kind:'audio', src:blobURL, dur};
     blobURL=null;                     /* handed over, don't revoke on close */
-    if(S.theme==='night'){
-      afterTransformTransition(sheet,560,()=>done(m));
-      close();
-    }else{
-      close(); setTimeout(()=>done(m),200);
-    }
+    close(); setTimeout(()=>done(m),200);
   };
 
   async function start(){
@@ -7735,6 +7538,7 @@ function openRequest(postId, uidOverride){
     <button class="bigbtn" id="reqGo">話したいことを伝える</button>
     <button class="textlink" id="reqNo">キャンセル</button>
   </div>`);
+  beginAnim(560);
   $('#overlays').appendChild(sheet);
   showScrim(true, close);
   raf(()=>sheet.classList.add('on'));
@@ -7847,21 +7651,16 @@ function openMenu(items){
     <div class="mcard">${items.map((it,i)=>`<button data-i="${i}"${it.danger?' class="danger"':''}>${esc(it.t)}</button>`).join('')}</div>
     <div class="mcard solo"><button data-close="1">キャンセル</button></div>
   </div>`);
+  beginAnim(560);
   $('#overlays').appendChild(m);
   showScrim(true, close);
   raf(()=>m.classList.add('on'));
   m.addEventListener('click',e=>{
     const b=e.target.closest('button'); if(!b) return;
     if(b.dataset.close){ close(); return; }
-    const it=items[+b.dataset.i];
-    if(S.theme==='night'){
-      afterTransformTransition(m,520,()=>it.fn&&it.fn());
-      close();
-    }else{
-      close(); setTimeout(()=>it.fn&&it.fn(),240);
-    }
+    const it=items[+b.dataset.i]; close(); setTimeout(()=>it.fn&&it.fn(),240);
   });
-  function close(){ m.classList.remove('on'); showScrim(false); setTimeout(()=>m.remove(),480); }
+  function close(){ beginAnim(560); m.classList.remove('on'); showScrim(false); setTimeout(()=>m.remove(),480); }
 }
 function openPostMenu(pid){
   const p=S.posts.find(x=>x.id===pid); if(!p) return;
@@ -8021,19 +7820,13 @@ function confirmSheet({title, lead, go, danger, fn}){
     <button class="bigbtn${danger?' danger':''}" id="cfGo">${esc(go)}</button>
     <button class="textlink" id="cfNo">キャンセル</button>
   </div>`);
+  beginAnim(560);
   $('#overlays').appendChild(sheet);
   showScrim(true, close);
   raf(()=>sheet.classList.add('on'));
   $('#cfNo',sheet).onclick=close;
-  $('#cfGo',sheet).onclick=()=>{
-    if(S.theme==='night'){
-      afterTransformTransition(sheet,560,fn);
-      close();
-    }else{
-      close(); setTimeout(fn,220);
-    }
-  };
-  function close(){ sheet.classList.remove('on'); showScrim(false); setTimeout(()=>sheet.remove(),520); }
+  $('#cfGo',sheet).onclick=()=>{ close(); setTimeout(fn,220); };
+  function close(){ beginAnim(560); sheet.classList.remove('on'); showScrim(false); setTimeout(()=>sheet.remove(),520); }
 }
 
 /* ---------- compose modal ---------- */
@@ -8070,6 +7863,7 @@ function openCompose(){
       <p class="safety" style="margin-top:22px">${I.shield}<span>出会い募集・連絡先・金銭要求の投稿は禁止です</span></p>
     </div>
   </div>`);
+  beginAnim(560);
   $('#overlays').appendChild(m);
   fitBars(m);
   void m.offsetHeight;
@@ -8124,23 +7918,13 @@ function openCompose(){
 
     /* Instagram-style UX: the composer is done immediately.
        Upload/insert continues in the background while the app stays open. */
-    if(S.theme==='night'){
-      afterTransformTransition(m,560,()=>{
-        refreshInPlace('posts');
-        if(S.tab==='home'){
-          const sc=$('#feedScroll'); if(sc) sc.scrollTo({top:0,behavior:'smooth'});
-        }
-      });
-      close();
-    }else{
-      close();
-      setTimeout(()=>{
-        refreshInPlace('posts');
-        if(S.tab==='home'){
-          const sc=$('#feedScroll'); if(sc) sc.scrollTo({top:0,behavior:'smooth'});
-        }
-      },80);
-    }
+    close();
+    setTimeout(()=>{
+      refreshInPlace('posts');
+      if(S.tab==='home'){
+        const sc=$('#feedScroll'); if(sc) sc.scrollTo({top:0,behavior:'smooth'});
+      }
+    },80);
 
     void (async()=>{
       try{
