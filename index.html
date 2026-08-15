@@ -3077,37 +3077,13 @@ html[data-theme="night"] body,
 
 
 
-/* ============================================================
-   v4.9.6 — プロフィールタブ下バーの外側の光を完全に除去
-   他タブ・バー形状・透明感・位置は変更しない
-   ============================================================ */
-#navwrap:has(.navbtn[data-tab="me"].on){
-  background:transparent !important;
-  box-shadow:none !important;
-  filter:none !important;
-}
-#nav:has(.navbtn[data-tab="me"].on){
-  box-shadow:none !important;
-  filter:none !important;
-  overflow:hidden;
-  isolation:isolate;
-}
-#nav:has(.navbtn[data-tab="me"].on)::before,
-#nav:has(.navbtn[data-tab="me"].on)::after,
-#navwrap:has(.navbtn[data-tab="me"].on)::before,
-#navwrap:has(.navbtn[data-tab="me"].on)::after{
-  content:none !important;
-  display:none !important;
-  box-shadow:none !important;
-  filter:none !important;
-}
-#nav:has(.navbtn[data-tab="me"].on) .nav-ind{
-  box-shadow:none !important;
-  filter:none !important;
-}
-#nav:has(.navbtn[data-tab="me"].on) .navbtn.on{
-  text-shadow:none !important;
-  filter:none !important;
+/* v4.9.6 — プロフィール画面の下から見える白い外光だけ除去
+   navMorph がJSで付け直す外側shadowを、プロフィール表示中だけ抑える。
+   月そのものの内側の立体感は維持。 */
+[data-theme="night"] #navwrap:has(.navbtn[data-tab="me"].on) .fab-core{
+  box-shadow:
+    inset -8px -9px 15px rgba(73,69,98,.15),
+    inset 4px 4px 9px rgba(255,255,255,.30) !important;
 }
 
 </style>
