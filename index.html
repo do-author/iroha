@@ -3043,15 +3043,6 @@ html[data-theme="night"] body,
 }
 
 
-
-
-/* 投稿詳細へ移動するときだけ、押下scaleの戻りと横スライドを競合させない */
-.card.tap.post-opening,
-.card.tap.post-opening:active{
-  transform:none !important;
-  transition:none !important;
-}
-
 </style>
 </head>
 <body>
@@ -4324,9 +4315,9 @@ function fitBars(root){
   }
 }
 
-function wireScroll(scroller, bar){
+function wireScroll(scroller, bar, skipInitialFit=false){
   const root = scroller.closest('.tabpane,.screen,.modal') || scroller.parentElement;
-  if(root) fitBars(root);
+  if(root && !skipInitialFit) fitBars(root);
   let last=0, lastT=performance.now(), ticking=false;
   scroller.addEventListener('scroll', ()=>{
     if(ticking) return; ticking=true;
@@ -4806,7 +4797,6 @@ function onPostClick(e){
     const p=S.posts.find(x=>x.id===card.dataset.post);
     if(p?.pending){ toast('投稿を送信中です'); return; }
     if(p?.failed){ toast('投稿を送信できませんでした'); return; }
-    card.classList.add('post-opening');
     pushPostDetail(card.dataset.post);
   }
 }
@@ -5132,36 +5122,6 @@ function replyCard(entry,uid='me'){
    STACK NAVIGATION
    ========================================================= */
 const stackEls=[];
-
-/* 投稿→投稿詳細だけ、DMと同じ420ms/同じeaseで
-   背景と新画面を同じフレームに開始する。 */
-function pushPostDetailLikeDm(node){
-  const tabs=$('#tabsRoot');
-
-  $('#stack').appendChild(node);
-  fitBars(node);                       /* attached後に高さ確定 */
-  stackEls.push(node);
-  $('#navwrap').classList.add('hide');
-
-  /* 投稿カードの押下scaleが横スライドと競合しないよう即解除 */
-  document.querySelectorAll('.card.tap.post-opening').forEach(card=>{
-    card.classList.remove('post-opening');
-  });
-
-  /* 初期 transform: translate3d(100%,0,0) を確定 */
-  void node.offsetWidth;
-
-  /* DMと同じ420ms / var(--ease-out)。
-     背景と詳細画面は同じrequestAnimationFrameで開始。 */
-  requestAnimationFrame(()=>{
-    tabs.classList.add('pushed');
-    node.classList.add('in');
-  });
-
-  wireEdgeBack(node);
-  return node;
-}
-
 function push(node){
   $('#stack').appendChild(node);
   fitBars(node);                       /* heights are only real once attached */
@@ -5937,7 +5897,7 @@ function pushPostDetail(pid){
   </section>`);
 
   s.querySelector('.js-back').onclick=()=>{haptic(5);pop();};
-  wireScroll(s.querySelector('.js-scroll'), s.querySelector('.navbar'));
+  wireScroll(s.querySelector('.js-scroll'), s.querySelector('.navbar'), S.theme==='night');
   $('#pdMore',s).onclick=()=>openPostMenu(p.id);
   s.addEventListener('click',e=>{
     const us=e.target.closest('button[data-user]');
@@ -6033,7 +5993,7 @@ function pushPostDetail(pid){
         setTimeout(()=>lk.classList.remove('pop'),700); }
     };
   }
-  pushPostDetailLikeDm(s);
+  push(s);
 }
 
 
