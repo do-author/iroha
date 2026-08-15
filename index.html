@@ -3050,6 +3050,31 @@ html[data-theme="night"] body,
   transform:translate3d(0,0,0) !important;
 }
 
+
+
+/* ============================================================
+   v4.9.5 — 見た目を変えない描画軽量化
+   ============================================================ */
+
+/* 横遷移中だけ夜空の装飾アニメーションを止める。
+   位置・透明度・色は変更せず、遷移が終われば即再開。 */
+#app.anim .home-sky *,
+#app.anim .sky-stars *,
+#app.anim .sky-cloud{
+  animation-play-state:paused !important;
+}
+
+/* 現在表示していないタブは描画対象から外す。
+   leaving中は従来どおり描画するため、タブ遷移の見た目は維持。 */
+.tabpane:not(.on):not(.leaving){
+  content-visibility:hidden;
+}
+
+/* 横から動く前面レイヤーのレイアウト/描画範囲を分離。 */
+.screen,.modal{
+  contain:layout paint;
+}
+
 </style>
 </head>
 <body>
@@ -3067,7 +3092,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.9.4';
+const APP_VER='4.9.5';
 
 
 /* =========================================================
@@ -5144,7 +5169,20 @@ function replyCard(entry,uid='me'){
    STACK NAVIGATION
    ========================================================= */
 const stackEls=[];
+
+/* 横遷移中だけ装飾アニメーションを休止するための印。
+   画面の位置・速度・暗転方法には触れない。 */
+let animTimer=0;
+function beginAnim(ms=460){
+  const app=document.getElementById('app');
+  if(!app) return;
+  app.classList.add('anim');
+  clearTimeout(animTimer);
+  animTimer=setTimeout(()=>app.classList.remove('anim'), ms);
+}
+
 function push(node){
+  beginAnim();
   $('#stack').appendChild(node);
   fitBars(node);                       /* heights are only real once attached */
   stackEls.push(node);
@@ -5156,6 +5194,7 @@ function push(node){
 }
 function pop(){
   const node=stackEls.pop(); if(!node) return;
+  beginAnim();
   const leavingChat=!!node.dataset.chat;
   if(node.dataset.post) $('#tabsRoot').classList.remove('post-detail-no-bg-slide');
 
