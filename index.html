@@ -3075,17 +3075,6 @@ html[data-theme="night"] body,
   contain:layout paint;
 }
 
-
-
-/* v4.9.6 — プロフィール画面の下から見える白い外光だけ除去
-   navMorph がJSで付け直す外側shadowを、プロフィール表示中だけ抑える。
-   月そのものの内側の立体感は維持。 */
-[data-theme="night"] #navwrap:has(.navbtn[data-tab="me"].on) .fab-core{
-  box-shadow:
-    inset -8px -9px 15px rgba(73,69,98,.15),
-    inset 4px 4px 9px rgba(255,255,255,.30) !important;
-}
-
 </style>
 </head>
 <body>
@@ -3103,7 +3092,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.9.7';
+const APP_VER='4.9.5';
 
 
 /* =========================================================
@@ -3796,9 +3785,6 @@ async function cloudUnsendMessage(m){
   if(q.error) throw q.error;
 }
 async function cloudMarkChatRead(cid){
-  /* App内でこのDMを消化したら、通知センター側の同じDMも消す。 */
-  void dismissDeviceNotifications({chatId:cid});
-
   if(!CLOUD.enabled) return;
   /* The UI already knows this chat is read. Ignore the immediate Realtime echo
      so simply opening a thread never triggers cloudReloadAll(). */
@@ -4580,16 +4566,7 @@ function moveNavInd(animate=true){
 function allNotes(){ return [...S.notes.like, ...S.notes.reply]; }
 function unseenIn(kind){ return S.notes[kind].filter(n=>!S.noteSeen.has(n.id)).length; }
 function unseenNotes(){ return unseenIn('like')+unseenIn('reply'); }
-function markNotesSeen(){
-  const list=allNotes();
-  const ids=list.map(n=>n.id);
-  list.forEach(n=>S.noteSeen.add(n.id));
-  cloudMarkNotesRead(ids);
-  void dismissDeviceNotifications({
-    notificationIds:ids,
-    kinds:['like','reply','activity']
-  });
-}
+function markNotesSeen(){ const list=allNotes(); list.forEach(n=>S.noteSeen.add(n.id)); cloudMarkNotesRead(list.map(n=>n.id)); }
 
 /* ids highlighted for this visit — captured before the tab is marked read,
    so the new arrivals stay visible while the counter already drops */
@@ -4597,17 +4574,9 @@ let noteFresh=new Set();
 /* opening a tab clears only that tab: likes and replies count separately */
 function openNoteSegment(kind){
   const list=S.notes[kind]||[];
-  const ids=list.map(n=>n.id);
   noteFresh=new Set(list.filter(n=>!S.noteSeen.has(n.id)).map(n=>n.id));
   list.forEach(n=>S.noteSeen.add(n.id));
-  cloudMarkNotesRead(ids);
-
-  /* いいね/返信タブで消化した分を通知センターからも消す。 */
-  void dismissDeviceNotifications({
-    notificationIds:ids,
-    kinds:[kind]
-  });
-
+  cloudMarkNotesRead(list.map(n=>n.id));
   syncNavBadges();
 }
 
@@ -6300,154 +6269,6 @@ async function ensureIrohaServiceWorker(){
     return null;
   }
 }
-
-function normalizeDeviceNotificationKind(v){
-  const s=String(v||'').trim().toLowerCase().replace(/\s+/g,'_');
-  if(['dm','direct_message','direct-message','directmessage'].includes(s)) return 'dm';
-  if(['like','post_like','activity_like'].includes(s)) return 'like';
-  if(['reply','post_reply','activity_reply'].includes(s)) return 'reply';
-  if(s==='activity') return 'activity';
-  return '';
-}
-
-function deviceNotificationMeta(notification){
-  const d=(notification?.data && typeof notification.data==='object') ? notification.data : {};
-  const tag=String(notification?.tag||'');
-
-  let kind=normalizeDeviceNotificationKind(
-    d.kind ?? d.type ?? d.event ?? d.notification_kind ?? d.activity_kind
-  );
-
-  let chatId=String(
-    d.chat_id ?? d.chatId ?? d.direct_chat_id ?? d.directChatId ?? ''
-  ).trim();
-
-  let notificationId=String(
-    d.notification_id ?? d.notificationId ?? d.note_id ?? d.noteId ?? ''
-  ).trim();
-
-  if(!kind){
-    if(/^dm(?:[:_-]|$)/i.test(tag)) kind='dm';
-    else if(/^like(?:[:_-]|$)/i.test(tag)) kind='like';
-    else if(/^reply(?:[:_-]|$)/i.test(tag)) kind='reply';
-  }
-
-  if(!chatId){
-    const m=tag.match(/^dm[:_-](.+)$/i);
-    if(m) chatId=String(m[1]||'').trim();
-  }
-
-  try{
-    const u=new URL(String(d.url||''),location.href);
-    if(!chatId){
-      chatId=String(
-        u.searchParams.get('chat_id') ||
-        u.searchParams.get('chatId') ||
-        ''
-      ).trim();
-    }
-    if(!notificationId){
-      notificationId=String(
-        u.searchParams.get('notification_id') ||
-        u.searchParams.get('notificationId') ||
-        ''
-      ).trim();
-    }
-  }catch(_){}
-
-  return {kind,chatId,notificationId};
-}
-
-/* 通知センターに既に残っているiroha通知を、アプリ内既読と同期して閉じる。 */
-async function dismissDeviceNotifications({chatId='',notificationIds=[],kinds=[]}={}){
-  if(!('serviceWorker' in navigator)) return 0;
-
-  try{
-    const reg=
-      IROHA_SW_REG ||
-      await navigator.serviceWorker.getRegistration('./') ||
-      await navigator.serviceWorker.getRegistration();
-
-    if(!reg || typeof reg.getNotifications!=='function') return 0;
-
-    const targetChat=String(chatId||'').trim();
-    const idSet=new Set((notificationIds||[]).map(String).filter(Boolean));
-    const kindSet=new Set((kinds||[]).map(normalizeDeviceNotificationKind).filter(Boolean));
-
-    const shown=await reg.getNotifications();
-    let closed=0;
-
-    shown.forEach(n=>{
-      const meta=deviceNotificationMeta(n);
-
-      const hitChat=
-        !!targetChat &&
-        !!meta.chatId &&
-        meta.chatId===targetChat;
-
-      const hitId=
-        idSet.size>0 &&
-        !!meta.notificationId &&
-        idSet.has(meta.notificationId);
-
-      const hitKind=
-        kindSet.size>0 &&
-        !!meta.kind &&
-        kindSet.has(meta.kind);
-
-      if(hitChat || hitId || hitKind){
-        try{ n.close(); closed++; }catch(_){}
-      }
-    });
-
-    return closed;
-  }catch(e){
-    console.warn('[iroha notify] dismiss',e);
-    return 0;
-  }
-}
-
-/* Push受信時、今ユーザーが実際に見ている最上位DMをService Workerへ返す。 */
-function currentVisibleDmChatId(){
-  if(document.visibilityState!=='visible' || document.hidden) return '';
-
-  const stack=document.getElementById('stack');
-  const top=stack?.lastElementChild;
-
-  if(
-    !top ||
-    !top.matches?.('.screen[data-chat]') ||
-    top.classList.contains('out')
-  ){
-    return '';
-  }
-
-  return String(top.dataset.chat||'');
-}
-
-function handleIrohaServiceWorkerMessage(ev){
-  const msg=ev.data||{};
-
-  if(msg.type==='iroha-push-context-check'){
-    const reply={
-      type:'iroha-push-context-result',
-      requestId:String(msg.requestId||''),
-      visible:document.visibilityState==='visible' && !document.hidden,
-      activeChatId:currentVisibleDmChatId()
-    };
-
-    try{
-      if(ev.source?.postMessage) ev.source.postMessage(reply);
-      else navigator.serviceWorker.controller?.postMessage(reply);
-    }catch(_){}
-
-    return;
-  }
-
-  if(msg.type==='iroha-push'){
-    cloudReloadAll(false,false);
-  }
-}
 async function requestDeviceNotifications(){
   if(!notificationSupported()){
     toast('このブラウザでは端末通知を利用できません');
@@ -6650,7 +6471,6 @@ async function syncNotificationSettingsUI(root=document){
 /* Register silently on normal launches.
    Permission itself is NEVER requested here; that must stay behind a user tap. */
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.addEventListener('message',handleIrohaServiceWorkerMessage);
   window.addEventListener('load',()=>{ ensureIrohaServiceWorker(); },{once:true});
 }
 
@@ -8666,6 +8486,9 @@ async function boot(){
   if(CLOUD.enabled){
     cloudStartRealtime();
     pushRefresh();                     /* renewals happen quietly in the browser */
+    navigator.serviceWorker?.addEventListener('message',ev=>{
+      if(ev.data?.type==='iroha-push') cloudReloadAll(false,false);
+    });
     /* Realtimeが取りこぼした場合だけ拾う保険。通常同期はRealtime、確認は30秒ごと。 */
     setInterval(()=>{ if(!document.hidden) cloudReloadAll(false,false); }, 30000);
     
