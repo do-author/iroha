@@ -360,6 +360,10 @@ html[data-theme="night"] body::after{
   border-color:rgba(232,226,245,.12);
   box-shadow:none;
 }
+[data-theme="night"] #favBtn.obtn.on svg{
+  fill:#F1EDF8;
+  stroke:#F1EDF8;
+}
 [data-theme="night"] .segdot{
   background:#B9B1CD;
   box-shadow:0 0 8px rgba(197,188,219,.18);
@@ -3039,76 +3043,6 @@ html[data-theme="night"] body,
 }
 
 
-
-
-/* ============================================================
-   iroha 4.8.9 — NIGHT transition performance audit
-   Visual motion stays identical; only expensive background work is isolated.
-   ============================================================ */
-
-/* The Home sky is one paint island. Descendant stars no longer invalidate
-   unrelated app chrome while a screen/tab is moving. */
-[data-theme="night"] .home-sky{
-  contain:paint;
-  -webkit-backface-visibility:hidden;
-  backface-visibility:hidden;
-  transform:translateZ(0);
-}
-
-/* brightness(.94) on the entire 250-star tabs tree is expensive to animate.
-   This overlay reproduces the same ~6% dimming without filtering the whole tree. */
-[data-theme="night"] .tabs-root{
-  filter:none !important;
-}
-[data-theme="night"] .tabs-root.pushed{
-  filter:none !important;
-}
-[data-theme="night"] .tabs-root::after{
-  content:"";
-  position:absolute;
-  inset:0;
-  z-index:30;
-  pointer-events:none;
-  background:rgba(0,0,0,.06);
-  opacity:0;
-  transition:opacity 420ms var(--ease-out);
-}
-[data-theme="night"] .tabs-root.pushed::after{
-  opacity:1;
-}
-
-/* Keep the exact same transform animations, but freeze decorative animation
-   while another full-size layer is being composited. */
-html[data-theme="night"]:has(#stack .screen:not(.in)) .home-sky .sky-star.twinkle,
-html[data-theme="night"]:has(#stack .screen:not(.in)) .home-sky .sky-meteor,
-html[data-theme="night"]:has(.tabpane.leaving) .home-sky .sky-star.twinkle,
-html[data-theme="night"]:has(.tabpane.leaving) .home-sky .sky-meteor,
-html[data-theme="night"]:has(#overlays .modal:not(.on)) .home-sky .sky-star.twinkle,
-html[data-theme="night"]:has(#overlays .modal:not(.on)) .home-sky .sky-meteor,
-html[data-theme="night"]:has(#overlays .sheet:not(.on)) .home-sky .sky-star.twinkle,
-html[data-theme="night"]:has(#overlays .sheet:not(.on)) .home-sky .sky-meteor,
-html[data-theme="night"]:has(#overlays .menu:not(.on)) .home-sky .sky-star.twinkle,
-html[data-theme="night"]:has(#overlays .menu:not(.on)) .home-sky .sky-meteor,
-html[data-theme="night"]:has(#overlays .crop:not(.on)) .home-sky .sky-star.twinkle,
-html[data-theme="night"]:has(#overlays .crop:not(.on)) .home-sky .sky-meteor{
-  -webkit-animation-play-state:paused !important;
-  animation-play-state:paused !important;
-}
-
-/* Pure compositor hints; no geometry, duration or easing changes. */
-[data-theme="night"] .screen,
-[data-theme="night"] .modal,
-[data-theme="night"] .sheet,
-[data-theme="night"] .menu,
-[data-theme="night"] .crop,
-[data-theme="night"] .scrim{
-  -webkit-backface-visibility:hidden;
-  backface-visibility:hidden;
-}
-[data-theme="night"] .scrim{
-  will-change:opacity;
-}
-
 </style>
 </head>
 <body>
@@ -3126,7 +3060,7 @@ html[data-theme="night"]:has(#overlays .crop:not(.on)) .home-sky .sky-meteor{
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.8.9';
+const APP_VER='4.9';
 
 
 /* =========================================================
@@ -4305,8 +4239,6 @@ function holdMenu(node, fn, ms=460){
     cancel();
     sx=e.clientX; sy=e.clientY; active=true; pid=e.pointerId; fired=false;
 
-    /* iOSではpointerupが元の行へ戻らないことがある。
-       capture phaseのdocumentでも必ず解除する。 */
     document.addEventListener('pointerup',globalEnd,true);
     document.addEventListener('pointercancel',globalEnd,true);
 
@@ -4317,8 +4249,6 @@ function holdMenu(node, fn, ms=460){
       haptic(16);
       fn();
 
-      /* 長押し後にsynthetic clickが来た場合だけ抑止。
-         click自体が来なかった場合、次の普通のタップまで印を残さない。 */
       setTimeout(()=>{
         if(node.dataset.longpressed==='1') delete node.dataset.longpressed;
       },700);
@@ -4337,25 +4267,6 @@ function holdMenu(node, fn, ms=460){
     if(active || fired) e.preventDefault();
     cancel();
   });
-}
-
-
-/* Night mode transition helper.
-   It never changes timings/easing; it only keeps repaint work out of the moving frames. */
-function afterTransformTransition(node, fallback, fn){
-  let done=false, timer=0;
-  const finish=()=>{
-    if(done) return;
-    done=true;
-    node?.removeEventListener('transitionend',onEnd);
-    if(timer) clearTimeout(timer);
-    fn&&fn();
-  };
-  const onEnd=e=>{
-    if(e.target===node && e.propertyName==='transform') finish();
-  };
-  node?.addEventListener('transitionend',onEnd);
-  timer=setTimeout(finish,fallback);
 }
 
 /* ---------- ripple ---------- */
@@ -4389,7 +4300,6 @@ function revealAll(root, base=0, q=false){
 
 /* ---------- scroll shadow + nav autohide ---------- */
 /* the bars float above the scroller, so the scroller needs their heights */
-const NIGHT_BAR_STATE=new WeakMap();
 function fitBars(root){
   const top=root.querySelector('.appbar,.navbar');
   const bot=root.querySelector('.reply-dock,.composer-bar,.reply-bar');
@@ -4397,41 +4307,6 @@ function fitBars(root){
     if(top && top.offsetHeight) root.style.setProperty('--barH', top.offsetHeight+'px');
     if(bot && bot.offsetHeight) root.style.setProperty('--barB', bot.offsetHeight+'px');
   };
-
-  if(S.theme==='night'){
-    let st=NIGHT_BAR_STATE.get(root);
-    if(!st){
-      st={raf:0,ro:null};
-      NIGHT_BAR_STATE.set(root,st);
-    }
-
-    if(st.raf){
-      cancelAnimationFrame(st.raf);
-      st.raf=0;
-    }
-
-    /* wireScroll() may call this while the screen is still detached.
-       push() calls it again after mounting; cancel the detached rAF there and
-       settle the final bar geometry before the transform starts. */
-    if(root.isConnected){
-      set();
-    }else{
-      st.raf=requestAnimationFrame(()=>{
-        st.raf=0;
-        if(root.isConnected) set();
-      });
-    }
-
-    if(window.ResizeObserver && !st.ro){
-      st.ro=new ResizeObserver(()=>{
-        if(root.isConnected) set();
-      });
-      if(top) st.ro.observe(top);
-      if(bot) st.ro.observe(bot);
-    }
-    return;
-  }
-
   set(); raf(set);
   if(window.ResizeObserver){
     const ro=new ResizeObserver(set);
@@ -4727,29 +4602,6 @@ function goTab(id){
     if(sc) sc.scrollTo({top:0,behavior:'smooth'});
     return;
   }
-
-  if(S.theme==='night'){
-    const prev=PANES[S.tab];
-    S.tab=id;
-    const existed=!!PANES[id];
-    const pane=PANES[id]||buildPane(id);
-
-    /* destination DOM is settled before opacity/transform starts */
-    if(existed) quiet(()=>refreshPane(id));
-
-    if(prev){
-      prev.classList.add('leaving');
-      prev.classList.remove('on');
-      setTimeout(()=>prev.classList.remove('leaving'),180);
-    }
-    raf(()=>pane.classList.add('on'));
-    moveNavInd(true);
-    syncNavBadges();
-    $('#navwrap').classList.remove('hide');
-    navMorph.expand();
-    return;
-  }
-
   const prev=PANES[S.tab];
   S.tab=id;
   if(prev){ prev.classList.add('leaving'); prev.classList.remove('on');
@@ -5283,34 +5135,6 @@ function push(node){
 function pop(){
   const node=stackEls.pop(); if(!node) return;
   const leavingChat=!!node.dataset.chat;
-
-  if(S.theme==='night'){
-    const returningToTab=!stackEls.length;
-
-    /* The underlying tab is fully prepared while the outgoing screen is still
-       stationary. No list/feed repaint is allowed during the 420ms transform. */
-    if(returningToTab){
-      if(leavingChat && S.tab==='chat'){
-        chatSig=null;
-        renderChatList(true);
-      }else{
-        quiet(()=>refreshPane(S.tab));
-      }
-    }
-
-    node.classList.remove('in');
-    node.classList.add('out');
-
-    if(returningToTab){
-      $('#tabsRoot').classList.remove('pushed');
-      $('#navwrap').classList.remove('hide');
-      navMorph.expand();
-    }
-
-    afterTransformTransition(node,500,()=>node.remove());
-    syncNavBadges();
-    return;
-  }
 
   node.classList.remove('in');
   node.classList.add('out');
@@ -6325,13 +6149,8 @@ function openReplyCompose(p, toReply, done){
     try{ await cloudCreateReply(p,r); }
     catch(e){ sending=false; sync(); cloudErr('reply',e); toast('返信を送れませんでした'); return; }
     haptic(13);
-    if(S.theme==='night'){
-      afterTransformTransition(m,560,()=>{ done(r); toast('返信しました'); });
-      close();
-    }else{
-      close();
-      setTimeout(()=>{ done(r); toast('返信しました'); },240);
-    }
+    close();
+    setTimeout(()=>{ done(r); toast('返信しました'); },240);
   }
   function close(){ stopAudio(); m.classList.remove('on'); setTimeout(()=>m.remove(),520); }
 }
@@ -7235,13 +7054,7 @@ function pushSearch(){
   q.addEventListener('input',()=>{ clearTimeout(t); t=setTimeout(paint,140); });
   paint();
   push(s);
-  if(S.theme==='night'){
-    afterTransformTransition(s,500,()=>{
-      try{ q.focus({preventScroll:true}); }catch(_){ q.focus(); }
-    });
-  }else{
-    setTimeout(()=>q.focus(),420);
-  }
+  setTimeout(()=>q.focus(),420);
 }
 
 
@@ -7364,13 +7177,7 @@ function openCropper(src, {aspect=1, round=false, out=512, title='切り抜き'}
     let url;
     try{ url=cv.toDataURL('image/jpeg',0.88); }
     catch(err){ toast('画像を書き出せませんでした'); return; }
-    haptic(12);
-    if(S.theme==='night'){
-      afterTransformTransition(m,520,()=>done(url));
-      close();
-    }else{
-      close(); setTimeout(()=>done(url),200);
-    }
+    haptic(12); close(); setTimeout(()=>done(url),200);
   };
   function close(){ m.classList.remove('on'); setTimeout(()=>m.remove(),500); }
 }
@@ -7602,12 +7409,7 @@ function openRecorder(done){
     haptic(12);
     const m={kind:'audio', src:blobURL, dur};
     blobURL=null;                     /* handed over, don't revoke on close */
-    if(S.theme==='night'){
-      afterTransformTransition(sheet,560,()=>done(m));
-      close();
-    }else{
-      close(); setTimeout(()=>done(m),200);
-    }
+    close(); setTimeout(()=>done(m),200);
   };
 
   async function start(){
@@ -7853,13 +7655,7 @@ function openMenu(items){
   m.addEventListener('click',e=>{
     const b=e.target.closest('button'); if(!b) return;
     if(b.dataset.close){ close(); return; }
-    const it=items[+b.dataset.i];
-    if(S.theme==='night'){
-      afterTransformTransition(m,520,()=>it.fn&&it.fn());
-      close();
-    }else{
-      close(); setTimeout(()=>it.fn&&it.fn(),240);
-    }
+    const it=items[+b.dataset.i]; close(); setTimeout(()=>it.fn&&it.fn(),240);
   });
   function close(){ m.classList.remove('on'); showScrim(false); setTimeout(()=>m.remove(),480); }
 }
@@ -8025,14 +7821,7 @@ function confirmSheet({title, lead, go, danger, fn}){
   showScrim(true, close);
   raf(()=>sheet.classList.add('on'));
   $('#cfNo',sheet).onclick=close;
-  $('#cfGo',sheet).onclick=()=>{
-    if(S.theme==='night'){
-      afterTransformTransition(sheet,560,fn);
-      close();
-    }else{
-      close(); setTimeout(fn,220);
-    }
-  };
+  $('#cfGo',sheet).onclick=()=>{ close(); setTimeout(fn,220); };
   function close(){ sheet.classList.remove('on'); showScrim(false); setTimeout(()=>sheet.remove(),520); }
 }
 
@@ -8124,23 +7913,13 @@ function openCompose(){
 
     /* Instagram-style UX: the composer is done immediately.
        Upload/insert continues in the background while the app stays open. */
-    if(S.theme==='night'){
-      afterTransformTransition(m,560,()=>{
-        refreshInPlace('posts');
-        if(S.tab==='home'){
-          const sc=$('#feedScroll'); if(sc) sc.scrollTo({top:0,behavior:'smooth'});
-        }
-      });
-      close();
-    }else{
-      close();
-      setTimeout(()=>{
-        refreshInPlace('posts');
-        if(S.tab==='home'){
-          const sc=$('#feedScroll'); if(sc) sc.scrollTo({top:0,behavior:'smooth'});
-        }
-      },80);
-    }
+    close();
+    setTimeout(()=>{
+      refreshInPlace('posts');
+      if(S.tab==='home'){
+        const sc=$('#feedScroll'); if(sc) sc.scrollTo({top:0,behavior:'smooth'});
+      }
+    },80);
 
     void (async()=>{
       try{
