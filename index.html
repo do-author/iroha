@@ -2966,8 +2966,8 @@ html[data-theme="night"] body,
 }
 
 /* transform中のbackdrop-filter再計算を避ける。背景色自体は維持。 */
-.screen[data-chat].out .navbar,
-.screen[data-chat].out .composer-bar{
+[data-theme="night"] .screen[data-chat].out .navbar,
+[data-theme="night"] .screen[data-chat].out .composer-bar{
   -webkit-backdrop-filter:none !important;
   backdrop-filter:none !important;
 }
@@ -3000,8 +3000,8 @@ html[data-theme="night"] body,
 }
 
 /* 画面が入る最初のフレームではblur再計算を避ける。 */
-.screen[data-chat]:not(.in) .navbar,
-.screen[data-chat]:not(.in) .composer-bar{
+[data-theme="night"] .screen[data-chat]:not(.in) .navbar,
+[data-theme="night"] .screen[data-chat]:not(.in) .composer-bar{
   -webkit-backdrop-filter:none !important;
   backdrop-filter:none !important;
 }
@@ -3039,23 +3039,6 @@ html[data-theme="night"] body,
 }
 
 
-
-
-/* ============================================================
-   iroha 4.8.9 — transition stability (all themes, geometry unchanged)
-   ============================================================ */
-.tabs-root,
-.screen,
-.modal,
-.sheet,
-.menu,
-.crop{
-  -webkit-backface-visibility:hidden;
-  backface-visibility:hidden;
-}
-.tabs-root{will-change:transform,filter}
-.menu{will-change:transform,opacity}
-.crop{will-change:transform}
 </style>
 </head>
 <body>
@@ -3073,7 +3056,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.8.9';
+const APP_VER='4.8.8';
 
 
 /* =========================================================
@@ -4276,87 +4259,16 @@ function revealAll(root, base=0, q=false){
 
 /* ---------- scroll shadow + nav autohide ---------- */
 /* the bars float above the scroller, so the scroller needs their heights */
-let UI_MOTION=0;
-const UI_DEFERRED_RENDER=new Map();
-
-function beginUiMotion(){ UI_MOTION++; }
-function endUiMotion(){
-  UI_MOTION=Math.max(0,UI_MOTION-1);
-  if(UI_MOTION) return;
-  const jobs=[...UI_DEFERRED_RENDER.values()];
-  UI_DEFERRED_RENDER.clear();
-  if(jobs.length) requestAnimationFrame(()=>jobs.forEach(fn=>{ try{ fn(); }catch(_){} }));
-}
-function deferUiRender(key,fn){
-  if(!UI_MOTION) return false;
-  UI_DEFERRED_RENDER.set(key,fn);
-  return true;
-}
-function afterTransform(node,fn,fallback=620){
-  if(!node){ if(fn) fn(); return ()=>{}; }
-  let done=false, timer=0;
-  const finish=()=>{
-    if(done) return;
-    done=true;
-    node.removeEventListener('transitionend',onEnd);
-    if(timer) clearTimeout(timer);
-    if(fn) fn();
-  };
-  const onEnd=e=>{
-    if(e.target===node && e.propertyName==='transform') finish();
-  };
-  node.addEventListener('transitionend',onEnd);
-  timer=setTimeout(finish,fallback);
-  return finish;
-}
-function openWithTransform(node,{activeClass='on',fallback=620}={}){
-  if(!node) return;
-  beginUiMotion();
-  requestAnimationFrame(()=>{
-    if(!node.isConnected || node.dataset.motionClosing==='1'){ endUiMotion(); return; }
-    node.classList.add(activeClass);
-    afterTransform(node,endUiMotion,fallback);
-  });
-}
-function closeAfterTransform(node,{activeClass='on',after=null,fallback=620}={}){
-  const cb=typeof after==='function' ? after : null;
-  if(!node){ if(cb) cb(); return; }
-  if(node.dataset.motionClosing==='1') return;
-  node.dataset.motionClosing='1';
-  beginUiMotion();
-  node.classList.remove(activeClass);
-  afterTransform(node,()=>{
-    if(node.__irohaBarRO) node.__irohaBarRO.disconnect();
-    node.remove();
-    try{ if(cb) cb(); }
-    finally{ endUiMotion(); }
-  },fallback);
-}
-function afterNodeExit(node,fn,fallback=620){
-  if(node && node.isConnected && node.dataset.motionClosing==='1') afterTransform(node,fn,fallback);
-  else if(fn) fn();
-}
-
 function fitBars(root){
-  if(!root) return;
   const top=root.querySelector('.appbar,.navbar');
   const bot=root.querySelector('.reply-dock,.composer-bar,.reply-bar');
   const set=()=>{
-    if(!root.isConnected) return;
-    if(top && top.offsetHeight){
-      const v=top.offsetHeight+'px';
-      if(root.style.getPropertyValue('--barH')!==v) root.style.setProperty('--barH',v);
-    }
-    if(bot && bot.offsetHeight){
-      const v=bot.offsetHeight+'px';
-      if(root.style.getPropertyValue('--barB')!==v) root.style.setProperty('--barB',v);
-    }
+    if(top && top.offsetHeight) root.style.setProperty('--barH', top.offsetHeight+'px');
+    if(bot && bot.offsetHeight) root.style.setProperty('--barB', bot.offsetHeight+'px');
   };
-  set();
+  set(); raf(set);
   if(window.ResizeObserver){
-    if(root.__irohaBarRO) root.__irohaBarRO.disconnect();
     const ro=new ResizeObserver(set);
-    root.__irohaBarRO=ro;
     if(top) ro.observe(top);
     if(bot) ro.observe(bot);
   }
@@ -4364,7 +4276,7 @@ function fitBars(root){
 
 function wireScroll(scroller, bar){
   const root = scroller.closest('.tabpane,.screen,.modal') || scroller.parentElement;
-  if(root && root.isConnected) fitBars(root);
+  if(root) fitBars(root);
   let last=0, lastT=performance.now(), ticking=false;
   scroller.addEventListener('scroll', ()=>{
     if(ticking) return; ticking=true;
@@ -4581,7 +4493,6 @@ function openNoteSegment(kind){
 }
 
 function syncNavBadges(){
-  if(deferUiRender('badges',()=>syncNavBadges())) return;
   $$('#nav .navbtn').forEach(b=>{
     b.classList.toggle('on', b.dataset.tab===S.tab);
 
@@ -4652,23 +4563,14 @@ function goTab(id){
   }
   const prev=PANES[S.tab];
   S.tab=id;
-  if(prev){
-    prev.classList.add('leaving');
-    prev.classList.remove('on');
-    setTimeout(()=>prev.classList.remove('leaving'),180);
-  }
+  if(prev){ prev.classList.add('leaving'); prev.classList.remove('on');
+    setTimeout(()=>prev.classList.remove('leaving'),180); }
   const existed=!!PANES[id];
   const pane=PANES[id]||buildPane(id);
-
-  /* hidden target is refreshed before it starts moving, not during the motion */
-  if(existed) quiet(()=>refreshPane(id));
-
-  beginUiMotion();
-  requestAnimationFrame(()=>{
-    if(!pane.isConnected){ endUiMotion(); return; }
-    pane.classList.add('on');
-    afterTransform(pane,endUiMotion,340);
-  });
+  raf(()=>pane.classList.add('on'));
+  /* A newly-built pane already rendered itself. Rendering it again here
+     restarted profile/content entrance animations and made the profile tab feel late. */
+  if(existed) refreshPane(id);
   moveNavInd(true);
   syncNavBadges();
   $('#navwrap').classList.remove('hide');
@@ -4788,7 +4690,6 @@ function burstDots(){
 }
 
 function renderFeed(animate){
-  if(deferUiRender('feed',()=>renderFeed(animate))) return;
   const feed=$('#feed'); if(!feed) return;
   const q=QUIET;
   const list=visiblePosts();
@@ -4916,6 +4817,7 @@ function paneBell(p){
   
   openNoteSegment(noteSeg);
   renderNotes();
+  raf(()=>moveSeg($('#noteSeg',p),$('#noteInd',p),false));
 
   
 }
@@ -4928,7 +4830,6 @@ function moveSeg(seg, ind, animate=true){
   if(!animate) requestAnimationFrame(()=>ind.style.transition='');
 }
 function renderNotes(animate){
-  if(deferUiRender('notes',()=>renderNotes(animate))) return;
   const host=$('#noteList'); if(!host) return;
   const q=QUIET;
   const list=S.notes[noteSeg];
@@ -4945,7 +4846,7 @@ function renderNotes(animate){
       if(unread>0){ if(!n) btn.appendChild(el('<span class="segdot"></span>')); }
       else if(n) n.remove();
     });
-    moveSeg(seg,$('#noteInd'),!!animate);   /* settle geometry before full-screen motion */
+    raf(()=>moveSeg(seg,$('#noteInd')));   /* widths change with the numbers */
   }
   let firstFresh=true;
   const paint=()=>{
@@ -5004,7 +4905,6 @@ function paneChat(p){
 }
 let chatSig=null;
 function renderChatList(instant=false){
-  if(deferUiRender('chat',()=>renderChatList(instant))) return;
   const host=$('#chatList'); if(!host) return;
   const q=QUIET;
   const qq=($('#chatQ')?.value||'').trim();
@@ -5074,7 +4974,6 @@ function paneMe(p){
   renderMe();
 }
 function renderMe(){
-  if(deferUiRender('me',()=>renderMe())) return;
   const host=$('#meBody'); if(!host) return;
   const q=QUIET;
   const u=S.users.me;
@@ -5108,7 +5007,7 @@ function renderMe(){
     }
   }));
   paintMeList();
-  moveU($('#meTabs'),$('#meInd'),false);
+  raf(()=>moveU($('#meTabs'),$('#meInd'),false));
 
   function paintMeList(){
     const box=$('#meList');
@@ -5184,62 +5083,62 @@ function replyCard(entry,uid='me'){
 const stackEls=[];
 function push(node){
   $('#stack').appendChild(node);
-  fitBars(node);                       /* measure once while still off-screen */
+  fitBars(node);                       /* heights are only real once attached */
   stackEls.push(node);
   $('#tabsRoot').classList.add('pushed');
   $('#navwrap').classList.add('hide');
-
-  beginUiMotion();
-  requestAnimationFrame(()=>{
-    if(node.isConnected && stackEls.includes(node) && !node.classList.contains('out')){
-      node.classList.add('in');
-      afterTransform(node,endUiMotion,500);
-    }else endUiMotion();
-  });
+  raf(()=>node.classList.add('in'));
   wireEdgeBack(node);
   return node;
 }
-function pop(opts={}){
+function pop(){
   const node=stackEls.pop(); if(!node) return;
-  const edgeX=Math.max(0,Number(opts.edgeX)||0);
-  const returningToBase=!stackEls.length;
-  beginUiMotion();
+  const leavingChat=!!node.dataset.chat;
 
-  if(edgeX>0){
-    node.classList.remove('in');
-    node.classList.add('out');
-    node.style.transition='none';
-    node.style.transform=`translate3d(${edgeX}px,0,0)`;
-    void node.offsetWidth;
-    node.style.transition='';
-    requestAnimationFrame(()=>{
-      if(node.isConnected) node.style.transform='translate3d(100%,0,0)';
-    });
-  }else{
-    node.classList.remove('in');
-    node.classList.add('out');
-  }
+  node.classList.remove('in');
+  node.classList.add('out');
 
-  if(returningToBase){
+  if(!stackEls.length){
     $('#tabsRoot').classList.remove('pushed');
     $('#navwrap').classList.remove('hide');
-    navMorph.expand();
+    navMorph.expand();          /* the bar is back, so the "+" rejoins it */
   }
 
-  afterTransform(node,()=>{
-    if(node.__irohaBarRO) node.__irohaBarRO.disconnect();
-    node.remove();
-    if(returningToBase){
-      quiet(()=>{
-        if(S.tab==='chat'){
-          chatSig=null;
-          renderChatList(true);
-        }else refreshPane(S.tab);
-      });
-    }
+  /* DMだけは、戻る420msの途中で背面リストを再描画しない。
+     夜空DOMを動かしている最中のreflow/repaint競合を避ける。 */
+  if(leavingChat){
+    let finished=false;
+    let fallback=0;
+
+    const finish=()=>{
+      if(finished) return;
+      finished=true;
+      node.removeEventListener('transitionend',onEnd);
+      if(fallback) clearTimeout(fallback);
+      node.remove();
+
+      if(S.tab==='chat'){
+        chatSig=null;
+        renderChatList(true);   /* 戻り切った後、アニメーションなしで1回だけ */
+      }else{
+        refreshPane(S.tab);
+      }
+      syncNavBadges();
+    };
+
+    const onEnd=e=>{
+      if(e.target===node && e.propertyName==='transform') finish();
+    };
+
+    node.addEventListener('transitionend',onEnd);
+    fallback=setTimeout(finish,500);
     syncNavBadges();
-    endUiMotion();
-  },520);
+    return;
+  }
+
+  setTimeout(()=>node.remove(),430);
+  refreshPane(S.tab);
+  syncNavBadges();
 }
 /* edge swipe back */
 function wireEdgeBack(node){
@@ -5253,10 +5152,7 @@ function wireEdgeBack(node){
   node.addEventListener('touchmove',e=>{
     if(!dragging) return;
     const t=e.touches[0], dx=Math.max(0,t.clientX-sx), dy=Math.abs(t.clientY-sy);
-    if(dy>44 && dx<10){
-      dragging=false; node.style.transition=''; node.style.transform='';
-      $('#tabsRoot').style.transform=''; return;
-    }
+    if(dy>44 && dx<10){ dragging=false; node.style.transition=''; node.style.transform=''; return; }
     node.style.transform=`translate3d(${dx}px,0,0)`;
     const pr=Math.min(1,dx/w);
     $('#tabsRoot').style.transform=`translate3d(${-22+22*pr}%,0,0)`;
@@ -5265,10 +5161,9 @@ function wireEdgeBack(node){
     if(!dragging) return; dragging=false;
     const m=/translate3d\((-?[\d.]+)px/.exec(node.style.transform);
     const dx=m?parseFloat(m[1]):0;
-    node.style.transition='';
+    node.style.transition=''; node.style.transform='';
     $('#tabsRoot').style.transform='';
-    if(dx>w*0.30) pop({edgeX:dx});
-    else node.style.transform='';
+    if(dx>w*0.30){ pop(); }
   };
   node.addEventListener('touchend',end); node.addEventListener('touchcancel',end);
 }
@@ -5367,7 +5262,7 @@ function pushProfile(uid){
       if(profTab==='replies') loadReplies();
     }));
     paintList();
-    if(s.isConnected) moveU($('#pfTabs',body),$('#pfInd',body),false);
+    raf(()=>moveU($('#pfTabs',body),$('#pfInd',body),false));
 
     function paintList(){
       const box=$('#pfList',body);
@@ -5387,7 +5282,6 @@ function pushProfile(uid){
   };
   paint();
   push(s);
-  moveU($('#pfTabs',body),$('#pfInd',body),false);
 }
 
 /* =========================================================
@@ -6174,7 +6068,8 @@ function openReplyCompose(p, toReply, done){
   </div>`);
   $('#overlays').appendChild(m);
   fitBars(m);
-  openWithTransform(m,{fallback:560});
+  void m.offsetHeight;
+  m.classList.add('on');
 
   let att=null, sending=false;
   const ta=$('#rcText',m), go=$('#rcGo',m), attBox=$('#rcAtt',m);
@@ -6213,9 +6108,10 @@ function openReplyCompose(p, toReply, done){
     try{ await cloudCreateReply(p,r); }
     catch(e){ sending=false; sync(); cloudErr('reply',e); toast('返信を送れませんでした'); return; }
     haptic(13);
-    close(()=>{ done(r); toast('返信しました'); });
+    close();
+    setTimeout(()=>{ done(r); toast('返信しました'); },240);
   }
-  function close(after){ stopAudio(); closeAfterTransform(m,{after,fallback:560}); }
+  function close(){ stopAudio(); m.classList.remove('on'); setTimeout(()=>m.remove(),520); }
 }
 
 /* keep a feed card's counters in step with the detail screen */
@@ -6730,10 +6626,8 @@ function pushSettings(){
   $('#stWho',body).onclick=()=>pushWhoCanTalk();
   $('#stGuide',body).onclick=()=>pushDoc('コミュニティガイドライン', GUIDE_TEXT);
   $('#stAbout',body).onclick=()=>pushDoc('irohaについて', ABOUT_TEXT());
+  syncNotificationSettingsUI(body);
   push(s);
-  afterTransform(s,()=>{
-    if(s.isConnected) syncNotificationSettingsUI(body);
-  },500);
 }
 
 
@@ -7113,18 +7007,13 @@ function pushSearch(){
     list.innerHTML = arr.length ? arr.map(p=>postCard(p)).join('')
       : `<div class="empty"><h3>見つかりませんでした</h3><p>別のことばで探してみてください</p></div>`;
     list.onclick=onPostClick;
-    revealAll(list,0,QUIET || !s.isConnected || !s.classList.contains('in'));
+    revealAll(list);
   };
   let t=null;
   q.addEventListener('input',()=>{ clearTimeout(t); t=setTimeout(paint,140); });
   paint();
   push(s);
-  afterTransform(s,()=>{
-    requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      if(!s.isConnected || !q.isConnected) return;
-      try{ q.focus({preventScroll:true}); }catch(_){ q.focus(); }
-    }));
-  },500);
+  setTimeout(()=>q.focus(),420);
 }
 
 
@@ -7182,7 +7071,7 @@ function openCropper(src, {aspect=1, round=false, out=512, title='切り抜き'}
     </div>
   </div>`);
   $('#overlays').appendChild(m);
-  openWithTransform(m,{fallback:540});
+  raf(()=>m.classList.add('on'));
 
   const img=$('#crImg',m), stage=$('#crStage',m), zoom=$('#crZoom',m);
   let nw=0, nh=0, base=1, z=1, x=0, y=0;
@@ -7247,9 +7136,9 @@ function openCropper(src, {aspect=1, round=false, out=512, title='切り抜き'}
     let url;
     try{ url=cv.toDataURL('image/jpeg',0.88); }
     catch(err){ toast('画像を書き出せませんでした'); return; }
-    haptic(12); close(()=>done(url));
+    haptic(12); close(); setTimeout(()=>done(url),200);
   };
-  function close(after){ closeAfterTransform(m,{after,fallback:540}); }
+  function close(){ m.classList.remove('on'); setTimeout(()=>m.remove(),500); }
 }
 
 
@@ -7467,7 +7356,7 @@ function openRecorder(done){
   </div>`);
   $('#overlays').appendChild(sheet);
   showScrim(true, close);
-  openWithTransform(sheet,{fallback:560});
+  raf(()=>sheet.classList.add('on'));
 
   const dot=$('#recDot',sheet), hint=$('#recHint',sheet), tEl=$('#recTime',sheet),
         prev=$('#recPreview',sheet), send=$('#recSend',sheet), bars=$$('#recBars i',sheet);
@@ -7479,7 +7368,7 @@ function openRecorder(done){
     haptic(12);
     const m={kind:'audio', src:blobURL, dur};
     blobURL=null;                     /* handed over, don't revoke on close */
-    close(()=>done(m));
+    close(); setTimeout(()=>done(m),200);
   };
 
   async function start(){
@@ -7539,11 +7428,11 @@ function openRecorder(done){
     if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
     haptic(9);
   }
-  function close(after){
+  function close(){
     stop(); stopAudio();
     if(blobURL) URL.revokeObjectURL(blobURL);
-    showScrim(false);
-    closeAfterTransform(sheet,{after:cb,fallback:560});
+    sheet.classList.remove('on'); showScrim(false);
+    setTimeout(()=>sheet.remove(),520);
   }
 }
 
@@ -7609,7 +7498,7 @@ function openRequest(postId, uidOverride){
   </div>`);
   $('#overlays').appendChild(sheet);
   showScrim(true, close);
-  openWithTransform(sheet,{fallback:560});
+  raf(()=>sheet.classList.add('on'));
 
   const ta=$('#reqMsg',sheet);
   const reqNo=$('#reqNo',sheet);
@@ -7634,8 +7523,11 @@ function openRequest(postId, uidOverride){
 
     /* Same feel as post submit: finish this sheet immediately.
        The DM request continues in the background; this does NOT navigate to DM. */
-    if(p) markPostRequested(p.id);
-    close(()=>{ if(p) syncRequestButtons(p.id,true); });
+    if(p){
+      markPostRequested(p.id);
+      syncRequestButtons(p.id,true);
+    }
+    close();
 
     void (async()=>{
       let sent=false;
@@ -7664,7 +7556,7 @@ function openRequest(postId, uidOverride){
       }catch(e){
         if(optimisticallyMarked){
           unmarkPostRequested(p.id);
-          afterNodeExit(sheet,()=>syncRequestButtons(p.id,false));
+          syncRequestButtons(p.id,false);
         }
 
         /* If we created only a temporary local empty chat and sending failed,
@@ -7698,35 +7590,14 @@ function openRequest(postId, uidOverride){
     $('#scrim').style.opacity = String(Math.max(0, 1-dy/380)); };
   const end=()=>{ if(!drag) return; drag=false;
     sheet.style.transition=''; $('#scrim').style.opacity='';
-    if(dy>110) close(null,dy); else sheet.style.transform=''; dy=0; };
+    if(dy>110) close(); else sheet.style.transform=''; dy=0; };
   sheet.addEventListener('touchstart',start,{passive:true});
   sheet.addEventListener('touchmove',move,{passive:true});
   sheet.addEventListener('touchend',end); sheet.addEventListener('touchcancel',end);
 
-  function close(after,fromDragY=0){
-    const cb=typeof after==='function' ? after : null;
-    showScrim(false);
-    if(fromDragY>0){
-      if(sheet.dataset.motionClosing==='1') return;
-      sheet.dataset.motionClosing='1';
-      beginUiMotion();
-      sheet.classList.remove('on');
-      sheet.style.transition='none';
-      sheet.style.transform=`translate3d(0,${fromDragY}px,0)`;
-      void sheet.offsetHeight;
-      sheet.style.transition='';
-      afterTransform(sheet,()=>{
-        sheet.remove();
-        try{ if(cb) cb(); }
-        finally{ endUiMotion(); }
-      },560);
-      requestAnimationFrame(()=>{
-        if(sheet.isConnected) sheet.style.transform='translate3d(0,110%,0)';
-      });
-      return;
-    }
-    sheet.style.transform='';
-    closeAfterTransform(sheet,{after,fallback:560});
+  function close(){
+    sheet.classList.remove('on'); sheet.style.transform='';
+    showScrim(false); setTimeout(()=>sheet.remove(),520);
   }
 }
 
@@ -7739,16 +7610,13 @@ function openMenu(items){
   </div>`);
   $('#overlays').appendChild(m);
   showScrim(true, close);
-  openWithTransform(m,{fallback:520});
+  raf(()=>m.classList.add('on'));
   m.addEventListener('click',e=>{
     const b=e.target.closest('button'); if(!b) return;
     if(b.dataset.close){ close(); return; }
-    const it=items[+b.dataset.i]; close(()=>{ if(it.fn) it.fn(); });
+    const it=items[+b.dataset.i]; close(); setTimeout(()=>it.fn&&it.fn(),240);
   });
-  function close(after){
-    showScrim(false);
-    closeAfterTransform(m,{after,fallback:520});
-  }
+  function close(){ m.classList.remove('on'); showScrim(false); setTimeout(()=>m.remove(),480); }
 }
 function openPostMenu(pid){
   const p=S.posts.find(x=>x.id===pid); if(!p) return;
@@ -7910,13 +7778,10 @@ function confirmSheet({title, lead, go, danger, fn}){
   </div>`);
   $('#overlays').appendChild(sheet);
   showScrim(true, close);
-  openWithTransform(sheet,{fallback:560});
+  raf(()=>sheet.classList.add('on'));
   $('#cfNo',sheet).onclick=close;
-  $('#cfGo',sheet).onclick=()=>close(fn);
-  function close(after){
-    showScrim(false);
-    closeAfterTransform(sheet,{after,fallback:560});
-  }
+  $('#cfGo',sheet).onclick=()=>{ close(); setTimeout(fn,220); };
+  function close(){ sheet.classList.remove('on'); showScrim(false); setTimeout(()=>sheet.remove(),520); }
 }
 
 /* ---------- compose modal ---------- */
@@ -7955,7 +7820,8 @@ function openCompose(){
   </div>`);
   $('#overlays').appendChild(m);
   fitBars(m);
-  openWithTransform(m,{fallback:560});
+  void m.offsetHeight;
+  m.classList.add('on');
 
   let tag='hitorigoto', att=null, sending=false;
   const ta=$('#cmText',m), go=$('#cmGo',m), attBox=$('#cmAtt',m);
@@ -8006,12 +7872,13 @@ function openCompose(){
 
     /* Instagram-style UX: the composer is done immediately.
        Upload/insert continues in the background while the app stays open. */
-    close(()=>{
+    close();
+    setTimeout(()=>{
       refreshInPlace('posts');
       if(S.tab==='home'){
         const sc=$('#feedScroll'); if(sc) sc.scrollTo({top:0,behavior:'smooth'});
       }
-    });
+    },80);
 
     void (async()=>{
       try{
@@ -8038,9 +7905,10 @@ function openCompose(){
   /* Wait until the post screen is visually settled before opening the keyboard. */
   focusAfterModalShown(m,ta);
 
-  function close(after){
+  function close(){
+    m.classList.remove('on');
     if(fab) fab.classList.remove('x');
-    closeAfterTransform(m,{after,fallback:560});
+    setTimeout(()=>m.remove(),520);
   }
 }
 
