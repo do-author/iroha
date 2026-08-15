@@ -4222,50 +4222,65 @@ function holdMenu(node, fn, ms=460){
 
   const detachGlobal=()=>{
     document.removeEventListener('pointerup',globalEnd,true);
-    document.removeEventListener('pointercancel',globalEnd,true);
+    document.removeEventListener('pointercancel',globalCancel,true);
   };
-  const cancel=()=>{
+  const clearGesture=(keepFired=false)=>{
     if(t){ clearTimeout(t); t=null; }
     active=false; pid=null;
     detachGlobal();
+    if(!keepFired) fired=false;
   };
   const globalEnd=e=>{
     if(pid!==null && e.pointerId!==pid) return;
-    cancel();
+    const wasFired=fired;
+    clearGesture(wasFired);
+
+    /* click は pointerup の直後に来る。
+       長押しした“その1回”だけを止め、次のタップには絶対残さない。 */
+    if(wasFired){
+      setTimeout(()=>{ fired=false; },0);
+    }
   };
+  const globalCancel=e=>{
+    if(pid!==null && e.pointerId!==pid) return;
+    clearGesture(false);
+  };
+
+  /* 長押し後に発生する同じジェスチャの click だけを capture で破棄する。
+     dataset フラグを700ms残さないので、次の通常タップは食わない。 */
+  node.addEventListener('click',e=>{
+    if(!fired) return;
+    fired=false;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  },true);
 
   node.addEventListener('pointerdown',e=>{
     if(e.button!==0 || e.isPrimary===false) return;
-    cancel();
-    sx=e.clientX; sy=e.clientY; active=true; pid=e.pointerId; fired=false;
+    clearGesture(false);
+    sx=e.clientX; sy=e.clientY; active=true; pid=e.pointerId;
 
     document.addEventListener('pointerup',globalEnd,true);
-    document.addEventListener('pointercancel',globalEnd,true);
+    document.addEventListener('pointercancel',globalCancel,true);
 
     t=setTimeout(()=>{
       if(!active) return;
       t=null; fired=true;
-      node.dataset.longpressed='1';
       haptic(16);
       fn();
-
-      setTimeout(()=>{
-        if(node.dataset.longpressed==='1') delete node.dataset.longpressed;
-      },700);
     },ms);
   });
 
   node.addEventListener('pointermove',e=>{
     if(!active || e.pointerId!==pid) return;
-    if(Math.abs(e.clientX-sx)>8 || Math.abs(e.clientY-sy)>8) cancel();
+    if(Math.abs(e.clientX-sx)>8 || Math.abs(e.clientY-sy)>8) clearGesture(false);
   });
   node.addEventListener('pointerleave',e=>{
-    if(active && e.pointerId===pid) cancel();
+    if(active && e.pointerId===pid) clearGesture(false);
   });
-  node.addEventListener('lostpointercapture',cancel);
+  node.addEventListener('lostpointercapture',()=>clearGesture(false));
   node.addEventListener('contextmenu',e=>{
     if(active || fired) e.preventDefault();
-    cancel();
   });
 }
 
@@ -4315,9 +4330,9 @@ function fitBars(root){
   }
 }
 
-function wireScroll(scroller, bar, skipInitialFit=false){
+function wireScroll(scroller, bar){
   const root = scroller.closest('.tabpane,.screen,.modal') || scroller.parentElement;
-  if(root && !skipInitialFit) fitBars(root);
+  if(root) fitBars(root);
   let last=0, lastT=performance.now(), ticking=false;
   scroller.addEventListener('scroll', ()=>{
     if(ticking) return; ticking=true;
@@ -5897,7 +5912,7 @@ function pushPostDetail(pid){
   </section>`);
 
   s.querySelector('.js-back').onclick=()=>{haptic(5);pop();};
-  wireScroll(s.querySelector('.js-scroll'), s.querySelector('.navbar'), S.theme==='night');
+  wireScroll(s.querySelector('.js-scroll'), s.querySelector('.navbar'));
   $('#pdMore',s).onclick=()=>openPostMenu(p.id);
   s.addEventListener('click',e=>{
     const us=e.target.closest('button[data-user]');
