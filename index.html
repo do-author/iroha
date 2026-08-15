@@ -3043,6 +3043,21 @@ html[data-theme="night"] body,
 }
 
 
+
+
+/* ============================================================
+   iroha 4.9.1 — 投稿 → 投稿詳細だけフレーム数を増やす
+   他の画面遷移は従来の420msのまま。
+   ============================================================ */
+.screen.post-detail-entering{
+  transition-duration:560ms !important;
+  transition-timing-function:cubic-bezier(.16,1,.3,1) !important;
+}
+.tabs-root.post-detail-entering{
+  transition-duration:560ms !important;
+  transition-timing-function:cubic-bezier(.16,1,.3,1) !important;
+}
+
 </style>
 </head>
 <body>
@@ -3060,7 +3075,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.9';
+const APP_VER='4.9.1';
 
 
 /* =========================================================
@@ -5122,6 +5137,49 @@ function replyCard(entry,uid='me'){
    STACK NAVIGATION
    ========================================================= */
 const stackEls=[];
+
+/* 投稿 → 投稿詳細だけの滑らか遷移。
+   generic push() は一切変更せず、背景と詳細画面を同一フレームで開始する。 */
+function pushPostDetailSmooth(node){
+  const tabs=$('#tabsRoot');
+
+  $('#stack').appendChild(node);
+  fitBars(node);
+  stackEls.push(node);
+  $('#navwrap').classList.add('hide');
+
+  node.classList.add('post-detail-entering');
+  tabs.classList.add('post-detail-entering');
+
+  /* 初期位置 translateX(100%) を一度確定させた後、
+     次の描画フレームで2枚を同時スタート。 */
+  void node.offsetWidth;
+
+  requestAnimationFrame(()=>{
+    tabs.classList.add('pushed');
+    node.classList.add('in');
+  });
+
+  let done=false;
+  let timer=0;
+  const finish=()=>{
+    if(done) return;
+    done=true;
+    node.removeEventListener('transitionend',onEnd);
+    if(timer) clearTimeout(timer);
+    node.classList.remove('post-detail-entering');
+    tabs.classList.remove('post-detail-entering');
+  };
+  const onEnd=e=>{
+    if(e.target===node && e.propertyName==='transform') finish();
+  };
+  node.addEventListener('transitionend',onEnd);
+  timer=setTimeout(finish,650);
+
+  wireEdgeBack(node);
+  return node;
+}
+
 function push(node){
   $('#stack').appendChild(node);
   fitBars(node);                       /* heights are only real once attached */
@@ -5993,7 +6051,7 @@ function pushPostDetail(pid){
         setTimeout(()=>lk.classList.remove('pop'),700); }
     };
   }
-  push(s);
+  pushPostDetailSmooth(s);
 }
 
 
