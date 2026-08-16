@@ -1372,19 +1372,6 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   background:var(--card-2); border:1px solid var(--line-soft);
 }
 .media img,.media video{display:block; width:100%; max-height:340px; object-fit:cover; background:#000}
-/* DMだけ: 一度表示済みの画像/動画は前回の表示枠を先に確保する。
-   送信データやmedia JSONには何も追加しない。 */
-.msgrow .media.dm-size-locked{
-  max-width:100%;
-  overflow:hidden;
-}
-.msgrow .media.dm-size-locked img,
-.msgrow .media.dm-size-locked video{
-  width:100%;
-  height:100%;
-  max-height:none;
-  object-fit:cover;
-}
 .media.blurred img,.media.blurred video{filter:blur(26px) saturate(.7); transform:scale(1.08)}
 /* iOS Safari can let a native <video> consume the tap before the post-card
    click guard sees it. While safety blur is active, the video is display-only:
@@ -3066,7 +3053,7 @@ html[data-theme="night"] body,
 
 
 /* ============================================================
-   v4.9.5.1 — DM画像サイズ記憶（送信処理は4.9.5のまま）
+   v4.9.5 — 見た目を変えない描画軽量化
    ============================================================ */
 
 /* 横遷移中だけ夜空の装飾アニメーションを止める。
@@ -3105,7 +3092,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.9.5.1';
+const APP_VER='4.9.5';
 
 
 /* =========================================================
@@ -5406,85 +5393,6 @@ function pushProfile(uid){
 
 /* Keep already-rendered message nodes across DM close/open.
    This preserves loaded <img>/<video> elements instead of constructing them again. */
-
-/* Legacy/new DM media size cache. This is deliberately display-only:
-   - no change to pickMedia()
-   - no change to cloudUploadMedia()
-   - no change to cloudSendMessage()
-   - no extra keys in messages.media
-   Once a cloud media path has been rendered, remember the actual on-screen box size. */
-const DM_MEDIA_BOX_KEY='iroha_dm_media_box_v1';
-const DM_MEDIA_BOX_MAX=600;
-
-function loadDmMediaBoxes(){
-  try{
-    const v=JSON.parse(localStorage.getItem(DM_MEDIA_BOX_KEY)||'{}');
-    return v&&typeof v==='object'?v:{};
-  }catch(_){
-    return {};
-  }
-}
-const DM_MEDIA_BOXES=loadDmMediaBoxes();
-
-function dmMediaBoxKey(m){
-  return m&&m.bucket&&m.path ? `${m.bucket}:${m.path}` : '';
-}
-
-function savedDmMediaBox(m){
-  const key=dmMediaBoxKey(m);
-  const v=key&&DM_MEDIA_BOXES[key];
-  if(!v) return null;
-  const w=Number(v.w)||0, h=Number(v.h)||0;
-  return w>0&&h>0?{w,h}:null;
-}
-
-function persistDmMediaBox(m,w,h){
-  const key=dmMediaBoxKey(m);
-  w=Math.round(Number(w)||0);
-  h=Math.round(Number(h)||0);
-  if(!key||w<=0||h<=0) return;
-
-  delete DM_MEDIA_BOXES[key];
-  DM_MEDIA_BOXES[key]={w,h};
-  const keys=Object.keys(DM_MEDIA_BOXES);
-  if(keys.length>DM_MEDIA_BOX_MAX){
-    for(const k of keys.slice(0,keys.length-DM_MEDIA_BOX_MAX)) delete DM_MEDIA_BOXES[k];
-  }
-  try{ localStorage.setItem(DM_MEDIA_BOX_KEY,JSON.stringify(DM_MEDIA_BOXES)); }catch(_){}
-}
-
-function applySavedDmMediaBox(node,m){
-  if(!node||!m) return false;
-  const box=node.querySelector('.media');
-  const saved=savedDmMediaBox(m);
-  if(!box||!saved) return false;
-  box.classList.add('dm-size-locked');
-  box.style.width=`min(${saved.w}px, 100%)`;
-  box.style.aspectRatio=`${saved.w} / ${saved.h}`;
-  return true;
-}
-
-function learnDmMediaBox(node,m){
-  if(!node||!m||!dmMediaBoxKey(m)) return;
-  const box=node.querySelector('.media');
-  const mediaEl=box&&box.querySelector('img,video');
-  if(!box||!mediaEl) return;
-
-  const save=()=>requestAnimationFrame(()=>{
-    if(!box.isConnected) return;
-    const r=box.getBoundingClientRect();
-    if(r.width>1&&r.height>1) persistDmMediaBox(m,r.width,r.height);
-  });
-
-  if(mediaEl.tagName==='IMG'){
-    if(mediaEl.complete&&mediaEl.naturalWidth>0) save();
-    else mediaEl.addEventListener('load',save,{once:true});
-  }else{
-    if(mediaEl.readyState>=1&&mediaEl.videoWidth>0) save();
-    else mediaEl.addEventListener('loadedmetadata',save,{once:true});
-  }
-}
-
 const DM_ROW_CACHE=new Map();
 const DM_ROW_CACHE_MAX=320;
 
@@ -5797,12 +5705,6 @@ function updateMessageNode(node,m,c){
   node.classList.toggle('is-sending',!!m.pending);
   node.classList.toggle('is-failed',!!m.failed);
 
-  /* If this DOM already contains a loaded blob image and the successful cloud
-     send just supplied bucket/path, learn that same visible size under the stable path. */
-  if(m.media){
-    if(!applySavedDmMediaBox(node,m.media)) learnDmMediaBox(node,m.media);
-  }
-
   let tm=node.querySelector('.mtime');
   if(!tm){
     tm=document.createElement('span');
@@ -5974,15 +5876,8 @@ function appendMsg(th,c,m,animate,i=0){
     openMessageMenu(liveC,liveM,th);
   });
 
-  /* Apply a known display footprint while the row is still detached, so opening
-     an already-seen DM cannot jump when the image starts decoding. */
-  const hadSavedMediaBox=m.media ? applySavedDmMediaBox(row,m.media) : false;
-
   th.appendChild(row);
   rememberDmRow(c.id,m,i,row);
-
-  /* First encounter only: learn the actual rendered footprint for future opens. */
-  if(m.media&&!hadSavedMediaBox) learnDmMediaBox(row,m.media);
 
   /* Arrival animation is one-shot. Removing the marker after it ends means
      moving this same cached node on a later DM open can never replay it. */
