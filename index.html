@@ -1372,21 +1372,6 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   background:var(--card-2); border:1px solid var(--line-soft);
 }
 .media img,.media video{display:block; width:100%; max-height:340px; object-fit:cover; background:#000}
-/* DM media with saved dimensions reserves its final footprint before loading.
-   This prevents each late image decode from shifting the message thread. */
-.msgrow .media.media-sized{
-  width:230px;
-  max-width:100%;
-  max-height:340px;
-  overflow:hidden;
-}
-.msgrow .media.media-sized img,
-.msgrow .media.media-sized video{
-  width:100%;
-  height:100%;
-  max-height:none;
-  object-fit:cover;
-}
 .media.blurred img,.media.blurred video{filter:blur(26px) saturate(.7); transform:scale(1.08)}
 /* iOS Safari can let a native <video> consume the tap before the post-card
    click guard sees it. While safety blur is active, the video is display-only:
@@ -3068,7 +3053,7 @@ html[data-theme="night"] body,
 
 
 /* ============================================================
-   v4.9.6 — DM画像レイアウト固定
+   v4.9.5 — 見た目を変えない描画軽量化
    ============================================================ */
 
 /* 横遷移中だけ夜空の装飾アニメーションを止める。
@@ -3107,7 +3092,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.9.6.1';
+const APP_VER='4.9.5';
 
 
 /* =========================================================
@@ -3169,15 +3154,7 @@ function extFor(blob,name,kind){
 }
 async function cloudUploadMedia(m,{scope='post',chatId=null}={}){
   if(!CLOUD.enabled || !m) return m;
-  if(m.bucket&&m.path) return {
-    kind:m.kind,
-    bucket:m.bucket,
-    path:m.path,
-    name:m.name||'',
-    dur:m.dur||0,
-    w:Number(m.w)||0,
-    h:Number(m.h)||0
-  };
+  if(m.bucket&&m.path) return {kind:m.kind,bucket:m.bucket,path:m.path,name:m.name||'',dur:m.dur||0};
   if(!m.src || (!m.src.startsWith('blob:')&&!m.src.startsWith('data:'))) return m;
   const blob=await fetch(m.src).then(r=>r.blob());
   const ext=extFor(blob,m.name,m.kind);
@@ -3187,81 +3164,10 @@ async function cloudUploadMedia(m,{scope='post',chatId=null}={}){
   const folder=isDm ? `${chatId}/${CLOUD.userId}` : `${CLOUD.userId}/${scope}`;
   const path=`${folder}/${id}.${ext}`;
   must(await CLOUD.client.storage.from(bucket).upload(path,blob,{contentType:blob.type||undefined,upsert:false}));
-  return {
-    kind:m.kind,
-    bucket,
-    path,
-    name:m.name||'',
-    dur:m.dur||0,
-    w:Number(m.w)||0,
-    h:Number(m.h)||0
-  };
+  return {kind:m.kind,bucket,path,name:m.name||'',dur:m.dur||0};
 }
-/* Remember intrinsic DM media dimensions on this device so legacy messages
-   (created before w/h were stored in messages.media) can reserve the same
-   footprint on every later open without changing database permissions/schema. */
-const DM_MEDIA_SIZE_KEY='iroha_dm_media_sizes_v1';
-const DM_MEDIA_SIZE_MAX=600;
-
-function loadDmMediaSizes(){
-  try{
-    const raw=JSON.parse(localStorage.getItem(DM_MEDIA_SIZE_KEY)||'{}');
-    return raw && typeof raw==='object' ? raw : {};
-  }catch(_){
-    return {};
-  }
-}
-const DM_MEDIA_SIZES=loadDmMediaSizes();
-
-function dmMediaSizeKey(m){
-  if(!m) return '';
-  if(m.bucket&&m.path) return `${m.bucket}:${m.path}`;
-  return m.src||m.name||'';
-}
-
-function rememberDmMediaSize(m,w,h){
-  w=Number(w)||0;
-  h=Number(h)||0;
-  if(!m||w<=0||h<=0) return;
-
-  const key=dmMediaSizeKey(m);
-  if(!key) return;
-
-  m.w=w;
-  m.h=h;
-
-  /* Reinsert so Object.keys order works as a tiny LRU approximation. */
-  delete DM_MEDIA_SIZES[key];
-  DM_MEDIA_SIZES[key]={w,h};
-
-  const keys=Object.keys(DM_MEDIA_SIZES);
-  if(keys.length>DM_MEDIA_SIZE_MAX){
-    for(const oldKey of keys.slice(0,keys.length-DM_MEDIA_SIZE_MAX)){
-      delete DM_MEDIA_SIZES[oldKey];
-    }
-  }
-
-  try{
-    localStorage.setItem(DM_MEDIA_SIZE_KEY,JSON.stringify(DM_MEDIA_SIZES));
-  }catch(_){}
-}
-
-function applyRememberedDmMediaSize(m){
-  if(!m) return m;
-  if(Number(m.w)>0&&Number(m.h)>0) return m;
-
-  const key=dmMediaSizeKey(m);
-  const saved=key&&DM_MEDIA_SIZES[key];
-  if(saved){
-    m.w=Number(saved.w)||0;
-    m.h=Number(saved.h)||0;
-  }
-  return m;
-}
-
 async function cloudHydrateMedia(m){
   if(!m) return null;
-  m=applyRememberedDmMediaSize({...m});
   if(!m.bucket||!m.path) return m;
 
   const cacheKey=`${m.bucket}:${m.path}`;
@@ -5959,7 +5865,7 @@ function appendMsg(th,c,m,animate,i=0){
 
   const row=el(`<div class="msgrow${m.me?' me':''}${sendClass}${animate?' dm-new-message':''}" data-mid="${esc(key)}" data-day="${esc(day)}" data-msg-ts="${m.ts}">
     ${m.me?uav('me',30):uav(c.u,30)}
-    <div class="bub${m.media?' has-media':''}">${m.media?mediaHTML(m.media,{forceShow:!!m.me,reserveSize:true}):''}${m.t?esc(m.t):''}</div>
+    <div class="bub${m.media?' has-media':''}">${m.media?mediaHTML(m.media,{forceShow:!!m.me}):''}${m.t?esc(m.t):''}</div>
     ${timeHTML}
   </div>`);
 
@@ -5972,41 +5878,6 @@ function appendMsg(th,c,m,animate,i=0){
 
   th.appendChild(row);
   rememberDmRow(c.id,m,i,row);
-
-  /* Legacy DM media has no stored w/h. Learn it once from the actual element,
-     remember it in localStorage, and immediately lock this bubble to that ratio.
-     New media already carries w/h and skips this path entirely. */
-  if(m.media && (!Number(m.media.w) || !Number(m.media.h))){
-    const mediaEl=row.querySelector('.media img, .media video');
-    if(mediaEl){
-      const saveSize=()=>{
-        let w=0,h=0;
-        if(mediaEl.tagName==='IMG'){
-          w=mediaEl.naturalWidth;
-          h=mediaEl.naturalHeight;
-        }else{
-          w=mediaEl.videoWidth;
-          h=mediaEl.videoHeight;
-        }
-        if(w>0&&h>0){
-          rememberDmMediaSize(m.media,w,h);
-          const box=mediaEl.closest('.media');
-          if(box){
-            box.classList.add('media-sized');
-            box.style.aspectRatio=`${w} / ${h}`;
-          }
-        }
-      };
-
-      if(mediaEl.tagName==='IMG'){
-        if(mediaEl.complete && mediaEl.naturalWidth>0) saveSize();
-        else mediaEl.addEventListener('load',saveSize,{once:true});
-      }else{
-        if(mediaEl.readyState>=1 && mediaEl.videoWidth>0) saveSize();
-        else mediaEl.addEventListener('loadedmetadata',saveSize,{once:true});
-      }
-    }
-  }
 
   /* Arrival animation is one-shot. Removing the marker after it ends means
      moving this same cached node on a later DM open can never replay it. */
@@ -7388,43 +7259,9 @@ function pickMedia(accept, cb){
     const f=inp.files && inp.files[0];
     inp.remove();
     if(!f) return;
-
     const kind = /^video\//.test(f.type) ? 'video' : /^audio\//.test(f.type) ? 'audio' : 'image';
     /* object URLs keep big videos out of memory as base64 */
-    const src=URL.createObjectURL(f);
-
-    /* Keep intrinsic dimensions with the media JSON. DM can then reserve the
-       final bubble size before the image/video bytes are loaded on a later open. */
-    if(kind==='image'){
-      const probe=new Image();
-      probe.onload=()=>cb({
-        kind,
-        src,
-        name:f.name,
-        w:probe.naturalWidth||0,
-        h:probe.naturalHeight||0
-      });
-      probe.onerror=()=>cb({kind,src,name:f.name});
-      probe.src=src;
-      return;
-    }
-
-    if(kind==='video'){
-      const probe=document.createElement('video');
-      probe.preload='metadata';
-      probe.onloadedmetadata=()=>cb({
-        kind,
-        src,
-        name:f.name,
-        w:probe.videoWidth||0,
-        h:probe.videoHeight||0
-      });
-      probe.onerror=()=>cb({kind,src,name:f.name});
-      probe.src=src;
-      return;
-    }
-
-    cb({kind,src,name:f.name});
+    cb({kind, src:URL.createObjectURL(f), name:f.name});
   });
   inp.click();
 }
@@ -7467,18 +7304,12 @@ function mediaHTML(m, opts={}){
   if(mode==='off')
     return `<div class="media-off">${I.eyeoff}<span>${MEDIA_LABEL[m.kind]}は非表示に設定されています</span></div>`;
 
-  const mw=Number(m.w)||0;
-  const mh=Number(m.h)||0;
-  const reserveSize=!!opts.reserveSize && mw>0 && mh>0;
-  const sizeClass=reserveSize ? ' media-sized' : '';
-  const sizeStyle=reserveSize ? ` style="aspect-ratio:${mw} / ${mh}"` : '';
-
   const inner = m.kind==='video'
     ? `<video src="${escAttr(m.src)}" playsinline ${mode==='blur'?'':'controls'} preload="metadata"></video>`
     : `<img src="${escAttr(m.src)}" alt="" decoding="async">`;
 
   if(mode==='blur')
-    return `<div class="media blurred${sizeClass}" data-reveal data-media-key="${keyAttr}"${sizeStyle}>${inner}
+    return `<div class="media blurred" data-reveal data-media-key="${keyAttr}">${inner}
       <div class="veil">${I.eye}<span>タップして表示<small>セーフティ表示がオンです</small></span></div></div>`;
 
   /* Only media that was manually revealed gets X-style “restore filter”. */
@@ -7487,7 +7318,7 @@ function mediaHTML(m, opts={}){
 
   const keyData = restore ? ` data-media-key="${keyAttr}"` : '';
 
-  return `<div class="media${sizeClass}"${keyData}${sizeStyle}>${inner}${restore}</div>`;
+  return `<div class="media"${keyData}>${inner}${restore}</div>`;
 }
 
 function revealMediaByAttr(keyAttr){
