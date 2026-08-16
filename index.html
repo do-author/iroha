@@ -3107,7 +3107,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.9.6';
+const APP_VER='4.9.6.1';
 
 
 /* =========================================================
@@ -3197,8 +3197,71 @@ async function cloudUploadMedia(m,{scope='post',chatId=null}={}){
     h:Number(m.h)||0
   };
 }
+/* Remember intrinsic DM media dimensions on this device so legacy messages
+   (created before w/h were stored in messages.media) can reserve the same
+   footprint on every later open without changing database permissions/schema. */
+const DM_MEDIA_SIZE_KEY='iroha_dm_media_sizes_v1';
+const DM_MEDIA_SIZE_MAX=600;
+
+function loadDmMediaSizes(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(DM_MEDIA_SIZE_KEY)||'{}');
+    return raw && typeof raw==='object' ? raw : {};
+  }catch(_){
+    return {};
+  }
+}
+const DM_MEDIA_SIZES=loadDmMediaSizes();
+
+function dmMediaSizeKey(m){
+  if(!m) return '';
+  if(m.bucket&&m.path) return `${m.bucket}:${m.path}`;
+  return m.src||m.name||'';
+}
+
+function rememberDmMediaSize(m,w,h){
+  w=Number(w)||0;
+  h=Number(h)||0;
+  if(!m||w<=0||h<=0) return;
+
+  const key=dmMediaSizeKey(m);
+  if(!key) return;
+
+  m.w=w;
+  m.h=h;
+
+  /* Reinsert so Object.keys order works as a tiny LRU approximation. */
+  delete DM_MEDIA_SIZES[key];
+  DM_MEDIA_SIZES[key]={w,h};
+
+  const keys=Object.keys(DM_MEDIA_SIZES);
+  if(keys.length>DM_MEDIA_SIZE_MAX){
+    for(const oldKey of keys.slice(0,keys.length-DM_MEDIA_SIZE_MAX)){
+      delete DM_MEDIA_SIZES[oldKey];
+    }
+  }
+
+  try{
+    localStorage.setItem(DM_MEDIA_SIZE_KEY,JSON.stringify(DM_MEDIA_SIZES));
+  }catch(_){}
+}
+
+function applyRememberedDmMediaSize(m){
+  if(!m) return m;
+  if(Number(m.w)>0&&Number(m.h)>0) return m;
+
+  const key=dmMediaSizeKey(m);
+  const saved=key&&DM_MEDIA_SIZES[key];
+  if(saved){
+    m.w=Number(saved.w)||0;
+    m.h=Number(saved.h)||0;
+  }
+  return m;
+}
+
 async function cloudHydrateMedia(m){
   if(!m) return null;
+  m=applyRememberedDmMediaSize({...m});
   if(!m.bucket||!m.path) return m;
 
   const cacheKey=`${m.bucket}:${m.path}`;
@@ -5909,6 +5972,41 @@ function appendMsg(th,c,m,animate,i=0){
 
   th.appendChild(row);
   rememberDmRow(c.id,m,i,row);
+
+  /* Legacy DM media has no stored w/h. Learn it once from the actual element,
+     remember it in localStorage, and immediately lock this bubble to that ratio.
+     New media already carries w/h and skips this path entirely. */
+  if(m.media && (!Number(m.media.w) || !Number(m.media.h))){
+    const mediaEl=row.querySelector('.media img, .media video');
+    if(mediaEl){
+      const saveSize=()=>{
+        let w=0,h=0;
+        if(mediaEl.tagName==='IMG'){
+          w=mediaEl.naturalWidth;
+          h=mediaEl.naturalHeight;
+        }else{
+          w=mediaEl.videoWidth;
+          h=mediaEl.videoHeight;
+        }
+        if(w>0&&h>0){
+          rememberDmMediaSize(m.media,w,h);
+          const box=mediaEl.closest('.media');
+          if(box){
+            box.classList.add('media-sized');
+            box.style.aspectRatio=`${w} / ${h}`;
+          }
+        }
+      };
+
+      if(mediaEl.tagName==='IMG'){
+        if(mediaEl.complete && mediaEl.naturalWidth>0) saveSize();
+        else mediaEl.addEventListener('load',saveSize,{once:true});
+      }else{
+        if(mediaEl.readyState>=1 && mediaEl.videoWidth>0) saveSize();
+        else mediaEl.addEventListener('loadedmetadata',saveSize,{once:true});
+      }
+    }
+  }
 
   /* Arrival animation is one-shot. Removing the marker after it ends means
      moving this same cached node on a later DM open can never replay it. */
