@@ -1407,6 +1407,51 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .msgrow.me .bub.has-media{background:var(--accent)}
 .bub .media{max-width:230px}
 
+
+/* ---------- media actions: native save + full-screen image viewer ---------- */
+/* The app globally disables iOS touch callouts. Re-enable them only for
+   revealed media so a long press uses Safari/iOS's native Save to Photos menu.
+   Blurred safety media stays protected until the user reveals it. */
+#app .media:not(.blurred) img,
+#app .media:not(.blurred) video,
+#app .media-viewer-image{
+  -webkit-touch-callout:default !important;
+  -webkit-user-select:none;
+  user-select:none;
+}
+
+.media-viewer-screen{
+  background:#000 !important;
+  color:#fff;
+}
+.media-viewer-screen .media-viewer-nav{
+  background:linear-gradient(to bottom,rgba(0,0,0,.72),rgba(0,0,0,.18),transparent);
+  border-bottom:0;
+  box-shadow:none;
+}
+.media-viewer-screen .media-viewer-nav .iconbtn,
+.media-viewer-screen .media-viewer-nav .ttl{color:#fff}
+.media-viewer-stage{
+  position:absolute;
+  inset:0;
+  min-width:0;
+  min-height:0;
+  display:grid;
+  place-items:center;
+  padding:calc(var(--safe-t) + 58px) 0 calc(var(--safe-b) + 12px);
+  overflow:hidden;
+  background:#000;
+}
+.media-viewer-image{
+  display:block;
+  width:auto;
+  height:auto;
+  max-width:100%;
+  max-height:100%;
+  object-fit:contain;
+  background:#000;
+}
+
 /* voice note */
 .aplayer{
   display:flex; align-items:center; gap:12px; margin-top:11px;
@@ -3092,7 +3137,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.9.5.4';
+const APP_VER='4.9.5.4.2';
 
 
 /* =========================================================
@@ -4289,6 +4334,15 @@ function holdMenu(node, fn, ms=460){
 
   node.addEventListener('pointerdown',e=>{
     if(e.button!==0 || e.isPrimary===false) return;
+
+    /* Images/videos use the native iOS long-press menu for Save to Photos.
+       Do not let iroha's own message hold-menu steal that gesture. */
+    const pressTarget=e.target instanceof Element ? e.target : null;
+    if(pressTarget && pressTarget.closest('.media:not(.blurred) img, .media:not(.blurred) video')){
+      clearGesture(false);
+      return;
+    }
+
     clearGesture(false);
     sx=e.clientX; sy=e.clientY; active=true; pid=e.pointerId;
 
@@ -7411,6 +7465,27 @@ function mediaHTML(m, opts={}){
   return `<div class="media"${keyData}${dmBoxStyle}>${inner}${restore}</div>`;
 }
 
+
+function openImageViewer(src){
+  if(document.querySelector('.media-viewer-screen')) return;
+  const safeSrc=safeAssetUrl(src,{allowLocal:true});
+  if(!safeSrc) return;
+
+  const s=el(`<section class="screen media-viewer-screen" data-image-viewer>
+    <div class="media-viewer-stage">
+      <img class="media-viewer-image" src="${escAttr(safeSrc)}" alt="拡大画像" decoding="async">
+    </div>
+    <header class="navbar media-viewer-nav">
+      <div class="side"><button class="iconbtn js-back" aria-label="戻る">${I.back}</button></div>
+      <div class="ttl">写真</div>
+      <div class="side"></div>
+    </header>
+  </section>`);
+
+  s.querySelector('.js-back').onclick=()=>{ haptic(5); pop(); };
+  push(s);
+}
+
 function revealMediaByAttr(keyAttr){
   let key='';
   try{ key=decodeURIComponent(keyAttr||''); }catch(_){ key=keyAttr||''; }
@@ -7507,6 +7582,22 @@ function stopAudio(){
 }
 /* Capture safety taps before post/profile card click handlers can navigate. */
 document.addEventListener('click',e=>{ handleMediaSafetyClick(e); },true);
+
+/* A revealed image opens in iroha's normal navigation stack. Using push()/pop()
+   keeps the existing back button and edge-swipe behavior instead of placing a
+   pointer-blocking overlay over the whole app. */
+document.addEventListener('click',e=>{
+  if(e.defaultPrevented) return;  /* the same tap may have only revealed safety blur */
+  const target=e.target instanceof Element ? e.target : null;
+  if(!target) return;
+  const img=target.closest('.media:not(.blurred) img');
+  if(!img) return;
+
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  haptic(5);
+  openImageViewer(img.currentSrc||img.src);
+},true);
 
 document.addEventListener('click',e=>{
   const btn=e.target.closest('.apbtn');
