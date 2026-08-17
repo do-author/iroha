@@ -1408,29 +1408,40 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .bub .media{max-width:230px}
 
 
-/* ---------- media actions: native save + full-screen image viewer ---------- */
-/* The app globally disables iOS touch callouts. Re-enable them only for
-   revealed media so a long press uses Safari/iOS's native Save to Photos menu.
-   Blurred safety media stays protected until the user reveals it. */
+/* ---------- media viewer: native long-press save + iroha viewer ---------- */
+/* Global iOS callouts are disabled elsewhere. Re-enable only revealed media and
+   viewer media so long-press can still expose the OS save/share menu. */
 #app .media:not(.blurred) img,
 #app .media:not(.blurred) video,
-#app .media-viewer-image{
+#app .media-viewer-image,
+#app .media-viewer-video{
   -webkit-touch-callout:default !important;
   -webkit-user-select:none;
   user-select:none;
 }
 
-.media-viewer-screen{
+/* Use the 4.1-style fade/black presentation, while still living in iroha's
+   normal stack so close/back state can never leave an invisible blocker behind. */
+.screen.media-viewer-screen{
   background:#000 !important;
   color:#fff;
+  box-shadow:none;
+  transform:none;
+  opacity:0;
+  transition:opacity 180ms ease;
 }
+.screen.media-viewer-screen.in{transform:none;opacity:1}
+.screen.media-viewer-screen.out{transform:none;opacity:0;pointer-events:none}
 .media-viewer-screen .media-viewer-nav{
-  background:linear-gradient(to bottom,rgba(0,0,0,.72),rgba(0,0,0,.18),transparent);
+  background:linear-gradient(to bottom,rgba(0,0,0,.82),rgba(0,0,0,.28),transparent);
   border-bottom:0;
   box-shadow:none;
 }
 .media-viewer-screen .media-viewer-nav .iconbtn,
 .media-viewer-screen .media-viewer-nav .ttl{color:#fff}
+.media-viewer-screen .media-viewer-nav .side{min-width:44px}
+.media-viewer-screen .media-viewer-save.is-preparing{opacity:.42}
+.media-viewer-screen .media-viewer-save.is-error{opacity:.35}
 .media-viewer-stage{
   position:absolute;
   inset:0;
@@ -1438,11 +1449,15 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   min-height:0;
   display:grid;
   place-items:center;
-  padding:calc(var(--safe-t) + 58px) 0 calc(var(--safe-b) + 12px);
+  padding:calc(var(--safe-t) + 58px) 12px calc(var(--safe-b) + 18px);
   overflow:hidden;
   background:#000;
 }
-.media-viewer-image{
+.media-viewer-stage.is-video{
+  padding:calc(var(--safe-t) + 58px) 0 calc(var(--safe-b) + 84px);
+}
+.media-viewer-image,
+.media-viewer-video{
   display:block;
   width:auto;
   height:auto;
@@ -1450,6 +1465,73 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   max-height:100%;
   object-fit:contain;
   background:#000;
+}
+.media-viewer-video{width:100%;height:100%}
+
+/* Inline videos no longer expose Safari's browser controls. A quiet play mark
+   makes it clear that tapping opens iroha's own player. */
+.media .iroha-inline-video{cursor:pointer}
+.video-open-indicator{
+  position:absolute;
+  left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  width:46px;height:46px;border-radius:50%;
+  display:grid;place-items:center;
+  color:#fff;background:rgba(0,0,0,.52);
+  -webkit-backdrop-filter:blur(9px);backdrop-filter:blur(9px);
+  box-shadow:0 3px 15px rgba(0,0,0,.22);
+  pointer-events:none;
+  z-index:3;
+}
+.video-open-indicator svg{width:20px;height:20px;margin-left:2px}
+.media.blurred .video-open-indicator{opacity:0}
+
+/* iroha original video controls */
+.media-video-center{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:66px;height:66px;border-radius:50%;
+  display:grid;place-items:center;
+  background:rgba(20,20,20,.60);color:#fff;
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+  pointer-events:none;
+  transition:opacity 140ms ease, transform 180ms var(--spring);
+  z-index:3;
+}
+.media-video-center svg{width:27px;height:27px;margin-left:3px}
+.media-video-center.playing{opacity:0;transform:translate(-50%,-50%) scale(.88)}
+.media-video-controls{
+  position:absolute;
+  left:14px;right:14px;
+  bottom:calc(var(--safe-b) + 16px);
+  z-index:5;
+  display:grid;
+  grid-template-columns:42px 42px minmax(0,1fr) 42px;
+  align-items:center;
+  gap:8px;
+  padding:9px 10px;
+  border-radius:17px;
+  background:rgba(22,22,22,.66);
+  color:#fff;
+  -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
+  box-shadow:0 4px 18px rgba(0,0,0,.22);
+}
+.media-video-toggle{
+  width:42px;height:42px;border-radius:50%;display:grid;place-items:center;color:#fff;
+}
+.media-video-toggle:active{transform:scale(.88)}
+.media-video-time{font-size:11.5px;font-weight:750;font-variant-numeric:tabular-nums;text-align:center;color:rgba(255,255,255,.92)}
+.media-video-range{
+  min-width:0;width:100%;height:24px;margin:0;padding:0;background:transparent;accent-color:#fff;
+}
+.media-video-range::-webkit-slider-runnable-track{height:3px;border-radius:999px;background:rgba(255,255,255,.36)}
+.media-video-range::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#fff;margin-top:-5.5px;border:0}
+.media-video-range::-moz-range-track{height:3px;border-radius:999px;background:rgba(255,255,255,.36)}
+.media-video-range::-moz-range-progress{height:3px;border-radius:999px;background:#fff}
+.media-video-range::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;border:0}
+@media (max-width:420px){
+  .media-video-controls{left:10px;right:10px;grid-template-columns:38px 38px minmax(0,1fr) 38px;padding:8px}
+  .media-video-toggle{width:38px;height:38px}
+  .media-video-time{font-size:10.5px}
 }
 
 /* voice note */
@@ -3137,7 +3219,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.9.5.4.2';
+const APP_VER='4.9.5.4.3';
 
 
 /* =========================================================
@@ -3940,6 +4022,7 @@ const I = {
   doc:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round"><path d="M6 3.4h7.6L18.6 8v12.6H6z"/><path d="M13.4 3.6V8.2h4.8M8.8 12.6h6.4M8.8 16h4.4"/></svg>',
   info:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11.2v5M12 7.9h.01"/></svg>',
   close:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  save:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M8 10l4 4 4-4"/><path d="M5 20h14"/></svg>',
   pin:'<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M14.5 2.5l7 7-2.1 2.1-1.4-.5-3.2 3.2.6 3.6-1.8 1.8-4-4L4 21l-.8-.8 5.3-5.6-4-4L6.3 8.8l3.6.6L13.1 6l-.5-1.4z"/></svg>',
   lockS:'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"><rect x="4.6" y="10.4" width="14.8" height="10" rx="2.8"/><path d="M8.2 10.2V7.8a3.8 3.8 0 017.6 0v2.4"/></svg>',
   camera:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M3.5 8.5h3.2l1.4-2.3h7.8l1.4 2.3h3.2v10a1 1 0 01-1 1H4.5a1 1 0 01-1-1z"/><circle cx="12" cy="13.3" r="3.4"/></svg>',
@@ -7397,7 +7480,7 @@ function rememberDmMediaGeometry(m,w,h){
   try{ localStorage.setItem(DM_MEDIA_GEOMETRY_KEY,JSON.stringify(next)); }catch(_){}
 }
 function rememberDmMediaGeometryFromElement(m,mediaEl){
-  /* Photos only. Video keeps the original 4.9.5 behavior to avoid changing controls/layout. */
+  /* DM display-size cache remains photo-only; video sizing is not persisted here. */
   if(!m || !mediaEl || mediaEl.tagName!=='IMG') return;
 
   const measure=()=>{
@@ -7449,7 +7532,7 @@ function mediaHTML(m, opts={}){
     ? ' style="width:100%;height:100%;max-height:none;object-fit:cover"'
     : '';
   const inner = m.kind==='video'
-    ? `<video src="${escAttr(m.src)}" playsinline ${mode==='blur'?'':'controls'} preload="metadata"></video>`
+    ? `<video class="iroha-inline-video" src="${escAttr(m.src)}" playsinline preload="metadata"></video><span class="video-open-indicator" aria-hidden="true">${I.play}</span>`
     : `<img src="${escAttr(m.src)}"${dmImageStyle} alt="" decoding="async">`;
 
   if(mode==='blur')
@@ -7466,23 +7549,195 @@ function mediaHTML(m, opts={}){
 }
 
 
-function openImageViewer(src){
+function mediaSaveType(src,blobType,kind){
+  const t=String(blobType||'').toLowerCase();
+  if(kind==='image' && t.startsWith('image/')) return t;
+  if(kind==='video' && t.startsWith('video/')) return t;
+  let path='';
+  try{ path=decodeURIComponent(new URL(src,location.href).pathname).toLowerCase(); }catch(_){ path=String(src||'').toLowerCase(); }
+  if(kind==='image'){
+    if(/\.png(?:$|[?#])/.test(path)) return 'image/png';
+    if(/\.webp(?:$|[?#])/.test(path)) return 'image/webp';
+    if(/\.gif(?:$|[?#])/.test(path)) return 'image/gif';
+    if(/\.heic(?:$|[?#])/.test(path)) return 'image/heic';
+    return 'image/jpeg';
+  }
+  if(/\.mov(?:$|[?#])/.test(path)) return 'video/quicktime';
+  if(/\.webm(?:$|[?#])/.test(path)) return 'video/webm';
+  return 'video/mp4';
+}
+function mediaSaveExtension(type,kind){
+  const t=String(type||'').toLowerCase();
+  if(t.includes('jpeg')) return 'jpg';
+  if(t.includes('png')) return 'png';
+  if(t.includes('webp')) return 'webp';
+  if(t.includes('gif')) return 'gif';
+  if(t.includes('heic')) return 'heic';
+  if(t.includes('quicktime')) return 'mov';
+  if(t.includes('webm')) return 'webm';
+  if(t.includes('mp4')) return 'mp4';
+  return kind==='video'?'mp4':'jpg';
+}
+function prepareViewerMediaFile(src,kind){
+  return (async()=>{
+    const r=await fetch(src,{cache:'force-cache'});
+    if(!r.ok) throw new Error(`media fetch ${r.status}`);
+    const raw=await r.blob();
+    const type=mediaSaveType(src,raw.type,kind);
+    const blob=raw.type===type ? raw : raw.slice(0,raw.size,type);
+    const ext=mediaSaveExtension(type,kind);
+    const stamp=new Date().toISOString().replace(/[:.]/g,'-');
+    const name=`iroha-${kind==='video'?'video':'photo'}-${stamp}.${ext}`;
+    return {blob,file:new File([blob],name,{type}),name};
+  })();
+}
+function mobileFileSharePreferred(){
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+}
+function downloadPreparedMedia(prepared){
+  const url=URL.createObjectURL(prepared.blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=prepared.name;
+  a.rel='noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+async function saveViewerMedia(btn,preparedPromise,kind){
+  if(btn.classList.contains('is-preparing')){
+    toast('保存の準備中です');
+    return;
+  }
+  if(btn.classList.contains('is-error')){
+    toast('保存の準備に失敗しました。長押し保存をお試しください');
+    return;
+  }
+  let prepared;
+  try{ prepared=await preparedPromise; }
+  catch(_){ toast('保存の準備に失敗しました'); return; }
+
+  if(mobileFileSharePreferred() && navigator.share && navigator.canShare){
+    try{
+      if(navigator.canShare({files:[prepared.file]})){
+        await navigator.share({files:[prepared.file],title:kind==='video'?'iroha 動画':'iroha 写真'});
+        return;
+      }
+    }catch(err){
+      if(err && err.name==='AbortError') return;
+      console.warn('[iroha media share]',err);
+    }
+  }
+
+  try{
+    downloadPreparedMedia(prepared);
+    toast(kind==='video'?'動画を保存しました':'画像を保存しました');
+  }catch(err){
+    console.warn('[iroha media save]',err);
+    toast('保存できませんでした。長押し保存をお試しください');
+  }
+}
+function initIrohaVideoViewer(s){
+  const v=s.querySelector('.media-viewer-video');
+  const toggle=s.querySelector('.media-video-toggle');
+  const center=s.querySelector('.media-video-center');
+  const range=s.querySelector('.media-video-range');
+  const now=s.querySelector('.media-video-now');
+  const total=s.querySelector('.media-video-total');
+  if(!v||!toggle||!center||!range) return;
+
+  const paint=()=>{
+    const dur=Number.isFinite(v.duration)?v.duration:0;
+    const cur=Number.isFinite(v.currentTime)?v.currentTime:0;
+    range.value=dur?String(Math.max(0,Math.min(1000,(cur/dur)*1000))):'0';
+    if(now) now.textContent=fmtDur(cur);
+    if(total) total.textContent=fmtDur(dur);
+    const playing=!v.paused&&!v.ended;
+    toggle.innerHTML=playing?I.pause:I.play;
+    toggle.setAttribute('aria-label',playing?'一時停止':'再生');
+    center.innerHTML=I.play;
+    center.classList.toggle('playing',playing);
+  };
+  const togglePlay=()=>{
+    if(v.paused||v.ended){
+      v.play().catch(()=>toast('動画を再生できませんでした'));
+    }else v.pause();
+  };
+
+  toggle.onclick=e=>{ e.preventDefault(); e.stopPropagation(); haptic(5); togglePlay(); };
+  v.addEventListener('click',e=>{ e.preventDefault(); e.stopPropagation(); togglePlay(); });
+  range.addEventListener('input',()=>{
+    const dur=Number.isFinite(v.duration)?v.duration:0;
+    if(dur>0) v.currentTime=(Number(range.value)/1000)*dur;
+    paint();
+  });
+  ['loadedmetadata','durationchange','timeupdate','play','pause','ended'].forEach(ev=>v.addEventListener(ev,paint));
+  paint();
+
+  /* pop() can also happen by edge swipe. Pause as soon as this viewer starts leaving. */
+  const mo=new MutationObserver(()=>{
+    if(s.classList.contains('out')) v.pause();
+    if(!s.isConnected) mo.disconnect();
+  });
+  mo.observe(s,{attributes:true,attributeFilter:['class']});
+}
+function openMediaViewer(src,kind){
   if(document.querySelector('.media-viewer-screen')) return;
   const safeSrc=safeAssetUrl(src,{allowLocal:true});
+  kind=kind==='video'?'video':'image';
   if(!safeSrc) return;
 
-  const s=el(`<section class="screen media-viewer-screen" data-image-viewer>
-    <div class="media-viewer-stage">
-      <img class="media-viewer-image" src="${escAttr(safeSrc)}" alt="拡大画像" decoding="async">
-    </div>
+  const body=kind==='video'
+    ? `<div class="media-viewer-stage is-video">
+         <video class="media-viewer-video" src="${escAttr(safeSrc)}" playsinline preload="metadata"></video>
+         <div class="media-video-center" aria-hidden="true">${I.play}</div>
+         <div class="media-video-controls" data-video-controls>
+           <button class="media-video-toggle" type="button" aria-label="再生">${I.play}</button>
+           <span class="media-video-time media-video-now">0:00</span>
+           <input class="media-video-range" type="range" min="0" max="1000" step="1" value="0" aria-label="再生位置">
+           <span class="media-video-time media-video-total">0:00</span>
+         </div>
+       </div>`
+    : `<div class="media-viewer-stage">
+         <img class="media-viewer-image" src="${escAttr(safeSrc)}" alt="拡大画像" decoding="async">
+       </div>`;
+
+  const s=el(`<section class="screen media-viewer-screen" data-media-viewer="${kind}">
+    ${body}
     <header class="navbar media-viewer-nav">
-      <div class="side"><button class="iconbtn js-back" aria-label="戻る">${I.back}</button></div>
-      <div class="ttl">写真</div>
-      <div class="side"></div>
+      <div class="side"><button class="iconbtn media-viewer-close" type="button" aria-label="閉じる">${I.close}</button></div>
+      <div class="ttl">${kind==='video'?'動画':'写真'}</div>
+      <div class="side"><button class="iconbtn media-viewer-save is-preparing" type="button" aria-label="保存">${I.save}</button></div>
     </header>
   </section>`);
 
-  s.querySelector('.js-back').onclick=()=>{ haptic(5); pop(); };
+  const close=()=>{
+    const v=s.querySelector('.media-viewer-video');
+    if(v) v.pause();
+    haptic(5);
+    pop();
+  };
+  s.querySelector('.media-viewer-close').onclick=close;
+
+  const prep=prepareViewerMediaFile(safeSrc,kind);
+  const save=s.querySelector('.media-viewer-save');
+  prep.then(()=>{
+    if(!save.isConnected) return;
+    save.classList.remove('is-preparing');
+  }).catch(err=>{
+    console.warn('[iroha media prepare]',err);
+    if(!save.isConnected) return;
+    save.classList.remove('is-preparing');
+    save.classList.add('is-error');
+  });
+  save.onclick=e=>{
+    e.preventDefault();e.stopPropagation();haptic(7);
+    saveViewerMedia(save,prep,kind);
+  };
+
+  if(kind==='video') initIrohaVideoViewer(s);
   push(s);
 }
 
@@ -7494,7 +7749,7 @@ function revealMediaByAttr(keyAttr){
     if(node.dataset.mediaKey!==keyAttr) return;
     node.classList.remove('blurred');
     node.removeAttribute('data-reveal');
-    const v=node.querySelector('video'); if(v) v.controls=true;
+    const v=node.querySelector('video'); if(v) v.controls=false;
     const veil=node.querySelector('.veil'); if(veil) veil.remove();
     if(!node.querySelector('[data-restore-filter]')){
       node.insertAdjacentHTML('beforeend',`<button class="media-filter-restore" data-restore-filter type="button">${I.eyeoff}<span>フィルターを戻す</span></button>`);
@@ -7583,21 +7838,39 @@ function stopAudio(){
 /* Capture safety taps before post/profile card click handlers can navigate. */
 document.addEventListener('click',e=>{ handleMediaSafetyClick(e); },true);
 
-/* A revealed image opens in iroha's normal navigation stack. Using push()/pop()
-   keeps the existing back button and edge-swipe behavior instead of placing a
-   pointer-blocking overlay over the whole app. */
+/* Native long-press menus can emit a synthetic click when they close. Suppress
+   only that follow-up click so Save-to-Photos never unexpectedly opens/plays media. */
+let MEDIA_NATIVE_PRESS_SUPPRESS_UNTIL=0;
+document.addEventListener('contextmenu',e=>{
+  const target=e.target instanceof Element ? e.target : null;
+  if(!target || !target.closest('.media:not(.blurred) img, .media:not(.blurred) video, .media-viewer-image, .media-viewer-video')) return;
+  MEDIA_NATIVE_PRESS_SUPPRESS_UNTIL=Date.now()+900;
+  /* Do not preventDefault: the whole point is to keep the OS media menu. */
+},true);
 document.addEventListener('click',e=>{
-  if(e.defaultPrevented) return;  /* the same tap may have only revealed safety blur */
+  if(Date.now()>=MEDIA_NATIVE_PRESS_SUPPRESS_UNTIL) return;
+  const target=e.target instanceof Element ? e.target : null;
+  if(!target || !target.closest('.media:not(.blurred) img, .media:not(.blurred) video, .media-viewer-image, .media-viewer-video')) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+},true);
+
+/* Revealed photos/videos open iroha's own viewer. Safety reveal runs first, so
+   the first tap on blurred media only reveals it; the next tap opens the viewer. */
+document.addEventListener('click',e=>{
+  if(e.defaultPrevented) return;
   const target=e.target instanceof Element ? e.target : null;
   if(!target) return;
-  const img=target.closest('.media:not(.blurred) img');
-  if(!img) return;
+  const media=target.closest('.media:not(.blurred) img, .media:not(.blurred) video');
+  if(!media) return;
 
   e.preventDefault();
   e.stopImmediatePropagation();
   haptic(5);
-  openImageViewer(img.currentSrc||img.src);
+  const kind=media.tagName==='VIDEO'?'video':'image';
+  openMediaViewer(media.currentSrc||media.src,kind);
 },true);
+
 
 document.addEventListener('click',e=>{
   const btn=e.target.closest('.apbtn');
