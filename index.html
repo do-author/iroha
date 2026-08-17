@@ -1440,6 +1440,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .media-viewer-screen .media-viewer-nav .iconbtn,
 .media-viewer-screen .media-viewer-nav .ttl{color:#fff}
 .media-viewer-screen .media-viewer-nav .side{min-width:44px}
+.media-viewer-screen .media-viewer-close svg{width:22px;height:22px}
 .media-viewer-screen .media-viewer-save.is-preparing{opacity:.42}
 .media-viewer-screen .media-viewer-save.is-error{opacity:.35}
 .media-viewer-stage{
@@ -1447,14 +1448,21 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   inset:0;
   min-width:0;
   min-height:0;
-  display:grid;
-  place-items:center;
-  padding:calc(var(--safe-t) + 58px) 12px calc(var(--safe-b) + 18px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  /* Keep the media itself centered on the viewport. Using the larger safe-area
+     inset on both sides prevents portrait/landscape media from being nudged by
+     the asymmetric top bar or iPhone home-indicator area. */
+  padding-block:calc(max(var(--safe-t),var(--safe-b)) + 18px);
+  padding-inline:calc(max(env(safe-area-inset-left,0px),env(safe-area-inset-right,0px)) + 12px);
   overflow:hidden;
   background:#000;
 }
 .media-viewer-stage.is-video{
-  padding:calc(var(--safe-t) + 58px) 0 calc(var(--safe-b) + 84px);
+  /* Controls float above the video; the video itself stays centered exactly
+     like photos instead of being shifted upward by a larger bottom padding. */
+  padding-block:calc(max(var(--safe-t),var(--safe-b)) + 18px);
 }
 .media-viewer-image,
 .media-viewer-video{
@@ -1483,7 +1491,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   pointer-events:none;
   z-index:3;
 }
-.video-open-indicator svg{width:20px;height:20px;margin-left:2px}
+.video-open-indicator svg{width:20px;height:20px;margin:0;display:block}
 .media.blurred .video-open-indicator{opacity:0}
 
 /* iroha original video controls */
@@ -1497,7 +1505,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   transition:opacity 140ms ease, transform 180ms var(--spring);
   z-index:3;
 }
-.media-video-center svg{width:27px;height:27px;margin-left:3px}
+.media-video-center svg{width:27px;height:27px;margin:0;display:block}
 .media-video-center.playing{opacity:0;transform:translate(-50%,-50%) scale(.88)}
 .media-video-controls{
   position:absolute;
@@ -3219,7 +3227,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.9.5.4.3';
+const APP_VER='4.9.5.4.4';
 
 
 /* =========================================================
