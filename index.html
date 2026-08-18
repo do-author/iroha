@@ -1407,6 +1407,16 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .msgrow.me .bub.has-media{background:var(--accent)}
 .bub .media{max-width:230px}
 
+/* v5.0: unloaded DM media keeps a lightweight box until it nears the viewport. */
+.dm-media-lazy{
+  width:230px; max-width:100%; height:156px;
+  display:grid; place-items:center;
+  background:var(--card-2); border:1px solid var(--line-soft);
+  color:var(--muted); font-size:12px;
+}
+.dm-media-lazy-video{height:132px}
+.dm-media-lazy-audio{height:52px; border-radius:14px}
+
 /* voice note */
 .aplayer{
   display:flex; align-items:center; gap:12px; margin-top:11px;
@@ -3053,7 +3063,7 @@ html[data-theme="night"] body,
 
 
 /* ============================================================
-   v4.9.5 — 見た目を変えない描画軽量化
+   v4.9.5.6 — 初期ロード分離・DM画像遅延読込
    ============================================================ */
 
 /* 横遷移中だけ夜空の装飾アニメーションを止める。
@@ -3092,7 +3102,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='4.9.5.4';
+const APP_VER='5.0';
 
 
 /* =========================================================
@@ -3121,6 +3131,12 @@ const CLOUD={
   /* Keep hydrated media URLs stable across realtime reloads.
      This avoids requesting a fresh signed URL for every old DM image each time one message changes. */
   mediaUrlCache:new Map(),
+  /* Private DM media is hydrated only for the chat the user actually opens.
+     Keep one in-flight job per chat so repeated paints/realtime events cannot
+     request the same signed URLs over and over. */
+  chatMediaLoads:new Map(),
+  dmHistoryLoads:new Map(),
+  initialSyncPromise:null,
   /* Opening a DM writes last_read_at. That write comes back through Realtime;
      do not turn our own read receipt into a full app reload. */
   suppressChatStateUntil:new Map()
@@ -3189,6 +3205,233 @@ async function cloudHydrateMedia(m){
   CLOUD.mediaUrlCache.set(cacheKey,{src:data.signedUrl,expiresAt:Date.now()+50*60*1000});
   return {...m,src:data.signedUrl};
 }
+
+const DM_PAGE_SIZE=40;
+const DM_MEDIA_PRELOAD_MARGIN='700px 0px';
+const DM_HISTORY_TRIGGER_PX=620;
+
+function cloudMessageFromRow(row, me=CLOUD.userId, priorMedia=null){
+  let media=row.media ? {...row.media} : null;
+  if(media && priorMedia?.src && priorMedia.bucket===media.bucket && priorMedia.path===media.path){
+    media={...media,src:priorMedia.src};
+  }
+  const mm={
+    id:row.id,
+    me:row.sender_id===me,
+    t:row.body||'',
+    sys:!!row.system_text,
+    media,
+    ts:new Date(row.created_at).getTime(),
+    _createdAt:row.created_at,
+    cloud:true
+  };
+  if(row.system_text){ mm.t=row.system_text; mm.sys=true; }
+  return mm;
+}
+
+async function cloudMapLimit(items,limit,fn){
+  const out=new Array(items.length);
+  let next=0;
+  const workers=Array.from({length:Math.min(limit,items.length)},async()=>{
+    while(true){
+      const i=next++;
+      if(i>=items.length) return;
+      out[i]=await fn(items[i],i);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+async function cloudFetchLatestDmPages(chatIds){
+  const map=new Map();
+  if(!chatIds.length) return map;
+  const pages=await cloudMapLimit(chatIds,6,async cid=>{
+    const rows=await cloudRows(
+      CLOUD.client.from('messages')
+        .select('*')
+        .eq('chat_id',cid)
+        .order('created_at',{ascending:false})
+        .limit(DM_PAGE_SIZE)
+    );
+    rows.reverse();
+    return [String(cid),rows];
+  });
+  pages.forEach(([cid,rows])=>map.set(cid,rows));
+  return map;
+}
+
+async function cloudHydrateDmMessageMedia(c,m){
+  if(!CLOUD.enabled || !c?.id || !m?.media?.bucket || !m.media.path || m.media.src) return false;
+  const media=await cloudHydrateMedia(m.media);
+  if(!media?.src) return false;
+  const liveC=S.chats.find(x=>String(x.id)===String(c.id))||c;
+  const liveM=(liveC.msgs||[]).find(x=>String(x.id)===String(m.id));
+  if(!liveM?.media) return false;
+  if(liveM.media.bucket!==media.bucket || liveM.media.path!==media.path) return false;
+  liveM.media=media;
+  return true;
+}
+
+function dmLazyMediaHTML(m){
+  if(!m?.media) return '';
+  if(m.media.src || !m.media.bucket || !m.media.path){
+    return mediaHTML(m.media,{forceShow:!!m.me});
+  }
+  const kind=['video','audio'].includes(m.media.kind)?m.media.kind:'image';
+  const label=kind==='video'?'動画':kind==='audio'?'音声':'画像';
+  return `<div class="media dm-media-lazy dm-media-lazy-${kind}" data-dm-media-placeholder aria-busy="true"><span>${label}</span></div>`;
+}
+
+function syncDmMediaNode(row,m){
+  if(!row||m?.sys||!m?.media) return;
+  const pending=!!(m.media.bucket&&m.media.path&&!m.media.src);
+  row.toggleAttribute('data-dm-media-pending',pending);
+  const bub=row.querySelector('.bub');
+  if(!bub) return;
+  const ph=bub.querySelector('[data-dm-media-placeholder]');
+  if(m.media.src && ph){
+    const node=el(mediaHTML(m.media,{forceShow:!!m.me}));
+    if(node) ph.replaceWith(node);
+  }else if(pending && !ph && !bub.querySelector('.media,.media-off,.aplayer')){
+    const node=el(dmLazyMediaHTML(m));
+    if(node) bub.prepend(node);
+  }
+}
+
+function dmMessageForRow(c,row){
+  const key=String(row?.dataset?.mid||'');
+  if(!key) return null;
+  const liveC=S.chats.find(x=>String(x.id)===String(c.id))||c;
+  return (liveC.msgs||[]).find((m,i)=>threadMessageKey(m,i)===key)||null;
+}
+
+async function hydrateDmMediaRow(th,c,row){
+  if(!row?.isConnected) return;
+  const m=dmMessageForRow(c,row);
+  if(!m?.media || m.media.src || !m.media.bucket || !m.media.path){
+    row.removeAttribute('data-dm-media-pending');
+    return;
+  }
+  if(row.dataset.dmMediaLoading==='1') return;
+  row.dataset.dmMediaLoading='1';
+  try{
+    const changed=await cloudHydrateDmMessageMedia(c,m);
+    if(changed && row.isConnected){
+      const fresh=dmMessageForRow(c,row)||m;
+      syncDmMediaNode(row,fresh);
+    }
+  }catch(e){
+    console.warn('[iroha cloud] dm visible media',e);
+  }finally{
+    delete row.dataset.dmMediaLoading;
+  }
+}
+
+function wireDmThreadLazyMedia(th,c){
+  if(!th||!c) return;
+  const cid=String(c.id);
+  if(th._dmMediaCid!==cid){
+    th._dmMediaObserver?.disconnect?.();
+    th._dmMediaObserver=null;
+    th._dmMediaCid=cid;
+  }
+
+  const pending=[...th.querySelectorAll('[data-dm-media-pending]')];
+  if(!pending.length) return;
+
+  if(!('IntersectionObserver' in window)){
+    pending.slice(-12).forEach(row=>void hydrateDmMediaRow(th,c,row));
+    return;
+  }
+
+  if(!th._dmMediaObserver){
+    th._dmMediaObserver=new IntersectionObserver(entries=>{
+      entries.forEach(entry=>{
+        if(!entry.isIntersecting) return;
+        const row=entry.target;
+        th._dmMediaObserver.unobserve(row);
+        delete row.dataset.dmMediaObserved;
+        void hydrateDmMediaRow(th,c,row).then(()=>{
+          if(row.isConnected && row.hasAttribute('data-dm-media-pending')){
+            setTimeout(()=>wireDmThreadLazyMedia(th,c),1800);
+          }
+        });
+      });
+    },{root:th,rootMargin:DM_MEDIA_PRELOAD_MARGIN,threshold:0.01});
+  }
+
+  pending.forEach(row=>{
+    if(row.dataset.dmMediaObserved==='1') return;
+    row.dataset.dmMediaObserved='1';
+    th._dmMediaObserver.observe(row);
+  });
+}
+
+async function cloudLoadOlderDm(c,th){
+  if(!CLOUD.enabled||!c?.cloud||!th||c._dmHasMore===false||c._dmLoadingOlder) return false;
+  const liveC=S.chats.find(x=>String(x.id)===String(c.id))||c;
+  const oldest=(liveC.msgs||[]).find(m=>m?._createdAt&&!m.pending&&!m.failed);
+  if(!oldest?._createdAt){ liveC._dmHasMore=false; return false; }
+
+  const cid=String(liveC.id);
+  const running=CLOUD.dmHistoryLoads.get(cid);
+  if(running) return running;
+
+  liveC._dmLoadingOlder=true;
+  const oldHeight=th.scrollHeight;
+  const oldTop=th.scrollTop;
+  const job=(async()=>{
+    const rows=await cloudRows(
+      CLOUD.client.from('messages')
+        .select('*')
+        .eq('chat_id',liveC.id)
+        .lt('created_at',oldest._createdAt)
+        .order('created_at',{ascending:false})
+        .limit(DM_PAGE_SIZE)
+    );
+    rows.reverse();
+    if(!rows.length){ liveC._dmHasMore=false; return false; }
+
+    const existingIds=new Set((liveC.msgs||[]).map(m=>String(m.id)));
+    const older=rows.map(r=>cloudMessageFromRow(r)).filter(m=>!existingIds.has(String(m.id)));
+    if(!older.length){
+      liveC._dmHasMore=rows.length===DM_PAGE_SIZE;
+      return false;
+    }
+
+    liveC.msgs=[...older,...liveC.msgs].sort((a,b)=>a.ts-b.ts);
+    liveC._dmHistoryExpanded=true;
+    liveC._dmHasMore=rows.length===DM_PAGE_SIZE;
+
+    paintThread(th,liveC,{reuse:true});
+    const delta=Math.max(0,th.scrollHeight-oldHeight);
+    th.scrollTop=oldTop+delta;
+    wireDmThreadLazyMedia(th,liveC);
+    return true;
+  })().catch(e=>{
+    console.warn('[iroha cloud] older dm page',e);
+    return false;
+  }).finally(()=>{
+    liveC._dmLoadingOlder=false;
+    if(CLOUD.dmHistoryLoads.get(cid)===job) CLOUD.dmHistoryLoads.delete(cid);
+  });
+
+  CLOUD.dmHistoryLoads.set(cid,job);
+  return job;
+}
+
+function cloudPrepareFastShell(){
+  /* Do not flash bundled demo data while the real account is syncing.
+     Pending local outbox rows are kept if they exist in the current runtime. */
+  Object.keys(S.users).forEach(id=>{
+    if(id!=='me' && (S.users[id]?.demo || S.users[id]?.bot)) delete S.users[id];
+  });
+  S.posts=S.posts.filter(p=>p.pending||p.failed);
+  S.chats=S.chats.filter(c=>c.cloud && (c.msgs||[]).some(m=>m.pending||m.failed));
+  S.notes={like:[],reply:[]};
+}
+
 async function cloudUploadProfileAsset(src,slot){
   if(!CLOUD.enabled || !src) return src||null;
   if(/^https?:/.test(src)) return src;
@@ -3264,8 +3507,6 @@ async function cloudInit(){
     CLOUD.userId=session.user.id; CLOUD.enabled=true;
     
     await cloudEnsureProfile();
-    
-    await cloudReloadAll(true);
     return true;
   }catch(e){
     CLOUD.enabled=false; console.error('[iroha cloud] init',e);
@@ -3429,7 +3670,7 @@ function cloudViewSignature(){
   return JSON.stringify([users,posts,chats,notes,seen]);
 }
 
-async function cloudReloadAll(initial=false, applyPosts=true){
+async function cloudReloadAll(initial=false, applyPosts=true, earlyPaint=false){
   if(!CLOUD.enabled) return;
   if(CLOUD.reloading){ CLOUD.reloadAgain=true; if(applyPosts) CLOUD.reloadAgainApplyPosts=true; return; }
   CLOUD.reloading=true;
@@ -3527,27 +3768,59 @@ async function cloudReloadAll(initial=false, applyPosts=true){
       if(currentIds.size!==remoteIds.size || [...remoteIds].some(id=>!currentIds.has(id))) CLOUD.feedDirty=true;
     }
 
+    if(earlyPaint && !initial){
+      /* Home should become useful before a large DM history finishes downloading. */
+      cloudRefreshUI(true);
+      await new Promise(resolve=>requestAnimationFrame(()=>resolve()));
+    }
+
+    const previousDmMedia=new Map();
+    const previousChatsById=new Map(S.chats.map(c=>[String(c.id),c]));
+    S.chats.forEach(c=>(c.msgs||[]).forEach(m=>{
+      if(m?.id && m?.media?.src) previousDmMedia.set(String(m.id),m.media);
+    }));
+
     const localChatOutbox=new Map(
-      S.chats.map(c=>[c.id,(c.msgs||[]).filter(m=>m.pending||m.failed)])
+      S.chats.map(c=>[String(c.id),(c.msgs||[]).filter(m=>m.pending||m.failed)])
     );
     const chatIds=chats.map(c=>c.id), stMap=new Map(states.map(x=>[x.chat_id,x]));
-    const msgs=chatIds.length?await cloudRows(sb.from('messages').select('*').in('chat_id',chatIds).order('created_at',{ascending:true})):[];
-    const msgsByChat=new Map();
-    for(const m of msgs){
-      const mm={id:m.id,me:m.sender_id===me,t:m.body||'',sys:!!m.system_text,media:await cloudHydrateMedia(m.media),ts:new Date(m.created_at).getTime()};
-      if(m.system_text){ mm.t=m.system_text; mm.sys=true; }
-      if(!msgsByChat.has(m.chat_id)) msgsByChat.set(m.chat_id,[]); msgsByChat.get(m.chat_id).push(mm);
-    }
+
+    /* v5.0: only the newest page of each conversation is fetched during sync.
+       Older pages are requested only when that thread is scrolled toward the top. */
+    const latestDmPages=await cloudFetchLatestDmPages(chatIds);
+
     const cloudChats=chats.map(c=>{
       const other=c.user_a===me?c.user_b:c.user_a, key=localKey(other), st=stMap.get(c.id);
-      const remoteMs=msgsByChat.get(c.id)||[];
-      const remoteIds=new Set(remoteMs.map(m=>m.id));
-      const localMs=(localChatOutbox.get(c.id)||[]).filter(m=>!remoteIds.has(m.id));
-      const ms=[...remoteMs,...localMs].sort((a,b)=>a.ts-b.ts);
+      const prev=previousChatsById.get(String(c.id));
+      const rows=latestDmPages.get(String(c.id))||[];
+      const latestMs=rows.map(row=>cloudMessageFromRow(row,me,previousDmMedia.get(String(row.id))));
+      const latestIds=new Set(latestMs.map(m=>String(m.id)));
+
+      /* Pages explicitly loaded by upward scrolling stay resident for this session.
+         A periodic latest-page refresh must not throw that history away. */
+      const retainedOlder=prev?._dmHistoryExpanded
+        ? (prev.msgs||[]).filter(m=>
+            !m.pending&&!m.failed&&!latestIds.has(String(m.id)) &&
+            (!latestMs.length || (m.ts||0)<latestMs[0].ts)
+          )
+        : [];
+
+      const localMs=(localChatOutbox.get(String(c.id))||[]).filter(m=>!latestIds.has(String(m.id)));
+      const dedup=new Map();
+      [...retainedOlder,...latestMs,...localMs].forEach(m=>dedup.set(String(m.id),m));
+      const ms=[...dedup.values()].sort((a,b)=>a.ts-b.ts);
       const seen=st?.last_read_at?new Date(st.last_read_at).getTime():0;
-      const unread=ms.filter(m=>!m.me&&!m.sys&&m.ts>seen).length;
+      const loadedUnread=ms.filter(m=>!m.me&&!m.sys&&m.ts>seen).length;
+      const unread=prev && !prev._dmHistoryExpanded ? Math.max(prev.unread||0,loadedUnread) : loadedUnread;
       if(S.users[key]) S.users[key].talks=(S.users[key].talks||0)+1;
-      return {id:c.id,u:key,unread,ts:Math.max(new Date(c.updated_at||c.created_at).getTime(),...(ms.map(m=>m.ts||0))),msgs:ms,pin:!!st?.pinned,hidden:!!st?.hidden,cloud:true};
+      return {
+        id:c.id,u:key,unread,
+        ts:Math.max(new Date(c.updated_at||c.created_at).getTime(),...(ms.map(m=>m.ts||0))),
+        msgs:ms,pin:!!st?.pinned,hidden:!!st?.hidden,cloud:true,
+        _dmHistoryExpanded:!!prev?._dmHistoryExpanded,
+        _dmHasMore:prev?._dmHistoryExpanded ? prev._dmHasMore : rows.length===DM_PAGE_SIZE,
+        _dmLoadingOlder:false
+      };
     });
     S.chats=cloudChats;
 
@@ -3600,6 +3873,8 @@ function cloudRefreshUI(refreshFeed=true){
 
         syncThread(th,c);
         if(near) raf(()=>scrollThread(th));
+
+        wireDmThreadLazyMedia(th,c);
       }
     });
     syncNavBadges();
@@ -5638,6 +5913,21 @@ function pushThread(cid){
      スクロールしてから次フレームのスライドを始める。 */
   push(s);
   th.scrollTop=th.scrollHeight;
+
+  /* v5.0: only media close to the viewport is signed/downloaded. */
+  wireDmThreadLazyMedia(th,c);
+
+  /* Older message pages are fetched only when the user approaches the top. */
+  let historyTick=false;
+  th.addEventListener('scroll',()=>{
+    if(historyTick || th.scrollTop>DM_HISTORY_TRIGGER_PX) return;
+    historyTick=true;
+    requestAnimationFrame(()=>{
+      historyTick=false;
+      const liveC=S.chats.find(x=>String(x.id)===String(c.id))||c;
+      void cloudLoadOlderDm(liveC,th);
+    });
+  },{passive:true});
 }
 
 function threadMessageKey(m,i=0){
@@ -5704,11 +5994,7 @@ function updateMessageNode(node,m,c){
 
   node.classList.toggle('is-sending',!!m.pending);
   node.classList.toggle('is-failed',!!m.failed);
-
-  if(m.media){
-    const mediaEl=node.querySelector('.media img, .media video');
-    if(mediaEl) rememberDmMediaGeometryFromElement(m.media,mediaEl);
-  }
+  syncDmMediaNode(node,m);
 
   let tm=node.querySelector('.mtime');
   if(!tm){
@@ -5780,6 +6066,7 @@ function paintThread(th,c,{reuse=false}={}){
       appendMsg(th,c,m,false,i);
     }
   });
+  wireDmThreadLazyMedia(th,c);
 }
 function syncThread(th,c){
   if(!th||!c) return;
@@ -5843,6 +6130,7 @@ function syncThread(th,c){
   });
 
   rebuildThreadDayChips(th);
+  wireDmThreadLazyMedia(th,c);
 }
 function appendMsg(th,c,m,animate,i=0){
   const key=threadMessageKey(m,i);
@@ -5870,7 +6158,7 @@ function appendMsg(th,c,m,animate,i=0){
 
   const row=el(`<div class="msgrow${m.me?' me':''}${sendClass}${animate?' dm-new-message':''}" data-mid="${esc(key)}" data-day="${esc(day)}" data-msg-ts="${m.ts}">
     ${m.me?uav('me',30):uav(c.u,30)}
-    <div class="bub${m.media?' has-media':''}">${m.media?mediaHTML(m.media,{forceShow:!!m.me,dmStable:true}):''}${m.t?esc(m.t):''}</div>
+    <div class="bub${m.media?' has-media':''}">${m.media?dmLazyMediaHTML(m):''}${m.t?esc(m.t):''}</div>
     ${timeHTML}
   </div>`);
 
@@ -5882,14 +6170,9 @@ function appendMsg(th,c,m,animate,i=0){
   });
 
   th.appendChild(row);
+  syncDmMediaNode(row,m);
   rememberDmRow(c.id,m,i,row);
-
-  /* Learn existing/new DM image geometry after it loads. This only writes the
-     local display cache and never mutates m.media or sends anything to Supabase. */
-  if(m.media){
-    const mediaEl=row.querySelector('.media img, .media video');
-    if(mediaEl) rememberDmMediaGeometryFromElement(m.media,mediaEl);
-  }
+  wireDmThreadLazyMedia(th,c);
 
   /* Arrival animation is one-shot. Removing the marker after it ends means
      moving this same cached node on a later DM open can never replay it. */
@@ -7292,77 +7575,6 @@ const REVEALED_MEDIA=new Set();
 function mediaKey(m){ return String(m && (m.src||m.name||'')); }
 function mediaKeyAttr(m){ return encodeURIComponent(mediaKey(m)); }
 
-/* DM image display-size cache.
-   Display-only: never changes messages.media, uploads, Storage paths, or send payloads.
-   We remember the final CSS content-box width AND height that iroha actually rendered.
-   On later renders the wrapper reserves that same box; narrower screens scale it down
-   proportionally, so the image never stretches and never exceeds its available width. */
-const DM_MEDIA_GEOMETRY_KEY='iroha_dm_media_display_box_v2';
-const DM_MEDIA_GEOMETRY_MAX=600;
-let DM_MEDIA_GEOMETRY=(()=>{
-  try{
-    const v=JSON.parse(localStorage.getItem(DM_MEDIA_GEOMETRY_KEY)||'{}');
-    return v && typeof v==='object' ? v : {};
-  }catch(_){ return {}; }
-})();
-function dmMediaGeometryKey(m){
-  if(!m || !m.bucket || !m.path) return '';
-  return `${m.bucket}:${m.path}`;
-}
-function dmMediaGeometry(m){
-  const key=dmMediaGeometryKey(m);
-  if(!key) return null;
-  const v=DM_MEDIA_GEOMETRY[key];
-  const w=Number(v&&v.w)||0, h=Number(v&&v.h)||0;
-  if(!Number.isFinite(w)||!Number.isFinite(h)||w<=0||h<=0) return null;
-  return {w,h};
-}
-function rememberDmMediaGeometry(m,w,h){
-  const key=dmMediaGeometryKey(m);
-  w=Math.round((Number(w)||0)*100)/100;
-  h=Math.round((Number(h)||0)*100)/100;
-  if(!key || !Number.isFinite(w) || !Number.isFinite(h) || w<=0 || h<=0) return;
-
-  /* Values come from the rendered DM box, but reject obviously broken measurements. */
-  if(w>260 || h>380) return;
-
-  const prev=DM_MEDIA_GEOMETRY[key];
-  if(prev && Math.abs((Number(prev.w)||0)-w)<.1 && Math.abs((Number(prev.h)||0)-h)<.1) return;
-
-  /* Reinsert to keep object order roughly LRU-like without touching media data. */
-  const next={};
-  for(const [k,v] of Object.entries(DM_MEDIA_GEOMETRY)){
-    if(k!==key) next[k]=v;
-  }
-  next[key]={w,h};
-  const keys=Object.keys(next);
-  if(keys.length>DM_MEDIA_GEOMETRY_MAX){
-    for(const k of keys.slice(0,keys.length-DM_MEDIA_GEOMETRY_MAX)) delete next[k];
-  }
-  DM_MEDIA_GEOMETRY=next;
-  try{ localStorage.setItem(DM_MEDIA_GEOMETRY_KEY,JSON.stringify(next)); }catch(_){}
-}
-function rememberDmMediaGeometryFromElement(m,mediaEl){
-  /* Photos only. Video keeps the original 4.9.5 behavior to avoid changing controls/layout. */
-  if(!m || !mediaEl || mediaEl.tagName!=='IMG') return;
-
-  const measure=()=>{
-    /* Two frames let the image-load layout settle. client/computed size ignores the
-       message entrance transform, so we do not accidentally save a scaled animation frame. */
-    requestAnimationFrame(()=>requestAnimationFrame(()=>{
-      const box=mediaEl.closest('.media');
-      if(!box || !box.isConnected || mediaEl.naturalWidth<=0) return;
-      const cs=getComputedStyle(box);
-      const w=parseFloat(cs.width)||box.clientWidth||0;
-      const h=parseFloat(cs.height)||box.clientHeight||0;
-      rememberDmMediaGeometry(m,w,h);
-    }));
-  };
-
-  if(mediaEl.complete && mediaEl.naturalWidth>0) measure();
-  else mediaEl.addEventListener('load',measure,{once:true});
-}
-
 function mediaHTML(m, opts={}){
   if(!m) return '';
 
@@ -7387,19 +7599,12 @@ function mediaHTML(m, opts={}){
   if(mode==='off')
     return `<div class="media-off">${I.eyeoff}<span>${MEDIA_LABEL[m.kind]}は非表示に設定されています</span></div>`;
 
-  const dmGeom=(opts.dmStable && m.kind==='image') ? dmMediaGeometry(m) : null;
-  const dmBoxStyle=dmGeom
-    ? ` style="width:${dmGeom.w}px;max-width:100%;height:auto;aspect-ratio:${dmGeom.w} / ${dmGeom.h}"`
-    : '';
-  const dmImageStyle=dmGeom
-    ? ' style="width:100%;height:100%;max-height:none;object-fit:cover"'
-    : '';
   const inner = m.kind==='video'
     ? `<video src="${escAttr(m.src)}" playsinline ${mode==='blur'?'':'controls'} preload="metadata"></video>`
-    : `<img src="${escAttr(m.src)}"${dmImageStyle} alt="" decoding="async">`;
+    : `<img src="${escAttr(m.src)}" alt="" decoding="async">`;
 
   if(mode==='blur')
-    return `<div class="media blurred" data-reveal data-media-key="${keyAttr}"${dmBoxStyle}>${inner}
+    return `<div class="media blurred" data-reveal data-media-key="${keyAttr}">${inner}
       <div class="veil">${I.eye}<span>タップして表示<small>セーフティ表示がオンです</small></span></div></div>`;
 
   /* Only media that was manually revealed gets X-style “restore filter”. */
@@ -7408,7 +7613,7 @@ function mediaHTML(m, opts={}){
 
   const keyData = restore ? ` data-media-key="${keyAttr}"` : '';
 
-  return `<div class="media"${keyData}${dmBoxStyle}>${inner}${restore}</div>`;
+  return `<div class="media"${keyData}>${inner}${restore}</div>`;
 }
 
 function revealMediaByAttr(keyAttr){
@@ -8565,6 +8770,8 @@ async function boot(){
 
   if(firstSetup?.layer?.isConnected) firstSetup.layer.remove();
 
+  if(CLOUD.enabled) cloudPrepareFastShell();
+
   buildNav();
   buildPane('home');
   raf(()=>{
@@ -8575,6 +8782,13 @@ async function boot(){
   });
   if(CLOUD.enabled){
     cloudStartRealtime();
+
+    /* Do not block first paint on the full cloud snapshot. Posts are painted as
+       soon as they are ready; the heavier DM history continues afterwards. */
+    CLOUD.initialSyncPromise=cloudReloadAll(false,true,true)
+      .catch(e=>console.warn('[iroha cloud] initial sync',e))
+      .finally(()=>{ CLOUD.initialSyncPromise=null; });
+
     pushRefresh();                     /* renewals happen quietly in the browser */
     navigator.serviceWorker?.addEventListener('message',ev=>{
       if(ev.data?.type==='iroha-push') cloudReloadAll(false,false);
