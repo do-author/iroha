@@ -3102,7 +3102,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='5.0.1';
+const APP_VER='5.0.2';
 
 
 /* =========================================================
@@ -3137,6 +3137,8 @@ const CLOUD={
   chatMediaLoads:new Map(),
   dmHistoryLoads:new Map(),
   initialSyncPromise:null,
+  postsInitialLoading:false,
+  dmWarmCacheTimer:null,
   /* Opening a DM writes last_read_at. That write comes back through Realtime;
      do not turn our own read receipt into a full app reload. */
   suppressChatStateUntil:new Map()
@@ -3292,6 +3294,7 @@ async function cloudPaintPriorityHome(sb,me,posts){
   const localOutbox=S.posts.filter(p=>(p.pending||p.failed)&&!remoteIds.has(p.id));
   S.posts=[...localOutbox,...quick].sort((a,b)=>b.ts-a.ts);
   CLOUD.feedDirty=false;
+  CLOUD.postsInitialLoading=false;
   cloudRefreshUI(true);
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
   await waitForPriorityHomeMedia();
@@ -3522,14 +3525,120 @@ async function cloudLoadOlderDm(c,th){
   return job;
 }
 
+const DM_WARM_CACHE_VERSION=1;
+const DM_WARM_CACHE_MAX_CHATS=20;
+const DM_WARM_CACHE_MESSAGES=20;
+function dmWarmCacheKey(){
+  return CLOUD.userId ? `iroha:dm-warm:v${DM_WARM_CACHE_VERSION}:${CLOUD.userId}` : '';
+}
+function dmWarmMediaForCache(media){
+  if(!media || typeof media!=='object') return null;
+  const out={};
+  for(const k of ['kind','bucket','path','name','dur']){
+    if(media[k]!==undefined && media[k]!==null) out[k]=media[k];
+  }
+  /* Never persist blob/data URLs or expiring private signed URLs. */
+  if(!out.bucket && typeof media.src==='string' && /^https?:/i.test(media.src)) out.src=media.src;
+  return Object.keys(out).length?out:null;
+}
+function dmWarmUserForCache(u){
+  if(!u) return null;
+  return {
+    id:u.id,cloudId:u.cloudId||u.id,name:u.name||'このユーザー',handle:u.handle||'',bio:u.bio||'',
+    av:u.av||'stone',gender:u.gender||'secret',img:u.img||null,banner:u.banner||null,
+    isActive:u.isActive!==false,dmPolicy:u.dmPolicy||'all',official:!!u.official,
+    fav:!!u.fav,favMe:!!u.favMe
+  };
+}
+function cloudSaveDmWarmCache(){
+  if(!CLOUD.enabled || !CLOUD.userId) return;
+  const key=dmWarmCacheKey(); if(!key) return;
+  try{
+    const chats=S.chats
+      .filter(c=>c?.cloud && !c.hidden)
+      .slice()
+      .sort((a,b)=>(b.pin?1:0)-(a.pin?1:0) || (b.ts||0)-(a.ts||0))
+      .slice(0,DM_WARM_CACHE_MAX_CHATS)
+      .map(c=>({
+        id:c.id,u:c.u,unread:Number(c.unread)||0,ts:Number(c.ts)||0,pin:!!c.pin,hidden:!!c.hidden,cloud:true,
+        _dmHasMore:c._dmHasMore!==false,
+        msgs:(c.msgs||[]).slice(-DM_WARM_CACHE_MESSAGES).map(m=>({
+          id:m.id,me:!!m.me,t:m.t||'',sys:!!m.sys,media:dmWarmMediaForCache(m.media),
+          ts:Number(m.ts)||0,_createdAt:m._createdAt||null,cloud:true
+        }))
+      }));
+    const peerIds=[...new Set(chats.map(c=>c.u).filter(Boolean))];
+    const users={};
+    peerIds.forEach(id=>{ const u=dmWarmUserForCache(S.users[id]); if(u) users[id]=u; });
+    localStorage.setItem(key,JSON.stringify({savedAt:Date.now(),users,chats}));
+  }catch(e){
+    console.warn('[iroha cache] dm save',e);
+  }
+}
+function scheduleDmWarmCacheSave(){
+  if(!CLOUD.enabled) return;
+  clearTimeout(CLOUD.dmWarmCacheTimer);
+  CLOUD.dmWarmCacheTimer=setTimeout(()=>{
+    CLOUD.dmWarmCacheTimer=null;
+    cloudSaveDmWarmCache();
+  },120);
+}
+function cloudRestoreDmWarmCache(){
+  if(!CLOUD.enabled || !CLOUD.userId) return false;
+  const key=dmWarmCacheKey(); if(!key) return false;
+  try{
+    const data=JSON.parse(localStorage.getItem(key)||'null');
+    if(!data || !Array.isArray(data.chats) || !data.users || typeof data.users!=='object') return false;
+    for(const [id,u] of Object.entries(data.users)){
+      if(!id || id==='me' || !u) continue;
+      S.users[id]={
+        id,cloudId:u.cloudId||id,name:u.name||'このユーザー',handle:u.handle||'',bio:u.bio||'',
+        av:u.av||'stone',gender:u.gender||'secret',img:u.img||null,banner:u.banner||null,
+        isActive:u.isActive!==false,dmPolicy:u.dmPolicy||'all',official:!!u.official,
+        posts:0,replies:0,talks:0,fav:!!u.fav,favMe:!!u.favMe,_dmWarm:true
+      };
+    }
+    const pendingByChat=new Map(
+      S.chats.map(c=>[String(c.id),(c.msgs||[]).filter(m=>m.pending||m.failed)])
+    );
+    S.chats=data.chats.map(raw=>{
+      const cachedMsgs=(raw.msgs||[]).map(m=>({
+        id:m.id,me:!!m.me,t:m.t||'',sys:!!m.sys,media:m.media?{...m.media}:null,
+        ts:Number(m.ts)||0,_createdAt:m._createdAt||null,cloud:true,_dmWarm:true
+      }));
+      const ids=new Set(cachedMsgs.map(m=>String(m.id)));
+      const pending=(pendingByChat.get(String(raw.id))||[]).filter(m=>!ids.has(String(m.id)));
+      return {
+        id:raw.id,u:raw.u,unread:Number(raw.unread)||0,ts:Number(raw.ts)||0,pin:!!raw.pin,hidden:!!raw.hidden,
+        msgs:[...cachedMsgs,...pending].sort((a,b)=>(a.ts||0)-(b.ts||0)),cloud:true,
+        _dmHasMore:raw._dmHasMore!==false,_dmWarm:true
+      };
+    }).filter(c=>c.id && c.u && S.users[c.u]);
+    chatSig=null;
+    return S.chats.length>0;
+  }catch(e){
+    console.warn('[iroha cache] dm restore',e);
+    return false;
+  }
+}
+function cloudClearDmWarmCache(){
+  const key=dmWarmCacheKey();
+  if(!key) return;
+  try{ localStorage.removeItem(key); }catch(_){}
+}
 function cloudPrepareFastShell(){
-  /* Do not flash bundled demo data while the real account is syncing.
-     Pending local outbox rows are kept if they exist in the current runtime. */
+  /* Posts intentionally show a loading shell until the first server snapshot.
+     DMs do the opposite: restore the previous device snapshot immediately, then
+     let Supabase catch up in the background. */
   Object.keys(S.users).forEach(id=>{
     if(id!=='me' && (S.users[id]?.demo || S.users[id]?.bot)) delete S.users[id];
   });
   S.posts=S.posts.filter(p=>p.pending||p.failed);
-  S.chats=S.chats.filter(c=>c.cloud && (c.msgs||[]).some(m=>m.pending||m.failed));
+  CLOUD.postsInitialLoading=true;
+  const hadDmCache=cloudRestoreDmWarmCache();
+  if(!hadDmCache){
+    S.chats=S.chats.filter(c=>c.cloud && (c.msgs||[]).some(m=>m.pending||m.failed));
+  }
   S.notes={like:[],reply:[]};
 }
 
@@ -3886,6 +3995,7 @@ async function cloudReloadAll(initial=false, applyPosts=true, earlyPaint=false){
       const localOutbox=S.posts.filter(p=>(p.pending||p.failed) && !remoteIds.has(p.id));
       S.posts=[...localOutbox,...remotePosts].sort((a,b)=>b.ts-a.ts);
       CLOUD.feedDirty=false;
+      CLOUD.postsInitialLoading=false;
     }else{
       const currentIds=new Set(S.posts.filter(p=>p.cloud).map(p=>p.id));
       const remoteIds=new Set(remotePosts.map(p=>p.id));
@@ -3947,6 +4057,7 @@ async function cloudReloadAll(initial=false, applyPosts=true, earlyPaint=false){
       };
     });
     S.chats=cloudChats;
+    scheduleDmWarmCacheSave();
 
     /* If a chat was deleted by either participant, this device must also forget
        old 「申請済み」 markers so the relationship really returns to "from scratch". */
@@ -4003,6 +4114,7 @@ function cloudRefreshUI(refreshFeed=true){
     });
     syncNavBadges();
   });
+  scheduleDmWarmCacheSave();
 }
 function cloudScheduleReload(){
   clearTimeout(CLOUD.reloadTimer);
@@ -4132,6 +4244,7 @@ async function cloudSetProfileActive(active){
    On the next launch is_active=false makes the start screen appear again. */
 async function cloudWithdrawProfile(){
   await cloudSetProfileActive(false);
+  cloudClearDmWarmCache();
 }
 async function cloudDeleteChatForEveryone(c){
   if(!CLOUD.enabled||!c?.cloud) return;
@@ -5176,6 +5289,20 @@ function burstDots(){
   return s;
 }
 
+function feedLoadingHTML(){
+  const card=()=>`<article class="card" aria-hidden="true">
+    <div class="p-head">
+      <div class="sk" style="width:48px;height:48px;border-radius:50%;flex:0 0 48px"></div>
+      <div class="p-col" style="width:100%">
+        <div class="sk" style="width:38%;height:13px;margin:5px 0 15px"></div>
+        <div class="sk" style="width:92%;height:12px;margin-bottom:9px"></div>
+        <div class="sk" style="width:68%;height:12px;margin-bottom:15px"></div>
+        <div style="display:flex;gap:18px"><div class="sk" style="width:42px;height:12px"></div><div class="sk" style="width:42px;height:12px"></div></div>
+      </div>
+    </div>
+  </article>`;
+  return `<div data-feed-loading role="status" aria-live="polite" aria-label="投稿を読み込んでいます">${card()}${card()}${card()}</div>`;
+}
 function renderFeed(animate){
   const feed=$('#feed'); if(!feed) return;
   const q=QUIET;
@@ -5187,10 +5314,12 @@ function renderFeed(animate){
   } else paint();
 
   function paint(){
-    feed.innerHTML = list.length
-      ? list.map((p,i)=>postCard(p,{mediaPriority:i<6?'high':'low'})).join('')
-      : `<div class="empty"><h3>${S.filter==='fav'?'お気に入りの投稿はまだありません':'まだ投稿がありません'}</h3>
-         <p>${S.filter==='fav'?'プロフィールからお気に入りに登録すると、ここに投稿がまとまります':'最初のひとことを置いてみませんか'}</p></div>`;
+    feed.innerHTML = CLOUD.enabled && CLOUD.postsInitialLoading && !list.length
+      ? feedLoadingHTML()
+      : list.length
+        ? list.map((p,i)=>postCard(p,{mediaPriority:i<6?'high':'low'})).join('')
+        : `<div class="empty"><h3>${S.filter==='fav'?'お気に入りの投稿はまだありません':'まだ投稿がありません'}</h3>
+           <p>${S.filter==='fav'?'プロフィールからお気に入りに登録すると、ここに投稿がまとまります':'最初のひとことを置いてみませんか'}</p></div>`;
     wirePostActions(feed);
     revealAll(feed,0,q);
     if(!q && typeof navMorph!=='undefined') navMorph.refresh();
@@ -5440,6 +5569,7 @@ function renderChatList(instant=false){
     });
     holdMenu(r, ()=>openChatMenu(r.dataset.chat));
   });
+  scheduleDmWarmCacheSave();
 }
 
 /* =========================================================
@@ -5898,8 +6028,13 @@ function attachNightSkyToChat(screen){
 
 function pushThread(cid){
   const c=S.chats.find(x=>x.id===cid); if(!c) return;
-  c.unread=0;
-  cloudMarkChatRead(c.id);
+  /* A warm-cache chat can be behind the server. Do not advance last_read_at to
+     "now" before the fresh page arrives, or unseen messages could be marked read.
+     cloudRefreshUI() will mark it read after the current server snapshot replaces it. */
+  if(!c._dmWarm){
+    c.unread=0;
+    cloudMarkChatRead(c.id);
+  }
   syncNavBadges();
   const u=S.users[c.u];
   const s=el(`<section class="screen" data-chat="${c.id}" data-owner="${c.u}">
@@ -8917,7 +9052,11 @@ async function boot(){
     /* Do not block first paint on the full cloud snapshot. Posts are painted as
        soon as they are ready; the heavier DM history continues afterwards. */
     CLOUD.initialSyncPromise=cloudReloadAll(false,true,true)
-      .catch(e=>console.warn('[iroha cloud] initial sync',e))
+      .catch(e=>{
+        console.warn('[iroha cloud] initial sync',e);
+        CLOUD.postsInitialLoading=false;
+        if($('#feed')) renderFeed(false);
+      })
       .finally(()=>{ CLOUD.initialSyncPromise=null; });
 
     pushRefresh();                     /* renewals happen quietly in the browser */
