@@ -3238,7 +3238,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='5.1';
+const APP_VER='5.2';
 
 
 /* =========================================================
@@ -4021,7 +4021,8 @@ function cloudViewSignature(){
   ]);
   const notes=[...S.notes.like,...S.notes.reply].filter(n=>n.cloud).map(n=>[n.id,n.u,n.p||'',n.t,n.s||'',n.ts]);
   const seen=[...S.noteSeen].sort();
-  return JSON.stringify([users,posts,chats,notes,seen]);
+  const blocked=[...S.blocked].sort();
+  return JSON.stringify([users,posts,chats,notes,seen,blocked]);
 }
 
 async function cloudReloadAll(initial=false, applyPosts=true, earlyPaint=false){
@@ -4032,27 +4033,37 @@ async function cloudReloadAll(initial=false, applyPosts=true, earlyPaint=false){
   try{
     const sb=CLOUD.client, me=CLOUD.userId;
     const previousCloudPeers=new Set(S.chats.filter(c=>c.cloud).map(c=>c.u));
-    let profiles,posts,favOut,favIn,chats=[],states=[],notes=[];
+    let profiles,posts,favOut,favIn,blocks=[],chats=[],states=[],notes=[];
     const prioritizeHome=!!(earlyPaint&&!initial&&S.tab==='home');
     if(prioritizeHome){
       /* Do not let DM metadata/notifications compete with the first visible home screen. */
-      [profiles,posts,favOut,favIn]=await Promise.all([
-        cloudRows(sb.from('profiles').select('*')),
-        cloudRows(sb.from('posts').select('*').order('created_at',{ascending:false}).limit(250)),
-        cloudRows(sb.from('favorites').select('target_id').eq('owner_id',me)),
-        cloudRows(sb.from('favorites').select('owner_id').eq('target_id',me))
-      ]);
-    }else{
-      [profiles,posts,favOut,favIn,chats,states,notes]=await Promise.all([
+      [profiles,posts,favOut,favIn,blocks]=await Promise.all([
         cloudRows(sb.from('profiles').select('*')),
         cloudRows(sb.from('posts').select('*').order('created_at',{ascending:false}).limit(250)),
         cloudRows(sb.from('favorites').select('target_id').eq('owner_id',me)),
         cloudRows(sb.from('favorites').select('owner_id').eq('target_id',me)),
+        cloudRows(sb.from('user_blocks').select('blocked_id').eq('blocker_id',me))
+      ]);
+    }else{
+      [profiles,posts,favOut,favIn,blocks,chats,states,notes]=await Promise.all([
+        cloudRows(sb.from('profiles').select('*')),
+        cloudRows(sb.from('posts').select('*').order('created_at',{ascending:false}).limit(250)),
+        cloudRows(sb.from('favorites').select('target_id').eq('owner_id',me)),
+        cloudRows(sb.from('favorites').select('owner_id').eq('target_id',me)),
+        cloudRows(sb.from('user_blocks').select('blocked_id').eq('blocker_id',me)),
         cloudRows(sb.from('direct_chats').select('*').or(`user_a.eq.${me},user_b.eq.${me}`).order('updated_at',{ascending:false})),
         cloudRows(sb.from('direct_chat_state').select('*').eq('user_id',me)),
         cloudRows(sb.from('notifications').select('*').eq('recipient_id',me).order('created_at',{ascending:false}).limit(100))
       ]);
     }
+
+    const serverBlocked=[...new Set(blocks.map(x=>localKey(x.blocked_id)).filter(x=>x&&x!=='me'))];
+    const blockListChanged=serverBlocked.slice().sort().join(',')!==S.blocked.slice().sort().join(',');
+    const blockedProfileCache=new Map(
+      serverBlocked.map(id=>[id,S.users[id]]).filter(([,u])=>!!u)
+    );
+    S.blocked=serverBlocked;
+    if(blockListChanged) savePrefs();
 
     for(const id of CLOUD.remoteUserIds) if(id!=='me') delete S.users[id];
     CLOUD.remoteUserIds.clear();
@@ -4069,6 +4080,10 @@ async function cloudReloadAll(initial=false, applyPosts=true, earlyPaint=false){
         if(['all','replied','fav'].includes(u.dm_policy)) S.who=u.dm_policy;
       }
       S.users[key]=target; if(key!=='me') CLOUD.remoteUserIds.add(key);
+    }
+    for(const [id,u] of blockedProfileCache){
+      if(!S.users[id]) S.users[id]=u;
+      CLOUD.remoteUserIds.add(id);
     }
     const outSet=new Set(favOut.map(x=>x.target_id)), inSet=new Set(favIn.map(x=>x.owner_id));
     Object.values(S.users).forEach(u=>{ const id=cloudKey(u.id); if(!id) return; u.fav=outSet.has(id); u.favMe=inSet.has(id); });
@@ -4161,13 +4176,20 @@ async function cloudReloadAll(initial=false, applyPosts=true, earlyPaint=false){
     const localChatOutbox=new Map(
       S.chats.map(c=>[String(c.id),(c.msgs||[]).filter(m=>m.pending||m.failed)])
     );
-    const chatIds=chats.map(c=>c.id), stMap=new Map(states.map(x=>[x.chat_id,x]));
+    const blockedChatPeers=new Set();
+    const visibleChats=chats.filter(c=>{
+      const other=c.user_a===me?c.user_b:c.user_a, key=localKey(other);
+      const visible=!S.blocked.includes(key) && !!S.users[key];
+      if(!visible) blockedChatPeers.add(key);
+      return visible;
+    });
+    const chatIds=visibleChats.map(c=>c.id), stMap=new Map(states.map(x=>[x.chat_id,x]));
 
     /* v5.0: only the newest page of each conversation is fetched during sync.
        Older pages are requested only when that thread is scrolled toward the top. */
     const latestDmPages=await cloudFetchLatestDmPages(chatIds);
 
-    const cloudChats=chats.map(c=>{
+    const cloudChats=visibleChats.map(c=>{
       const other=c.user_a===me?c.user_b:c.user_a, key=localKey(other), st=stMap.get(c.id);
       const prev=previousChatsById.get(String(c.id));
       const rows=latestDmPages.get(String(c.id))||[];
@@ -4207,7 +4229,7 @@ async function cloudReloadAll(initial=false, applyPosts=true, earlyPaint=false){
        old 「申請済み」 markers so the relationship really returns to "from scratch". */
     const currentCloudPeers=new Set(cloudChats.map(c=>c.u));
     for(const uid of previousCloudPeers){
-      if(!currentCloudPeers.has(uid)) clearRequestedForUser(uid);
+      if(!currentCloudPeers.has(uid) && !blockedChatPeers.has(uid)) clearRequestedForUser(uid);
     }
     S.posts.forEach(p=>{
       p.req=isPostRequested(p.id) && !!S.chats.find(c=>c.u===p.u);
@@ -4215,14 +4237,17 @@ async function cloudReloadAll(initial=false, applyPosts=true, earlyPaint=false){
 
     S.notes={like:[],reply:[]};
     for(const n of notes){
-      const actor=localKey(n.actor_id), p=S.posts.find(x=>x.id===n.post_id), r=p?.rep?.find(x=>x.id===n.reply_id);
+      const actor=localKey(n.actor_id);
+      if(S.blocked.includes(actor) || !S.users[actor]) continue;
+      const p=S.posts.find(x=>x.id===n.post_id), r=p?.rep?.find(x=>x.id===n.reply_id);
       const un=S.users[actor]||{name:'ユーザー'};
       const item={id:n.id,u:actor,p:n.post_id,ts:new Date(n.created_at).getTime(),cloud:true};
       if(n.kind==='like'){ item.t=`${un.name}があなたの投稿にいいねしました`; item.s=p?`「${(p.t||'').slice(0,18)}」`:''; S.notes.like.push(item); }
       else if(n.kind==='reply'){ item.t=`${un.name}があなたの投稿に返信しました`; item.s=(r?.t||'').slice(0,80); S.notes.reply.push(item); }
       if(n.read_at) S.noteSeen.add(n.id);
     }
-    if(!initial && beforeSig!==cloudViewSignature()) cloudRefreshUI(applyPosts);
+    const hiddenCachedPosts=S.posts.some(p=>p.cloud && p.u!=='me' && !S.users[p.u]);
+    if(!initial && beforeSig!==cloudViewSignature()) cloudRefreshUI(applyPosts || blockListChanged || hiddenCachedPosts);
   }catch(e){ cloudErr('reload',e); }
   finally{
     CLOUD.reloading=false;
@@ -4269,7 +4294,7 @@ function cloudStartRealtime(){
   if(!CLOUD.enabled||CLOUD.channel) return;
   let ch=CLOUD.client.channel('iroha-live');
 
-  ['profiles','posts','post_likes','replies','reply_likes','favorites','direct_chats','messages','notifications'].forEach(table=>{
+  ['profiles','posts','post_likes','replies','reply_likes','favorites','user_blocks','direct_chats','messages','notifications'].forEach(table=>{
     ch=ch.on('postgres_changes',{event:'*',schema:'public',table},cloudScheduleReload);
   });
 
@@ -4416,6 +4441,20 @@ async function cloudSetFavorite(uid,on){
   if(!CLOUD.enabled||!cloudUserKeyIsReal(uid)) return;
   const id=cloudKey(uid); const q=on?CLOUD.client.from('favorites').upsert({owner_id:CLOUD.userId,target_id:id},{onConflict:'owner_id,target_id'}):CLOUD.client.from('favorites').delete().eq('owner_id',CLOUD.userId).eq('target_id',id);
   const r=await q; if(r.error) throw r.error;
+}
+async function cloudSetBlock(uid,on){
+  if(!CLOUD.enabled||!cloudUserKeyIsReal(uid)) return;
+  const id=cloudKey(uid);
+  if(on){
+    const r=await CLOUD.client.from('user_blocks').insert({blocker_id:CLOUD.userId,blocked_id:id});
+    if(r.error && r.error.code!=='23505') throw r.error;
+    return;
+  }
+  const r=await CLOUD.client.from('user_blocks')
+    .delete()
+    .eq('blocker_id',CLOUD.userId)
+    .eq('blocked_id',id);
+  if(r.error) throw r.error;
 }
 async function cloudGetOrCreateChat(uid){
   if(!CLOUD.enabled||!cloudUserKeyIsReal(uid)) return null;
@@ -5394,6 +5433,7 @@ function paneHome(p){
 function visiblePosts(){
   let list=S.posts.filter(p=>
     !p.profileOnly &&
+    !!S.users[p.u] &&
     !S.blocked.includes(p.u) &&
     !(p.arch && p.u!=='me')          /* archived posts stay visible only to me */
   );
@@ -5679,7 +5719,7 @@ function renderChatList(instant=false){
   const q=QUIET;
   const qq=($('#chatQ')?.value||'').trim();
   const list=S.chats.filter(c=>{
-    if(c.hidden) return false;
+    if(c.hidden || S.blocked.includes(c.u) || !S.users[c.u]) return false;
     if(!qq) return true;
     const u=S.users[c.u];
     return u.name.includes(qq) || c.msgs.some(m=>m.t.includes(qq));
@@ -5816,8 +5856,9 @@ function miniPost(p){
 function profileReplies(uid){
   const out=[];
   S.posts.forEach(p=>{
+    if(S.blocked.includes(p.u) || !S.users[p.u]) return;
     (p.rep||[]).forEach((r,i)=>{
-      if(r.u!==uid) return;
+      if(r.u!==uid || S.blocked.includes(r.u) || !S.users[r.u]) return;
       out.push({r, i, post:p});
     });
   });
@@ -5971,6 +6012,7 @@ function screenShell(title, {left, right, big}={}){
 /* ---------- user profile ---------- */
 let profTab='posts';
 function pushProfile(uid){
+  if(uid!=='me' && S.blocked.includes(uid)) return;
   const u=S.users[uid]; if(!u) return;
   const isMe = uid==='me';
   /* from a tab with nothing stacked, my own profile is just that tab */
@@ -6216,7 +6258,7 @@ function pushThread(cid){
   $('#thMore',s).onclick=()=>openMenu([
     {t:'プロフィールを見る', fn:()=>pushProfile(c.u)},
     {t:'通知をオフにする', fn:()=>toast('通知をオフにしました')},
-    {t:'ブロックする', danger:true, fn:()=>toast('ブロックしました')}
+    {t:'ブロックする', danger:true, fn:()=>confirmBlock(c.u)}
   ]);
 
   const th=$('#thread',s);
@@ -6747,13 +6789,16 @@ function pushPostDetail(pid){
   const setTarget=rep=>openReply(rep);
 
   function paintReplies(fresh){
-    if(!p.rep.length){
+    const visibleRepEntries=(p.rep||[])
+      .map((r,i)=>({r,i}))
+      .filter(({r})=>!S.blocked.includes(r.u) && !!S.users[r.u]);
+    if(!visibleRepEntries.length){
       list.innerHTML=`<div class="rep-empty">まだ返信がありません。<br>最初に声をかけてみよう。</div>`;
       return;
     }
-    list.innerHTML=p.rep.map((r,i)=>{
+    list.innerHTML=visibleRepEntries.map(({r,i},visibleIndex)=>{
       const ru=S.users[r.u];
-      return `<div class="rep${fresh&&i===p.rep.length-1?' fresh':''}" data-rep="${i}">
+      return `<div class="rep${fresh&&visibleIndex===visibleRepEntries.length-1?' fresh':''}" data-rep="${i}">
         <button data-user="${r.u}" style="display:contents">${uav(r.u,36,r.av)}</button>
         <div class="rep-main">
           <div class="rep-line"><b>${esc(ru.name)}</b>${genderTag(ru)}
@@ -7588,26 +7633,31 @@ function pushBlockList(){
       return;
     }
     body.innerHTML=S.blocked.map(uid=>{
-      const u=S.users[uid]; if(!u) return '';
+      const u=S.users[uid]||{name:'ブロック中のユーザー',handle:'',av:'stone',gender:'secret'};
       return `<div class="row">
         ${uav(uid,48)}
         <div class="row-main">
           <div class="row-t">${esc(u.name)}${genderTag(u)}${accountTag(u)}</div>
-          <div class="row-s">@${esc(u.handle)}</div>
+          <div class="row-s">${u.handle?'@'+esc(u.handle):'ブロック中'}</div>
         </div>
         <button class="obtn" data-unblock="${uid}" style="padding:9px 16px;font-size:13px">解除</button>
       </div>`;
     }).join('');
     $$('[data-unblock]',body).forEach(b=>b.addEventListener('click',()=>{
-      const uid=b.dataset.unblock, u=S.users[uid];
+      const uid=b.dataset.unblock, u=S.users[uid]||{name:'このユーザー'};
       confirmSheet({
         title:`${u.name}のブロックを解除しますか？`,
         lead:'相手の投稿がふたたび表示され、会話の申請も届くようになります。',
         go:'解除する',
-        fn:()=>{
+        fn:async()=>{
+          if(CLOUD.enabled){
+            try{ await cloudSetBlock(uid,false); }
+            catch(e){ cloudErr('unblock user',e); return; }
+          }
           S.blocked=S.blocked.filter(x=>x!==uid); savePrefs();
           haptic(10); paint(); refreshInPlace();
           toast('ブロックを解除しました');
+          if(CLOUD.enabled) void cloudReloadAll(false,true);
         }
       });
     }));
@@ -7835,7 +7885,8 @@ function pushSearch(){
   const paint=()=>{
     const v=q.value.trim();
     head.textContent = v ? `「${v}」の検索結果` : '最近の投稿';
-    const arr = v ? S.posts.filter(p=>p.t.includes(v)||S.users[p.u].name.includes(v)) : S.posts.slice(0,6);
+    const searchable=S.posts.filter(p=>!S.blocked.includes(p.u) && !!S.users[p.u]);
+    const arr = v ? searchable.filter(p=>p.t.includes(v)||S.users[p.u].name.includes(v)) : searchable.slice(0,6);
     /* typing on through a dead end shouldn't replay the empty state */
     const sig = arr.map(p=>p.id).join(',');
     if(sig===lastSig) return;
@@ -8833,12 +8884,16 @@ function toggleMute(uid){
   haptic(9); refreshInPlace();
 }
 function confirmBlock(uid){
-  const u=S.users[uid];
+  const u=S.users[uid]; if(!u || uid==='me') return;
   confirmSheet({
     title:`${u.name}をブロックしますか？`,
     lead:'相手の投稿は表示されなくなり、会話もできなくなります。相手に通知は届きません。',
     go:'ブロックする', danger:true,
-    fn:()=>{
+    fn:async()=>{
+      if(CLOUD.enabled){
+        try{ await cloudSetBlock(uid,true); }
+        catch(e){ cloudErr('block user',e); return; }
+      }
       if(!S.blocked.includes(uid)) S.blocked.push(uid);
       const mi=S.muted.indexOf(uid); if(mi>=0) S.muted.splice(mi,1);
       savePrefs();
@@ -8849,8 +8904,13 @@ function confirmBlock(uid){
       for(let i=stackEls.length-1;i>=0;i--){
         if(stackEls[i].dataset.owner===uid){ while(stackEls.length>i) pop(); break; }
       }
+      /* A reply-detail screen can remain open when the reply author is blocked there. */
+      $$('.screen[data-post] [data-user]').forEach(btn=>{
+        if(btn.dataset.user===uid) btn.closest('.rep')?.remove();
+      });
       refreshInPlace(); syncNavBadges();
       toast(`${u.name}をブロックしました`);
+      if(CLOUD.enabled) void cloudReloadAll(false,true);
     }
   });
 }
