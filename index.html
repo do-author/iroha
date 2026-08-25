@@ -1275,6 +1275,18 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .rep-line b{font-size:15px; font-weight:800}
 .rep-line > span:not(.gtag){font-size:13px; color:var(--ink-3); font-weight:600}
 .rep-body{margin:6px 0 0; font-size:16px; font-weight:600; line-height:1.6; white-space:pre-wrap; word-break:break-word}
+.muted-reply-shell{border-bottom:1px solid var(--line-soft)}
+.muted-reply-shell .rep{border-bottom:0}
+.muted-reply-toggle{
+  width:100%; min-height:54px; padding:15px 17px;
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  text-align:left; color:var(--ink-3); font-size:14px; font-weight:750;
+  transition:background-color var(--dur-1) linear, color var(--dur-1) linear;
+}
+.muted-reply-toggle:active{background:var(--field); color:var(--ink-2)}
+.muted-reply-chev{display:grid;place-items:center;flex:0 0 auto;transition:transform var(--dur-2) var(--ease-out)}
+.muted-reply-chev svg{width:18px;height:18px}
+.muted-reply-shell.open .muted-reply-chev{transform:rotate(90deg)}
 .mini-head{display:flex; align-items:center; gap:11px; flex-wrap:nowrap}
 .mini-who{display:flex; align-items:center; gap:6px; font-size:14.5px; font-weight:800;
   min-width:0; flex:0 1 auto; overflow:hidden; white-space:nowrap}
@@ -3238,7 +3250,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='5.2';
+const APP_VER='5.3';
 
 
 /* =========================================================
@@ -3352,10 +3364,10 @@ const HOME_PRIORITY_MEDIA_WAIT_MS=900;
 
 function rawPostVisibleForCurrentHome(p){
   const uid=localKey(p.author_id);
-  if(S.blocked.includes(uid)) return false;
+  if(S.blocked.includes(uid) || S.muted.includes(uid)) return false;
   if(p.archived && uid!=='me') return false;
   if(S.filter==='fav') return !!S.users[uid]?.fav;
-  if(S.filter==='osusume') return !S.muted.includes(uid) && !p.archived;
+  if(S.filter==='osusume') return !p.archived;
   return (p.tag||'hitorigoto')===S.filter;
 }
 
@@ -4022,7 +4034,8 @@ function cloudViewSignature(){
   const notes=[...S.notes.like,...S.notes.reply].filter(n=>n.cloud).map(n=>[n.id,n.u,n.p||'',n.t,n.s||'',n.ts]);
   const seen=[...S.noteSeen].sort();
   const blocked=[...S.blocked].sort();
-  return JSON.stringify([users,posts,chats,notes,seen,blocked]);
+  const muted=[...S.muted].sort();
+  return JSON.stringify([users,posts,chats,notes,seen,blocked,muted]);
 }
 
 async function cloudReloadAll(initial=false, applyPosts=true, earlyPaint=false){
@@ -4033,24 +4046,26 @@ async function cloudReloadAll(initial=false, applyPosts=true, earlyPaint=false){
   try{
     const sb=CLOUD.client, me=CLOUD.userId;
     const previousCloudPeers=new Set(S.chats.filter(c=>c.cloud).map(c=>c.u));
-    let profiles,posts,favOut,favIn,blocks=[],chats=[],states=[],notes=[];
+    let profiles,posts,favOut,favIn,blocks=[],mutes=[],chats=[],states=[],notes=[];
     const prioritizeHome=!!(earlyPaint&&!initial&&S.tab==='home');
     if(prioritizeHome){
       /* Do not let DM metadata/notifications compete with the first visible home screen. */
-      [profiles,posts,favOut,favIn,blocks]=await Promise.all([
-        cloudRows(sb.from('profiles').select('*')),
-        cloudRows(sb.from('posts').select('*').order('created_at',{ascending:false}).limit(250)),
-        cloudRows(sb.from('favorites').select('target_id').eq('owner_id',me)),
-        cloudRows(sb.from('favorites').select('owner_id').eq('target_id',me)),
-        cloudRows(sb.from('user_blocks').select('blocked_id').eq('blocker_id',me))
-      ]);
-    }else{
-      [profiles,posts,favOut,favIn,blocks,chats,states,notes]=await Promise.all([
+      [profiles,posts,favOut,favIn,blocks,mutes]=await Promise.all([
         cloudRows(sb.from('profiles').select('*')),
         cloudRows(sb.from('posts').select('*').order('created_at',{ascending:false}).limit(250)),
         cloudRows(sb.from('favorites').select('target_id').eq('owner_id',me)),
         cloudRows(sb.from('favorites').select('owner_id').eq('target_id',me)),
         cloudRows(sb.from('user_blocks').select('blocked_id').eq('blocker_id',me)),
+        cloudRows(sb.from('user_mutes').select('muted_id').eq('owner_id',me))
+      ]);
+    }else{
+      [profiles,posts,favOut,favIn,blocks,mutes,chats,states,notes]=await Promise.all([
+        cloudRows(sb.from('profiles').select('*')),
+        cloudRows(sb.from('posts').select('*').order('created_at',{ascending:false}).limit(250)),
+        cloudRows(sb.from('favorites').select('target_id').eq('owner_id',me)),
+        cloudRows(sb.from('favorites').select('owner_id').eq('target_id',me)),
+        cloudRows(sb.from('user_blocks').select('blocked_id').eq('blocker_id',me)),
+        cloudRows(sb.from('user_mutes').select('muted_id').eq('owner_id',me)),
         cloudRows(sb.from('direct_chats').select('*').or(`user_a.eq.${me},user_b.eq.${me}`).order('updated_at',{ascending:false})),
         cloudRows(sb.from('direct_chat_state').select('*').eq('user_id',me)),
         cloudRows(sb.from('notifications').select('*').eq('recipient_id',me).order('created_at',{ascending:false}).limit(100))
@@ -4059,11 +4074,15 @@ async function cloudReloadAll(initial=false, applyPosts=true, earlyPaint=false){
 
     const serverBlocked=[...new Set(blocks.map(x=>localKey(x.blocked_id)).filter(x=>x&&x!=='me'))];
     const blockListChanged=serverBlocked.slice().sort().join(',')!==S.blocked.slice().sort().join(',');
+    const blockedSet=new Set(serverBlocked);
+    const serverMuted=[...new Set(mutes.map(x=>localKey(x.muted_id)).filter(x=>x&&x!=='me'&&!blockedSet.has(x)))];
+    const muteListChanged=serverMuted.slice().sort().join(',')!==S.muted.slice().sort().join(',');
     const blockedProfileCache=new Map(
       serverBlocked.map(id=>[id,S.users[id]]).filter(([,u])=>!!u)
     );
     S.blocked=serverBlocked;
-    if(blockListChanged) savePrefs();
+    S.muted=serverMuted;
+    if(blockListChanged || muteListChanged) savePrefs();
 
     for(const id of CLOUD.remoteUserIds) if(id!=='me') delete S.users[id];
     CLOUD.remoteUserIds.clear();
@@ -4247,7 +4266,7 @@ async function cloudReloadAll(initial=false, applyPosts=true, earlyPaint=false){
       if(n.read_at) S.noteSeen.add(n.id);
     }
     const hiddenCachedPosts=S.posts.some(p=>p.cloud && p.u!=='me' && !S.users[p.u]);
-    if(!initial && beforeSig!==cloudViewSignature()) cloudRefreshUI(applyPosts || blockListChanged || hiddenCachedPosts);
+    if(!initial && beforeSig!==cloudViewSignature()) cloudRefreshUI(applyPosts || blockListChanged || muteListChanged || hiddenCachedPosts);
   }catch(e){ cloudErr('reload',e); }
   finally{
     CLOUD.reloading=false;
@@ -4294,7 +4313,7 @@ function cloudStartRealtime(){
   if(!CLOUD.enabled||CLOUD.channel) return;
   let ch=CLOUD.client.channel('iroha-live');
 
-  ['profiles','posts','post_likes','replies','reply_likes','favorites','user_blocks','direct_chats','messages','notifications'].forEach(table=>{
+  ['profiles','posts','post_likes','replies','reply_likes','favorites','user_blocks','user_mutes','direct_chats','messages','notifications'].forEach(table=>{
     ch=ch.on('postgres_changes',{event:'*',schema:'public',table},cloudScheduleReload);
   });
 
@@ -4454,6 +4473,20 @@ async function cloudSetBlock(uid,on){
     .delete()
     .eq('blocker_id',CLOUD.userId)
     .eq('blocked_id',id);
+  if(r.error) throw r.error;
+}
+async function cloudSetMute(uid,on){
+  if(!CLOUD.enabled||!cloudUserKeyIsReal(uid)) return;
+  const id=cloudKey(uid);
+  if(on){
+    const r=await CLOUD.client.from('user_mutes').insert({owner_id:CLOUD.userId,muted_id:id});
+    if(r.error && r.error.code!=='23505') throw r.error;
+    return;
+  }
+  const r=await CLOUD.client.from('user_mutes')
+    .delete()
+    .eq('owner_id',CLOUD.userId)
+    .eq('muted_id',id);
   if(r.error) throw r.error;
 }
 async function cloudGetOrCreateChat(uid){
@@ -5268,8 +5301,9 @@ function moveNavInd(animate=true){
   if(!animate) requestAnimationFrame(()=>ind.style.transition='');
 }
 
-function allNotes(){ return [...S.notes.like, ...S.notes.reply]; }
-function unseenIn(kind){ return S.notes[kind].filter(n=>!S.noteSeen.has(n.id)).length; }
+function visibleNotes(kind){ return (S.notes[kind]||[]).filter(n=>!S.muted.includes(n.u)); }
+function allNotes(){ return [...visibleNotes('like'), ...visibleNotes('reply')]; }
+function unseenIn(kind){ return visibleNotes(kind).filter(n=>!S.noteSeen.has(n.id)).length; }
 function unseenNotes(){ return unseenIn('like')+unseenIn('reply'); }
 function markNotesSeen(){ const list=allNotes(); list.forEach(n=>S.noteSeen.add(n.id)); cloudMarkNotesRead(list.map(n=>n.id)); }
 
@@ -5278,7 +5312,7 @@ function markNotesSeen(){ const list=allNotes(); list.forEach(n=>S.noteSeen.add(
 let noteFresh=new Set();
 /* opening a tab clears only that tab: likes and replies count separately */
 function openNoteSegment(kind){
-  const list=S.notes[kind]||[];
+  const list=visibleNotes(kind);
   noteFresh=new Set(list.filter(n=>!S.noteSeen.has(n.id)).map(n=>n.id));
   list.forEach(n=>S.noteSeen.add(n.id));
   cloudMarkNotesRead(list.map(n=>n.id));
@@ -5435,10 +5469,11 @@ function visiblePosts(){
     !p.profileOnly &&
     !!S.users[p.u] &&
     !S.blocked.includes(p.u) &&
+    !S.muted.includes(p.u) &&
     !(p.arch && p.u!=='me')          /* archived posts stay visible only to me */
   );
   if(S.filter==='fav') return list.filter(p=>S.users[p.u]&&S.users[p.u].fav);
-  if(S.filter==='osusume') return list.filter(p=>!S.muted.includes(p.u) && !p.arch);
+  if(S.filter==='osusume') return list.filter(p=>!p.arch);
   return list.filter(p=>p.tag===S.filter);
 }
 
@@ -5608,8 +5643,8 @@ function paneBell(p){
       </div>
       <div class="seg" id="noteSeg" style="margin:13px 0 12px">
         <div class="segind" id="noteInd"></div>
-        <button class="segbtn on" data-seg="like">いいね <small>${S.notes.like.length}</small></button>
-        <button class="segbtn" data-seg="reply">返信 <small>${S.notes.reply.length}</small></button>
+        <button class="segbtn on" data-seg="like">いいね <small>${visibleNotes('like').length}</small></button>
+        <button class="segbtn" data-seg="reply">返信 <small>${visibleNotes('reply').length}</small></button>
       </div>
     </header>
     <div class="scroll flush" id="noteScroll"><div id="noteList"></div></div>`;
@@ -5642,14 +5677,14 @@ function moveSeg(seg, ind, animate=true){
 function renderNotes(animate){
   const host=$('#noteList'); if(!host) return;
   const q=QUIET;
-  const list=S.notes[noteSeg];
+  const list=visibleNotes(noteSeg);
   const seg=$('#noteSeg');
   if(seg){
     ['like','reply'].forEach(k=>{
       const t=seg.querySelector(`[data-seg="${k}"] small`);
       if(!t) return;
       const unread=unseenIn(k);
-      t.textContent=S.notes[k].length;
+      t.textContent=visibleNotes(k).length;
       t.classList.toggle('has-new', unread>0);
       const btn=seg.querySelector(`[data-seg="${k}"]`);
       let n=btn.querySelector('.segdot');
@@ -6689,6 +6724,9 @@ function openReplyFromProfilePost(pid){
 /* =========================================================
    POST DETAIL  —  replies live here
    ========================================================= */
+const MUTED_REPLY_EXPANDED=new Set();
+function mutedReplyKey(pid,r,i){ return `${pid}:${r?.id||i}`; }
+
 function pushPostDetail(pid){
   const p=S.posts.find(x=>x.id===pid); if(!p) return;
   const u=S.users[p.u], me=S.users.me;
@@ -6798,7 +6836,7 @@ function pushPostDetail(pid){
     }
     list.innerHTML=visibleRepEntries.map(({r,i},visibleIndex)=>{
       const ru=S.users[r.u];
-      return `<div class="rep${fresh&&visibleIndex===visibleRepEntries.length-1?' fresh':''}" data-rep="${i}">
+      const replyHtml=`<div class="rep${fresh&&visibleIndex===visibleRepEntries.length-1?' fresh':''}" data-rep="${i}">
         <button data-user="${r.u}" style="display:contents">${uav(r.u,36,r.av)}</button>
         <div class="rep-main">
           <div class="rep-line"><b>${esc(ru.name)}</b>${genderTag(ru)}
@@ -6815,8 +6853,24 @@ function pushPostDetail(pid){
           </div>
         </div>
       </div>`;
+      if(!S.muted.includes(r.u)) return replyHtml;
+      const key=mutedReplyKey(p.id,r,i), expanded=MUTED_REPLY_EXPANDED.has(key);
+      return `<div class="muted-reply-shell${expanded?' open':''}">
+        <button class="muted-reply-toggle" data-mutedreply="${i}" aria-expanded="${expanded?'true':'false'}">
+          <span>ミュート中のユーザーからの返信です</span>
+          <span class="muted-reply-chev">${I.chev}</span>
+        </button>
+        ${expanded?replyHtml:''}
+      </div>`;
     }).join('');
     list.onclick=e=>{
+      const mt=e.target.closest('[data-mutedreply]');
+      if(mt){
+        const i=+mt.dataset.mutedreply, r=p.rep[i]; if(!r) return;
+        const key=mutedReplyKey(p.id,r,i);
+        if(MUTED_REPLY_EXPANDED.has(key)) MUTED_REPLY_EXPANDED.delete(key); else MUTED_REPLY_EXPANDED.add(key);
+        haptic(5); paintReplies(); return;
+      }
       const rm=e.target.closest('[data-repmore]');
       if(rm){ e.stopPropagation(); openReplyMenu(rm.dataset.repmore, ()=>paintReplies()); return; }
       const rr=e.target.closest('[data-repreply]');
@@ -7306,7 +7360,7 @@ function pushSettings(){
         <button class="gitem" id="stBlock"><span class="gi">${I.ban}</span>
           <div class="gt"><b>ブロックしたユーザー</b><span>${S.blocked.length?S.blocked.length+'人をブロック中':'表示と会話を制限します'}</span></div><span class="chev">${I.chev}</span></button>
         <button class="gitem" id="stMute"><span class="gi">${I.eyeoff}</span>
-          <div class="gt"><b>ミュートしたユーザー</b><span>${S.muted.length?S.muted.length+'人をミュート中':'おすすめへの表示を減らします'}</span></div><span class="chev">${I.chev}</span></button>
+          <div class="gt"><b>ミュートしたユーザー</b><span>${S.muted.length?S.muted.length+'人をミュート中':'投稿と通知を非表示にします'}</span></div><span class="chev">${I.chev}</span></button>
       </div>
     </div>
 
@@ -7687,11 +7741,15 @@ function pushMuteList(){
         <button class="obtn" data-unmute="${uid}" style="padding:9px 16px;font-size:13px">解除</button>
       </div>`;
     }).join('');
-    $$('[data-unmute]',body).forEach(b=>b.addEventListener('click',()=>{
+    $$('[data-unmute]',body).forEach(b=>b.addEventListener('click',async()=>{
       const uid=b.dataset.unmute;
+      if(CLOUD.enabled){
+        try{ await cloudSetMute(uid,false); }
+        catch(e){ cloudErr('unmute user',e); return; }
+      }
       S.muted=S.muted.filter(x=>x!==uid);
       savePrefs();
-      haptic(10); paint(); refreshInPlace();
+      haptic(10); paint(); refreshInPlace(); syncNavBadges();
       toast('ミュートを解除しました');
     }));
     $$('.row',body).forEach(r=>r.addEventListener('pointerdown',e=>rippleAt(r,e)));
@@ -8876,12 +8934,17 @@ function confirmDelete(pid){
   toast('投稿を削除しました');
 }
 /* ---------- other people ---------- */
-function toggleMute(uid){
-  const i=S.muted.indexOf(uid), name=S.users[uid].name;
-  if(i<0){ S.muted.push(uid); toast(`${name}をミュートしました`); }
+async function toggleMute(uid){
+  const u=S.users[uid]; if(!u || uid==='me') return;
+  const i=S.muted.indexOf(uid), on=i<0, name=u.name;
+  if(CLOUD.enabled){
+    try{ await cloudSetMute(uid,on); }
+    catch(e){ cloudErr(on?'mute user':'unmute user',e); return; }
+  }
+  if(on){ S.muted.push(uid); toast(`${name}をミュートしました`); }
   else{ S.muted.splice(i,1); toast(`${name}のミュートを解除しました`); }
   savePrefs();
-  haptic(9); refreshInPlace();
+  haptic(9); refreshInPlace(); syncNavBadges();
 }
 function confirmBlock(uid){
   const u=S.users[uid]; if(!u || uid==='me') return;
@@ -8895,7 +8958,11 @@ function confirmBlock(uid){
         catch(e){ cloudErr('block user',e); return; }
       }
       if(!S.blocked.includes(uid)) S.blocked.push(uid);
-      const mi=S.muted.indexOf(uid); if(mi>=0) S.muted.splice(mi,1);
+      const mi=S.muted.indexOf(uid);
+      if(mi>=0){
+        S.muted.splice(mi,1);
+        if(CLOUD.enabled) cloudSetMute(uid,false).catch(e=>cloudErr('unmute blocked user',e));
+      }
       savePrefs();
       S.chats=S.chats.filter(c=>c.u!==uid);
       ['like','reply'].forEach(k=>{ S.notes[k]=S.notes[k].filter(n=>n.u!==uid); });
