@@ -3238,7 +3238,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='5.0.3';
+const APP_VER='5.1';
 
 
 /* =========================================================
@@ -3671,7 +3671,7 @@ async function cloudLoadOlderDm(c,th){
 
 const DM_WARM_CACHE_VERSION=1;
 const DM_WARM_CACHE_MAX_CHATS=20;
-const DM_WARM_CACHE_MESSAGES=20;
+const DM_WARM_CACHE_MESSAGES=DM_PAGE_SIZE;
 function dmWarmCacheKey(){
   return CLOUD.userId ? `iroha:dm-warm:v${DM_WARM_CACHE_VERSION}:${CLOUD.userId}` : '';
 }
@@ -6506,14 +6506,36 @@ function syncThread(th,c){
     .filter(node=>node.dataset?.mid)
     .map(node=>node.dataset.mid);
 
-  /* Realtime messages are chronological appends and removals. If an unusual
-     out-of-order insert ever occurs, do one safe full paint rather than corrupt order. */
-  const desiredExisting=desired.filter(x=>existing.has(x.key)).map(x=>x.key);
-  const orderOK=currentKeys.length===desiredExisting.length
-    && currentKeys.every((key,i)=>key===desiredExisting[i]);
+  /* Only true chronological tail appends may use the cheap append path.
+     A warm-cache thread can start with only the newest page. When the server
+     later supplies older messages, those keys belong BEFORE the current DOM.
+     Treating every missing key as realtime-new would append history at the
+     bottom and make old messages look newest. Repaint once in desired order
+     while reusing the existing rows and preserving the user's viewport. */
+  const prefixOK=currentKeys.every((key,i)=>desired[i]?.key===key);
 
-  if(!orderOK){
+  if(!prefixOK){
+    const rootTop=th.getBoundingClientRect().top;
+    const beforeNodes=Array.from(th.children).filter(node=>node.dataset?.mid);
+    const anchor=beforeNodes.find(node=>node.getBoundingClientRect().bottom>rootTop+1)||null;
+    const anchorKey=anchor?.dataset?.mid||'';
+    const anchorOffset=anchor ? anchor.getBoundingClientRect().top-rootTop : 0;
+    const bottomGap=Math.max(0,th.scrollHeight-th.clientHeight-th.scrollTop);
+    const keepBottom=bottomGap<=80;
+
     paintThread(th,c,{reuse:true});
+
+    if(keepBottom){
+      th.scrollTop=th.scrollHeight;
+    }else if(anchorKey){
+      const escaped=(window.CSS&&CSS.escape) ? CSS.escape(anchorKey) : anchorKey.replace(/([\"'\\])/g,'\\$1');
+      const nextAnchor=th.querySelector(`[data-mid="${escaped}"]`);
+      if(nextAnchor){
+        const nextRootTop=th.getBoundingClientRect().top;
+        const nextOffset=nextAnchor.getBoundingClientRect().top-nextRootTop;
+        th.scrollTop += nextOffset-anchorOffset;
+      }
+    }
     return;
   }
 
