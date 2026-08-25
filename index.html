@@ -1003,6 +1003,13 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .prof h2 .gtag{width:22px;height:22px;font-size:14px}
 .prof h2 .gtag .gender-svg{width:14px;height:14px}
 .prof .handle{margin:2px 0 0; font-size:14px; color:var(--ink-3); font-weight:600}
+.profile-rel-status{
+  display:inline-flex; align-items:center; justify-content:center;
+  margin-top:10px; padding:5px 12px; border-radius:999px;
+  font-size:12px; font-weight:800; line-height:1;
+  border:1px solid var(--line); background:var(--field); color:var(--ink-2);
+}
+.profile-rel-status.blocked{color:#E0245E; border-color:rgba(224,36,94,.26); background:rgba(224,36,94,.08)}
 .pill-official{
   display:inline-flex; align-items:center; gap:5px; margin-top:11px;
   background:var(--accent); color:var(--accent-ink);
@@ -3250,7 +3257,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='5.3';
+const APP_VER='5.4';
 
 
 /* =========================================================
@@ -6047,42 +6054,49 @@ function screenShell(title, {left, right, big}={}){
 /* ---------- user profile ---------- */
 let profTab='posts';
 function pushProfile(uid){
-  if(uid!=='me' && S.blocked.includes(uid)) return;
-  const u=S.users[uid]; if(!u) return;
+  let u=S.users[uid];
+  if(!u && uid!=='me' && S.blocked.includes(uid)){
+    u={id:uid,name:'ブロック中のユーザー',handle:'',bio:'',av:'stone',gender:'secret',posts:0,replies:0,talks:0,fav:false,favMe:false,dmPolicy:'all'};
+    S.users[uid]=u;
+  }
+  if(!u) return;
   const isMe = uid==='me';
   /* from a tab with nothing stacked, my own profile is just that tab */
   if(isMe && !stackEls.length){ goTab('me'); return; }
   profTab='posts';
-  const s=screenShell('プロフィール');
+  const s=screenShell('プロフィール',{right:isMe?'':`<button class="iconbtn" id="profMore" aria-label="その他">${I.dots}</button>`});
   s.dataset.owner=uid;
   const body=s.querySelector('.js-scroll');
   const paint=()=>{
-    const mine=S.posts.filter(p=>p.u===uid);
+    const isBlocked=S.blocked.includes(uid);
+    const isMuted=!isBlocked && S.muted.includes(uid);
+    const mine=isBlocked?[]:S.posts.filter(p=>p.u===uid);
     body.innerHTML=`
       <div class="banner" style="${bannerCSS(u)}"></div>
       <div class="prof under">
         ${uav(u.id,84)}
         <h2>${esc(u.name)}${genderTag(u)}</h2>
-        <p class="handle">@${esc(u.handle)}</p>
+        ${u.handle?`<p class="handle">@${esc(u.handle)}</p>`:''}
+        ${isBlocked?'<span class="profile-rel-status blocked">ブロック中</span>':isMuted?'<span class="profile-rel-status">ミュート中</span>':''}
         ${u.official?`<span class="pill-official">${I.bot}iroha公式BOT</span>`:u.demo?`<span class="badge-demo" style="margin-top:11px">DEMO アカウント</span>`:''}
-        <p class="bio">${esc(u.bio)}</p>
-        <div class="prof-actions">
+        <p class="bio">${esc(u.bio||'')}</p>
+        ${isBlocked?'':`<div class="prof-actions">
           ${isMe
             ? `<button class="obtn" id="editBtn">プロフィールを編集</button>`
             : `<button class="obtn${u.fav?' on':''}" id="favBtn">${I.star}${u.fav?'お気に入り中':'お気に入り'}</button>
                <button class="obtn" id="dmBtn">${I.reply}DM</button>`}
-        </div>
-        ${isMe?'':'<p class="note">お気に入りは相手へ通知されず、他の人にも表示されません</p>'}
+        </div>`}
+        ${isMe||isBlocked?'':'<p class="note">お気に入りは相手へ通知されず、他の人にも表示されません</p>'}
       </div>
       <div class="utabs" id="pfTabs">
-        <button class="utab${profTab==='posts'?' on':''}" data-ut="posts">投稿 <small>${u.posts}</small></button>
-        <button class="utab${profTab==='replies'?' on':''}" data-ut="replies">返信 <small>${u.replies}</small></button>
+        <button class="utab${profTab==='posts'?' on':''}" data-ut="posts">投稿 <small>${isBlocked?0:(u.posts||0)}</small></button>
+        <button class="utab${profTab==='replies'?' on':''}" data-ut="replies">返信 <small>${isBlocked?0:(u.replies||0)}</small></button>
         <div class="uind" id="pfInd"></div>
       </div>
       <div style="padding:6px 12px 40px" id="pfList"></div>`;
 
     if(isMe){ $('#editBtn',body).onclick=()=>pushEdit(); }
-    else{
+    else if(!isBlocked){
     $('#favBtn',body).onclick=()=>{
       u.fav=!u.fav; haptic(10);
       cloudSetFavorite(uid,u.fav).catch(e=>cloudErr('favorite',e));
@@ -6107,6 +6121,9 @@ function pushProfile(uid){
       openRequest(null,uid);
     };
     }
+    const more=$('#profMore',s);
+    if(more) more.onclick=()=>openProfileMenu(uid,paint);
+
     const loadReplies=async()=>{
       if(!CLOUD.enabled || profTab!=='replies') return;
       try{
@@ -6133,7 +6150,7 @@ function pushProfile(uid){
       box.style.opacity='1';
       box.style.transform='none';
       if(profTab==='replies'){
-        const reps=profileReplies(uid);
+        const reps=S.blocked.includes(uid)?[]:profileReplies(uid);
         box.innerHTML = reps.length ? reps.map(x=>replyCard(x,uid)).join('')
           : `<div class="empty"><h3>公開中の返信はありません</h3><p>${isMe?'返信すると、ここにまとまります':'公開されると、ここに並びます'}</p></div>`;
         box.onclick=onPostClick; return;
@@ -7689,7 +7706,7 @@ function pushBlockList(){
     body.innerHTML=S.blocked.map(uid=>{
       const u=S.users[uid]||{name:'ブロック中のユーザー',handle:'',av:'stone',gender:'secret'};
       return `<div class="row">
-        ${uav(uid,48)}
+        <button class="avhit" data-block-profile="${escAttr(uid)}" aria-label="${escAttr(u.name)}のプロフィール">${uav(uid,48)}</button>
         <div class="row-main">
           <div class="row-t">${esc(u.name)}${genderTag(u)}${accountTag(u)}</div>
           <div class="row-s">${u.handle?'@'+esc(u.handle):'ブロック中'}</div>
@@ -7697,6 +7714,9 @@ function pushBlockList(){
         <button class="obtn" data-unblock="${uid}" style="padding:9px 16px;font-size:13px">解除</button>
       </div>`;
     }).join('');
+    $$('[data-block-profile]',body).forEach(b=>b.addEventListener('click',()=>{
+      haptic(5); pushProfile(b.dataset.blockProfile);
+    }));
     $$('[data-unblock]',body).forEach(b=>b.addEventListener('click',()=>{
       const uid=b.dataset.unblock, u=S.users[uid]||{name:'このユーザー'};
       confirmSheet({
@@ -7733,7 +7753,7 @@ function pushMuteList(){
     body.innerHTML=S.muted.map(uid=>{
       const u=S.users[uid]; if(!u) return '';
       return `<div class="row">
-        ${uav(uid,48)}
+        <button class="avhit" data-mute-profile="${escAttr(uid)}" aria-label="${escAttr(u.name)}のプロフィール">${uav(uid,48)}</button>
         <div class="row-main">
           <div class="row-t">${esc(u.name)}${genderTag(u)}${accountTag(u)}</div>
           <div class="row-s">@${esc(u.handle)}</div>
@@ -7741,6 +7761,9 @@ function pushMuteList(){
         <button class="obtn" data-unmute="${uid}" style="padding:9px 16px;font-size:13px">解除</button>
       </div>`;
     }).join('');
+    $$('[data-mute-profile]',body).forEach(b=>b.addEventListener('click',()=>{
+      haptic(5); pushProfile(b.dataset.muteProfile);
+    }));
     $$('[data-unmute]',body).forEach(b=>b.addEventListener('click',async()=>{
       const uid=b.dataset.unmute;
       if(CLOUD.enabled){
@@ -8934,6 +8957,50 @@ function confirmDelete(pid){
   toast('投稿を削除しました');
 }
 /* ---------- other people ---------- */
+function openProfileMenu(uid,repaint){
+  const u=S.users[uid]||{name:'このユーザー'};
+  if(uid==='me') return;
+  haptic(6);
+  const blocked=S.blocked.includes(uid);
+  const items=[];
+
+  if(blocked){
+    items.push({t:`${u.name}のブロックを解除`, fn:()=>confirmSheet({
+      title:`${u.name}のブロックを解除しますか？`,
+      lead:'相手の投稿がふたたび表示され、会話の申請も届くようになります。',
+      go:'解除する',
+      fn:async()=>{
+        if(CLOUD.enabled){
+          try{ await cloudSetBlock(uid,false); }
+          catch(e){ cloudErr('unblock user',e); return; }
+        }
+        S.blocked=S.blocked.filter(x=>x!==uid);
+        savePrefs(); haptic(10);
+        if(CLOUD.enabled) await cloudReloadAll(false,true);
+        if(typeof repaint==='function') repaint();
+        refreshInPlace(); syncNavBadges();
+        toast('ブロックを解除しました');
+      }
+    })});
+  }else{
+    items.push(
+      {t:S.muted.includes(uid)?`${u.name}のミュートを解除`:`${u.name}をミュート`, fn:async()=>{
+        await toggleMute(uid);
+        if(typeof repaint==='function') repaint();
+      }},
+      {t:`${u.name}をブロック`, danger:true, fn:()=>confirmBlock(uid)}
+    );
+  }
+
+  items.push({t:'報告する', danger:true, fn:()=>confirmSheet({
+    title:`${u.name}を報告しますか？`,
+    lead:'不適切な投稿や迷惑行為がある場合に報告してください。',
+    go:'報告する', danger:true,
+    fn:()=>toast('報告を受け付けました')
+  })});
+  openMenu(items);
+}
+
 async function toggleMute(uid){
   const u=S.users[uid]; if(!u || uid==='me') return;
   const i=S.muted.indexOf(uid), on=i<0, name=u.name;
