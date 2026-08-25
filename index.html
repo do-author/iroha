@@ -3257,7 +3257,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='5.4';
+const APP_VER='5.5';
 
 
 /* =========================================================
@@ -6011,30 +6011,48 @@ function pop(){
 }
 /* edge swipe back */
 function wireEdgeBack(node){
-  let sx=0, sy=0, dragging=false, w=window.innerWidth;
+  let sx=0, sy=0, dragging=false, pending=false, w=window.innerWidth;
+  const reset=()=>{
+    dragging=false; pending=false;
+    node.style.transition=''; node.style.transform='';
+    $('#tabsRoot').style.transform='';
+  };
   node.addEventListener('touchstart',e=>{
+    if(e.touches.length!==1) return;
     const t=e.touches[0];
     if(t.clientX>28) return;
-    sx=t.clientX; sy=t.clientY; dragging=true; w=node.getBoundingClientRect().width;
-    node.style.transition='none';
+    sx=t.clientX; sy=t.clientY; pending=true; dragging=false;
+    w=node.getBoundingClientRect().width;
   },{passive:true});
   node.addEventListener('touchmove',e=>{
+    if((!pending&&!dragging) || e.touches.length!==1) return;
+    const t=e.touches[0];
+    const rawDx=t.clientX-sx, ax=Math.abs(rawDx), ay=Math.abs(t.clientY-sy);
+
+    /* Decide the gesture axis before moving anything. Once horizontal wins,
+       own the gesture until touchend so the vertical scroller cannot move too. */
+    if(pending){
+      if(Math.max(ax,ay)<6) return;
+      if(rawDx<=0 || ay>=ax){ reset(); return; }
+      pending=false; dragging=true;
+      node.style.transition='none';
+    }
+
     if(!dragging) return;
-    const t=e.touches[0], dx=Math.max(0,t.clientX-sx), dy=Math.abs(t.clientY-sy);
-    if(dy>44 && dx<10){ dragging=false; node.style.transition=''; node.style.transform=''; return; }
+    e.preventDefault();
+    const dx=Math.max(0,rawDx);
     node.style.transform=`translate3d(${dx}px,0,0)`;
     const pr=Math.min(1,dx/w);
     $('#tabsRoot').style.transform=`translate3d(${-22+22*pr}%,0,0)`;
-  },{passive:true});
+  },{passive:false});
   const end=()=>{
-    if(!dragging) return; dragging=false;
+    if(!dragging){ pending=false; return; }
     const m=/translate3d\((-?[\d.]+)px/.exec(node.style.transform);
     const dx=m?parseFloat(m[1]):0;
-    node.style.transition=''; node.style.transform='';
-    $('#tabsRoot').style.transform='';
+    reset();
     if(dx>w*0.30){ pop(); }
   };
-  node.addEventListener('touchend',end); node.addEventListener('touchcancel',end);
+  node.addEventListener('touchend',end); node.addEventListener('touchcancel',reset);
 }
 
 function screenShell(title, {left, right, big}={}){
