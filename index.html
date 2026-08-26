@@ -1578,7 +1578,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .media-video-center{
   position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
   width:66px;height:66px;border-radius:50%;
-  display:grid;place-items:center;
+  display:none;place-items:center;
   background:rgba(20,20,20,.60);color:#fff;
   -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
   pointer-events:none;
@@ -3325,7 +3325,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='6.3';
+const APP_VER='6.5';
 
 
 /* =========================================================
@@ -8412,7 +8412,8 @@ function refreshFeedVideoAutoplay(){
     if(viewBottom<=viewTop){ pauseFeedVideoAutoplay(); return; }
     const viewMid=(viewTop+viewBottom)/2, viewH=Math.max(1,viewBottom-viewTop);
     let best=null,bestScore=-Infinity;
-    const videos=[...feed.querySelectorAll('.feed-media-stable:not(.blurred) video[data-feed-autoplay]')];
+    const allVideos=[...feed.querySelectorAll('video[data-feed-autoplay]')];
+    const videos=allVideos.filter(v=>v.closest('.feed-media-stable:not(.blurred)'));
     videos.forEach(v=>{
       const r=v.getBoundingClientRect();
       if(r.height<=0||r.width<=0) return;
@@ -8423,7 +8424,7 @@ function refreshFeedVideoAutoplay(){
       const score=ratio*3-Math.abs(center-viewMid)/viewH;
       if(score>bestScore){bestScore=score;best=v;}
     });
-    videos.forEach(v=>{
+    allVideos.forEach(v=>{
       v.loop=true; v.playsInline=true; v.muted=FEED_VIDEO_MUTED;
       if(v!==best&&!v.paused){ try{v.pause()}catch(_){} }
     });
@@ -9283,7 +9284,12 @@ function restoreMediaFilterByAttr(keyAttr){
     if(node.dataset.mediaKey!==keyAttr) return;
     node.classList.add('blurred');
     node.setAttribute('data-reveal','');
-    const v=node.querySelector('video'); if(v) v.controls=false;
+    const v=node.querySelector('video');
+    if(v){
+      v.controls=false;
+      try{v.pause()}catch(_){}
+      if(FEED_VIDEO_ACTIVE===v) FEED_VIDEO_ACTIVE=null;
+    }
     const restore=node.querySelector('[data-restore-filter]'); if(restore) restore.remove();
     if(!node.querySelector('.veil')){
       node.insertAdjacentHTML('beforeend',`<div class="veil">${I.eye}<span>タップして表示<small>セーフティ表示がオンです</small></span></div>`);
