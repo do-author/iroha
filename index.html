@@ -3257,7 +3257,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='5.6';
+const APP_VER='5.7';
 
 
 /* =========================================================
@@ -3526,7 +3526,7 @@ function dmLazyMediaHTML(m){
   }
   const kind=['video','audio'].includes(m.media.kind)?m.media.kind:'image';
   const label=kind==='video'?'動画':kind==='audio'?'音声':'画像';
-  const geom=kind==='image'?dmMediaGeometry(m.media):null;
+  const geom=(kind==='image'||kind==='video')?dmMediaGeometry(m.media):null;
   const geomStyle=geom
     ? ` style="width:${geom.w}px;max-width:100%;height:auto;aspect-ratio:${geom.w} / ${geom.h}"`
     : '';
@@ -8213,15 +8213,18 @@ function rememberDmMediaGeometry(m,w,h){
   try{ localStorage.setItem(DM_MEDIA_GEOMETRY_KEY,JSON.stringify(next)); }catch(_){}
 }
 function rememberDmMediaGeometryFromElement(m,mediaEl){
-  /* DM display-size cache remains photo-only; video sizing is not persisted here. */
-  if(!m || !mediaEl || mediaEl.tagName!=='IMG') return;
+  if(!m || !mediaEl || !['IMG','VIDEO'].includes(mediaEl.tagName)) return;
+
+  const ready=()=>mediaEl.tagName==='IMG'
+    ? (mediaEl.complete && mediaEl.naturalWidth>0)
+    : (mediaEl.readyState>=1 && mediaEl.videoWidth>0 && mediaEl.videoHeight>0);
 
   const measure=()=>{
-    /* Two frames let the image-load layout settle. client/computed size ignores the
+    /* Two frames let the media layout settle. client/computed size ignores the
        message entrance transform, so we do not accidentally save a scaled animation frame. */
     requestAnimationFrame(()=>requestAnimationFrame(()=>{
       const box=mediaEl.closest('.media');
-      if(!box || !box.isConnected || mediaEl.naturalWidth<=0) return;
+      if(!box || !box.isConnected || !ready()) return;
       const cs=getComputedStyle(box);
       const w=parseFloat(cs.width)||box.clientWidth||0;
       const h=parseFloat(cs.height)||box.clientHeight||0;
@@ -8229,8 +8232,8 @@ function rememberDmMediaGeometryFromElement(m,mediaEl){
     }));
   };
 
-  if(mediaEl.complete && mediaEl.naturalWidth>0) measure();
-  else mediaEl.addEventListener('load',measure,{once:true});
+  if(ready()) measure();
+  else mediaEl.addEventListener(mediaEl.tagName==='VIDEO'?'loadedmetadata':'load',measure,{once:true});
 }
 
 function mediaHTML(m, opts={}){
@@ -8266,18 +8269,18 @@ function mediaHTML(m, opts={}){
       : '';
   const videoPreload=loadPriority==='low'?'none':'metadata';
 
-  /* DM photo display box is local-only and never changes messages.media or upload payloads. */
-  const dmGeom=(opts.dmStable && m.kind==='image') ? dmMediaGeometry(m) : null;
+  /* DM media display box is local-only and never changes messages.media or upload payloads. */
+  const dmGeom=(opts.dmStable && (m.kind==='image'||m.kind==='video')) ? dmMediaGeometry(m) : null;
   const dmBoxStyle=dmGeom
     ? ` style="width:${dmGeom.w}px;max-width:100%;height:auto;aspect-ratio:${dmGeom.w} / ${dmGeom.h}"`
     : '';
-  const dmImageStyle=dmGeom
+  const dmMediaStyle=dmGeom
     ? ' style="width:100%;height:100%;max-height:none;object-fit:cover"'
     : '';
 
   const inner = m.kind==='video'
-    ? `<video class="iroha-inline-video" src="${escAttr(m.src)}" playsinline preload="${videoPreload}"></video><span class="video-open-indicator" aria-hidden="true">${I.play}</span>`
-    : `<img src="${escAttr(m.src)}"${dmImageStyle} alt="" decoding="async"${imgLoad}>`;
+    ? `<video class="iroha-inline-video" src="${escAttr(m.src)}"${dmMediaStyle} playsinline preload="${videoPreload}"></video><span class="video-open-indicator" aria-hidden="true">${I.play}</span>`
+    : `<img src="${escAttr(m.src)}"${dmMediaStyle} alt="" decoding="async"${imgLoad}>`;
 
   if(mode==='blur')
     return `<div class="media blurred" data-reveal data-media-key="${keyAttr}"${dmBoxStyle}>${inner}
