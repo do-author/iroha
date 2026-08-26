@@ -1391,6 +1391,14 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   background:var(--card-2); border:1px solid var(--line-soft);
 }
 .media img,.media video{display:block; width:100%; max-height:340px; object-fit:cover; background:#000}
+/* Home feed media reserves its final box before the asset finishes loading.
+   This prevents image/video metadata from repeatedly changing card height. */
+.media.feed-media-stable{
+  overflow:hidden; background:#000;
+}
+.media.feed-media-stable img,.media.feed-media-stable video{
+  width:100%; height:100%; max-height:none; object-fit:contain; background:#000;
+}
 .media.blurred img,.media.blurred video{filter:blur(26px) saturate(.7); transform:scale(1.08)}
 /* iOS Safari can let a native <video> consume the tap before the post-card
    click guard sees it. While safety blur is active, the video is display-only:
@@ -3296,7 +3304,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='5.11';
+const APP_VER='5.12';
 
 
 /* =========================================================
@@ -3366,7 +3374,8 @@ function extFor(blob,name,kind){
 }
 async function cloudUploadMedia(m,{scope='post',chatId=null}={}){
   if(!CLOUD.enabled || !m) return m;
-  if(m.bucket&&m.path) return {kind:m.kind,bucket:m.bucket,path:m.path,name:m.name||'',dur:m.dur||0};
+  const postGeom=scope==='post'&&validMediaWH(m.w,m.h)?{w:Number(m.w),h:Number(m.h)}:{};
+  if(m.bucket&&m.path) return {kind:m.kind,bucket:m.bucket,path:m.path,name:m.name||'',dur:m.dur||0,...postGeom};
   if(!m.src || (!m.src.startsWith('blob:')&&!m.src.startsWith('data:'))) return m;
   const blob=await fetch(m.src).then(r=>r.blob());
   const ext=extFor(blob,m.name,m.kind);
@@ -3376,7 +3385,7 @@ async function cloudUploadMedia(m,{scope='post',chatId=null}={}){
   const folder=isDm ? `${chatId}/${CLOUD.userId}` : `${CLOUD.userId}/${scope}`;
   const path=`${folder}/${id}.${ext}`;
   must(await CLOUD.client.storage.from(bucket).upload(path,blob,{contentType:blob.type||undefined,upsert:false}));
-  return {kind:m.kind,bucket,path,name:m.name||'',dur:m.dur||0};
+  return {kind:m.kind,bucket,path,name:m.name||'',dur:m.dur||0,...postGeom};
 }
 async function cloudHydrateMedia(m){
   if(!m) return null;
@@ -5537,7 +5546,7 @@ function postCard(p, opts={}){
           <button class="p-more" data-more="${p.id}" aria-label="その他">${I.dots}</button>
         </div>
       <p class="p-body">${esc(p.t)}</p>
-      ${mediaHTML(p.media,{owner:p.u,loadPriority:opts.mediaPriority||'auto'})}
+      ${mediaHTML(p.media,{owner:p.u,loadPriority:opts.mediaPriority||'auto',feedStable:!!opts.feedStable})}
       ${tag?`<span class="tag ${tag.cls}">${tag.label}</span>`:''}
       ${p.arch?`<span class="tag tag-arch">アーカイブ</span>`:''}
       ${p.pending
@@ -5592,10 +5601,11 @@ function renderFeed(animate){
     feed.innerHTML = CLOUD.enabled && CLOUD.postsInitialLoading && !list.length
       ? feedLoadingHTML()
       : list.length
-        ? list.map((p,i)=>postCard(p,{mediaPriority:i<6?'high':'low'})).join('')
+        ? list.map((p,i)=>postCard(p,{mediaPriority:i<6?'high':'low',feedStable:true})).join('')
         : `<div class="empty"><h3>${S.filter==='fav'?'お気に入りの投稿はまだありません':'まだ投稿がありません'}</h3>
            <p>${S.filter==='fav'?'プロフィールからお気に入りに登録すると、ここに投稿がまとまります':'最初のひとことを置いてみませんか'}</p></div>`;
     wirePostActions(feed);
+    wireFeedMediaStability(feed);
     revealAll(feed,0,q);
     if(!q && typeof navMorph!=='undefined') navMorph.refresh();
   }
@@ -8176,13 +8186,18 @@ const MEDIA_LABEL={image:'画像', video:'動画', audio:'音声'};
 function pickMedia(accept, cb){
   const inp=el(`<input type="file" accept="${accept}" style="position:absolute;left:-9999px">`);
   document.body.appendChild(inp);
-  inp.addEventListener('change',()=>{
+  inp.addEventListener('change',async()=>{
     const f=inp.files && inp.files[0];
     inp.remove();
     if(!f) return;
     const kind = /^video\//.test(f.type) ? 'video' : /^audio\//.test(f.type) ? 'audio' : 'image';
     /* object URLs keep big videos out of memory as base64 */
-    cb({kind, src:URL.createObjectURL(f), name:f.name});
+    const media={kind,src:URL.createObjectURL(f),name:f.name};
+    if(kind==='image'||kind==='video'){
+      try{const g=await pickedVisualGeometry(kind,media.src); if(g){media.w=g.w;media.h=g.h;}}
+      catch(_){}
+    }
+    cb(media);
   });
   inp.click();
 }
@@ -8200,6 +8215,144 @@ function mediaMode(m){
 const REVEALED_MEDIA=new Set();
 function mediaKey(m){ return String(m && (m.src||m.name||'')); }
 function mediaKeyAttr(m){ return encodeURIComponent(mediaKey(m)); }
+
+/* Home-feed intrinsic media geometry + generated video thumbnail cache.
+   These are presentation-only. New post uploads also carry w/h inside the existing
+   media JSONB so another device can reserve the correct box before first paint. */
+const FEED_MEDIA_GEOMETRY_KEY='iroha_feed_media_intrinsic_v1';
+const FEED_VIDEO_POSTER_KEY='iroha_feed_video_posters_v1';
+const FEED_MEDIA_CACHE_MAX=500;
+const FEED_VIDEO_POSTER_MAX=36;
+let FEED_MEDIA_GEOMETRY=(()=>{try{const v=JSON.parse(localStorage.getItem(FEED_MEDIA_GEOMETRY_KEY)||'{}');return v&&typeof v==='object'?v:{}}catch(_){return {}}})();
+let FEED_VIDEO_POSTERS=(()=>{try{const v=JSON.parse(localStorage.getItem(FEED_VIDEO_POSTER_KEY)||'{}');return v&&typeof v==='object'?v:{}}catch(_){return {}}})();
+const FEED_POSTER_JOBS=new Map();
+function feedMediaCacheKey(m){
+  if(!m) return '';
+  if(m.bucket&&m.path) return `${m.bucket}:${m.path}`;
+  return String(m.src||m.name||'');
+}
+function validMediaWH(w,h){
+  w=Number(w)||0; h=Number(h)||0;
+  return Number.isFinite(w)&&Number.isFinite(h)&&w>0&&h>0;
+}
+function feedMediaGeometry(m){
+  const mw=Number(m&&m.w)||0, mh=Number(m&&m.h)||0;
+  if(validMediaWH(mw,mh)) return {w:mw,h:mh,known:true};
+  const key=feedMediaCacheKey(m), v=key&&FEED_MEDIA_GEOMETRY[key];
+  const w=Number(v&&v.w)||0, h=Number(v&&v.h)||0;
+  return validMediaWH(w,h)?{w,h,known:true}:null;
+}
+function rememberFeedMediaGeometry(key,w,h){
+  if(!key||!validMediaWH(w,h)) return;
+  w=Math.round(Number(w)); h=Math.round(Number(h));
+  const prev=FEED_MEDIA_GEOMETRY[key];
+  if(prev&&Number(prev.w)===w&&Number(prev.h)===h) return;
+  const next={...FEED_MEDIA_GEOMETRY}; delete next[key]; next[key]={w,h};
+  const keys=Object.keys(next);
+  if(keys.length>FEED_MEDIA_CACHE_MAX) for(const k of keys.slice(0,keys.length-FEED_MEDIA_CACHE_MAX)) delete next[k];
+  FEED_MEDIA_GEOMETRY=next;
+  try{localStorage.setItem(FEED_MEDIA_GEOMETRY_KEY,JSON.stringify(next))}catch(_){}
+}
+function feedMediaBoxStyle(m){
+  const g=feedMediaGeometry(m) || (m?.kind==='video'?{w:16,h:9,known:false}:{w:4,h:3,known:false});
+  const ratio=g.w/g.h;
+  /* Preserve the full image/video while respecting the existing 340px height cap. */
+  const maxW=Math.max(80,Math.min(2400,340*ratio));
+  return {style:`width:100%;max-width:${maxW.toFixed(2)}px;aspect-ratio:${g.w} / ${g.h}`,known:g.known,key:feedMediaCacheKey(m)};
+}
+function feedVideoPoster(key){ return key&&typeof FEED_VIDEO_POSTERS[key]==='string'?FEED_VIDEO_POSTERS[key]:''; }
+function rememberFeedVideoPoster(key,dataUrl){
+  if(!key||!/^data:image\/jpeg;base64,/i.test(String(dataUrl||''))) return;
+  const next={...FEED_VIDEO_POSTERS}; delete next[key]; next[key]=dataUrl;
+  const keys=Object.keys(next);
+  if(keys.length>FEED_VIDEO_POSTER_MAX) for(const k of keys.slice(0,keys.length-FEED_VIDEO_POSTER_MAX)) delete next[k];
+  FEED_VIDEO_POSTERS=next;
+  try{localStorage.setItem(FEED_VIDEO_POSTER_KEY,JSON.stringify(next))}catch(_){}
+}
+function captureFeedVideoPoster(src,key,targetVideo){
+  if(!src||!key||FEED_POSTER_JOBS.has(key)) return;
+  const cached=feedVideoPoster(key); if(cached){ if(targetVideo?.isConnected) targetVideo.poster=cached; return; }
+  const job=(async()=>{
+    const v=document.createElement('video');
+    v.muted=true; v.playsInline=true; v.preload='auto'; v.crossOrigin='anonymous';
+    const cleanup=()=>{try{v.pause();v.removeAttribute('src');v.load()}catch(_){}};
+    try{
+      await new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>reject(new Error('thumb metadata timeout')),4500);
+        v.addEventListener('loadedmetadata',()=>{clearTimeout(timer);resolve()},{once:true});
+        v.addEventListener('error',()=>{clearTimeout(timer);reject(new Error('thumb load failed'))},{once:true});
+        v.src=src;
+      });
+      if(!validMediaWH(v.videoWidth,v.videoHeight)) throw new Error('no video size');
+      const dur=Number.isFinite(v.duration)?v.duration:0;
+      const at=dur>0?Math.min(.18,Math.max(.03,dur*.03)):.05;
+      await new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>reject(new Error('thumb seek timeout')),3500);
+        const done=()=>{clearTimeout(timer);resolve()};
+        v.addEventListener('seeked',done,{once:true});
+        v.addEventListener('error',()=>{clearTimeout(timer);reject(new Error('thumb seek failed'))},{once:true});
+        try{v.currentTime=at}catch(_){done()}
+      });
+      const max=480, scale=Math.min(1,max/Math.max(v.videoWidth,v.videoHeight));
+      const cw=Math.max(2,Math.round(v.videoWidth*scale)), ch=Math.max(2,Math.round(v.videoHeight*scale));
+      const cv=document.createElement('canvas'); cv.width=cw; cv.height=ch;
+      const ctx=cv.getContext('2d'); if(!ctx) throw new Error('no canvas');
+      ctx.drawImage(v,0,0,cw,ch);
+      const data=cv.toDataURL('image/jpeg',.76);
+      rememberFeedVideoPoster(key,data);
+      if(targetVideo?.isConnected) targetVideo.poster=data;
+    }catch(e){ console.debug('[iroha video thumbnail]',e); }
+    finally{cleanup()}
+  })();
+  FEED_POSTER_JOBS.set(key,job);
+  job.finally(()=>FEED_POSTER_JOBS.delete(key));
+}
+function wireFeedMediaStability(root){
+  if(!root) return;
+  root.querySelectorAll('.feed-media-stable').forEach(box=>{
+    const node=box.querySelector('img,video'); if(!node) return;
+    const key=decodeURIComponent(box.dataset.feedMediaKey||'');
+    const storeSize=()=>{
+      const w=node.tagName==='VIDEO'?node.videoWidth:node.naturalWidth;
+      const h=node.tagName==='VIDEO'?node.videoHeight:node.naturalHeight;
+      rememberFeedMediaGeometry(key,w,h);
+    };
+    if(node.tagName==='IMG'){
+      if(node.complete&&node.naturalWidth) storeSize(); else node.addEventListener('load',storeSize,{once:true});
+      return;
+    }
+    if(node.readyState>=1&&node.videoWidth) storeSize(); else node.addEventListener('loadedmetadata',storeSize,{once:true});
+    const cached=feedVideoPoster(key);
+    if(cached){ node.poster=cached; return; }
+    const startThumb=()=>captureFeedVideoPoster(node.currentSrc||node.src,key,node);
+    if('IntersectionObserver' in window){
+      const io=new IntersectionObserver(entries=>{
+        if(entries.some(x=>x.isIntersecting)){io.disconnect();startThumb()}
+      },{root:$('#feedScroll'),rootMargin:'500px 0px'});
+      io.observe(box);
+    }else startThumb();
+  });
+}
+
+/* Read intrinsic dimensions before a newly selected visual enters the optimistic feed. */
+function pickedVisualGeometry(kind,src){
+  return new Promise(resolve=>{
+    if(kind==='image'){
+      const img=new Image();
+      const done=()=>resolve(validMediaWH(img.naturalWidth,img.naturalHeight)?{w:img.naturalWidth,h:img.naturalHeight}:null);
+      img.onload=done; img.onerror=()=>resolve(null); img.src=src; return;
+    }
+    if(kind==='video'){
+      const v=document.createElement('video'); v.preload='metadata'; v.muted=true; v.playsInline=true;
+      const finish=()=>{const out=validMediaWH(v.videoWidth,v.videoHeight)?{w:v.videoWidth,h:v.videoHeight}:null; try{v.removeAttribute('src');v.load()}catch(_){} resolve(out)};
+      const timer=setTimeout(finish,2200);
+      v.addEventListener('loadedmetadata',()=>{clearTimeout(timer);finish()},{once:true});
+      v.addEventListener('error',()=>{clearTimeout(timer);finish()},{once:true});
+      v.src=src; return;
+    }
+    resolve(null);
+  });
+}
 
 /* DM image display-size cache.
    Display-only: never changes messages.media, uploads, Storage paths, or send payloads.
@@ -8307,6 +8460,11 @@ function mediaHTML(m, opts={}){
       ? ' loading="lazy" fetchpriority="low"'
       : '';
   const videoPreload=loadPriority==='low'?'none':'metadata';
+  const feedBox=opts.feedStable ? feedMediaBoxStyle(m) : null;
+  const feedBoxStyle=feedBox ? ` style="${feedBox.style}"` : '';
+  const feedClass=feedBox ? ' feed-media-stable' : '';
+  const feedData=feedBox ? ` data-feed-media-key="${encodeURIComponent(feedBox.key)}"` : '';
+  const feedPoster=feedBox&&m.kind==='video' ? feedVideoPoster(feedBox.key) : '';
 
   /* DM media display box is local-only and never changes messages.media or upload payloads. */
   const dmGeom=(opts.dmStable && (m.kind==='image'||m.kind==='video')) ? dmMediaGeometry(m) : null;
@@ -8316,13 +8474,18 @@ function mediaHTML(m, opts={}){
   const dmMediaStyle=dmGeom
     ? ' style="width:100%;height:100%;max-height:none;object-fit:cover"'
     : '';
+  const feedMediaStyle=feedBox&&!dmGeom ? ' style="width:100%;height:100%;max-height:none;object-fit:contain"' : '';
+  const mediaStyle=dmMediaStyle||feedMediaStyle;
+  const posterAttr=feedPoster?` poster="${escAttr(feedPoster)}"`:'';
+  const crossAttr=feedBox?' crossorigin="anonymous"':'';
 
   const inner = m.kind==='video'
-    ? `<video class="iroha-inline-video" src="${escAttr(m.src)}"${dmMediaStyle} playsinline preload="${videoPreload}"></video><span class="video-open-indicator" aria-hidden="true">${I.play}</span>`
-    : `<img src="${escAttr(m.src)}"${dmMediaStyle} alt="" decoding="async"${imgLoad}>`;
+    ? `<video class="iroha-inline-video" src="${escAttr(m.src)}"${mediaStyle}${posterAttr}${crossAttr} playsinline preload="${videoPreload}"></video><span class="video-open-indicator" aria-hidden="true">${I.play}</span>`
+    : `<img src="${escAttr(m.src)}"${mediaStyle} alt="" decoding="async"${imgLoad}>`;
 
+  const boxStyle=dmBoxStyle||feedBoxStyle;
   if(mode==='blur')
-    return `<div class="media blurred" data-reveal data-media-key="${keyAttr}"${dmBoxStyle}>${inner}
+    return `<div class="media${feedClass} blurred" data-reveal data-media-key="${keyAttr}"${feedData}${boxStyle}>${inner}
       <div class="veil">${I.eye}<span>タップして表示<small>セーフティ表示がオンです</small></span></div></div>`;
 
   /* Only media that was manually revealed gets X-style “restore filter”. */
@@ -8331,7 +8494,7 @@ function mediaHTML(m, opts={}){
 
   const keyData = restore ? ` data-media-key="${keyAttr}"` : '';
 
-  return `<div class="media"${keyData}${dmBoxStyle}>${inner}${restore}</div>`;
+  return `<div class="media${feedClass}"${keyData}${feedData}${boxStyle}>${inner}${restore}</div>`;
 }
 
 function mediaSaveType(src,blobType,kind){
