@@ -3325,7 +3325,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='6.7';
+const APP_VER='6.8';
 
 
 /* =========================================================
@@ -3398,7 +3398,9 @@ async function cloudUploadMedia(m,{scope='post',chatId=null}={}){
   const postGeom=scope==='post'&&validMediaWH(m.w,m.h)?{w:Number(m.w),h:Number(m.h)}:{};
   if(m.bucket&&m.path) return {kind:m.kind,bucket:m.bucket,path:m.path,name:m.name||'',dur:m.dur||0,...postGeom};
   if(!m.src || (!m.src.startsWith('blob:')&&!m.src.startsWith('data:'))) return m;
-  const blob=await fetch(m.src).then(r=>r.blob());
+  /* Prefer the original selected File when available. This avoids depending on
+     fetch(blob:) in iOS/PWA while an upload is starting after the composer closes. */
+  const blob=(m._file instanceof Blob) ? m._file : await fetch(m.src).then(r=>r.blob());
   const ext=extFor(blob,m.name,m.kind);
   const id=(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2));
   const isDm=scope==='dm';
@@ -8222,18 +8224,25 @@ const MEDIA_LABEL={image:'画像', video:'動画', audio:'音声'};
 function pickMedia(accept, cb){
   const inp=el(`<input type="file" accept="${accept}" style="position:absolute;left:-9999px">`);
   document.body.appendChild(inp);
-  inp.addEventListener('change',async()=>{
+  inp.addEventListener('change',()=>{
     const f=inp.files && inp.files[0];
     inp.remove();
     if(!f) return;
     const kind = /^video\//.test(f.type) ? 'video' : /^audio\//.test(f.type) ? 'audio' : 'image';
-    /* object URLs keep big videos out of memory as base64 */
+    /* Never block attachment selection on metadata decoding. Some iPhone photos
+       can leave an Image load pending for a long time; posting must still work. */
     const media={kind,src:URL.createObjectURL(f),name:f.name};
-    if(kind==='image'||kind==='video'){
-      try{const g=await pickedVisualGeometry(kind,media.src); if(g){media.w=g.w;media.h=g.h;}}
-      catch(_){}
-    }
+    /* Keep the source File as non-enumerable upload state. It never enters the
+       post JSON/DB payload, but cloudUploadMedia can use it directly. */
+    try{Object.defineProperty(media,'_file',{value:f,configurable:true});}catch(_){}
     cb(media);
+    if(kind==='image'||kind==='video'){
+      pickedVisualGeometry(kind,media.src).then(g=>{
+        /* setAtt/post keep this same object reference, so dimensions can arrive
+           in the background without delaying the user's file selection. */
+        if(g){media.w=g.w;media.h=g.h;}
+      }).catch(()=>{});
+    }
   });
   inp.click();
 }
@@ -8470,15 +8479,24 @@ function pickedVisualGeometry(kind,src){
   return new Promise(resolve=>{
     if(kind==='image'){
       const img=new Image();
-      const done=()=>resolve(validMediaWH(img.naturalWidth,img.naturalHeight)?{w:img.naturalWidth,h:img.naturalHeight}:null);
-      img.onload=done; img.onerror=()=>resolve(null); img.src=src; return;
+      let settled=false;
+      const finish=(ok=true)=>{
+        if(settled) return; settled=true; clearTimeout(timer);
+        const out=ok&&validMediaWH(img.naturalWidth,img.naturalHeight)?{w:img.naturalWidth,h:img.naturalHeight}:null;
+        img.onload=null; img.onerror=null; resolve(out);
+      };
+      /* Geometry is only a layout optimisation. Never let a stubborn decoder
+         block image attachment or leave a background job hanging forever. */
+      const timer=setTimeout(()=>finish(false),1800);
+      img.onload=()=>finish(true); img.onerror=()=>finish(false); img.src=src; return;
     }
     if(kind==='video'){
       const v=document.createElement('video'); v.preload='metadata'; v.muted=true; v.playsInline=true;
-      const finish=()=>{const out=validMediaWH(v.videoWidth,v.videoHeight)?{w:v.videoWidth,h:v.videoHeight}:null; try{v.removeAttribute('src');v.load()}catch(_){} resolve(out)};
+      let settled=false;
+      const finish=()=>{if(settled)return;settled=true;clearTimeout(timer);const out=validMediaWH(v.videoWidth,v.videoHeight)?{w:v.videoWidth,h:v.videoHeight}:null; try{v.removeAttribute('src');v.load()}catch(_){} resolve(out)};
       const timer=setTimeout(finish,2200);
-      v.addEventListener('loadedmetadata',()=>{clearTimeout(timer);finish()},{once:true});
-      v.addEventListener('error',()=>{clearTimeout(timer);finish()},{once:true});
+      v.addEventListener('loadedmetadata',finish,{once:true});
+      v.addEventListener('error',finish,{once:true});
       v.src=src; return;
     }
     resolve(null);
