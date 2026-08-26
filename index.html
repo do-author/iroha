@@ -3325,7 +3325,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='6.6';
+const APP_VER='6.7';
 
 
 /* =========================================================
@@ -5572,7 +5572,7 @@ function postCard(p, opts={}){
           <button class="p-more" data-more="${p.id}" aria-label="その他">${I.dots}</button>
         </div>
       <p class="p-body">${esc(p.t)}</p>
-      ${mediaHTML(p.media,{owner:p.u,loadPriority:opts.mediaPriority||'auto',feedStable:!!opts.feedStable})}
+      ${mediaHTML(p.media,{owner:p.u,loadPriority:opts.mediaPriority||'auto',feedStable:!!opts.feedStable,noVideoAdornment:!!opts.noVideoAdornment})}
       ${tag?`<span class="tag ${tag.cls}">${tag.label}</span>`:''}
       ${p.arch?`<span class="tag tag-arch">アーカイブ</span>`:''}
       ${p.pending
@@ -5959,6 +5959,7 @@ function renderMe(){
         : `<div class="empty"><h3>公開中の返信はありません</h3><p>返信すると、ここにまとまります</p></div>`;
     }
     box.onclick=onPostClick;
+    wireFeedMediaStability(box);
   }
 }
 function moveU(tabs, ind, animate=true){
@@ -5973,7 +5974,7 @@ function moveU(tabs, ind, animate=true){
 function miniPost(p){
   /* Profile posts use the exact same card markup as the home feed.
      Only remove the entrance stagger so profile contents appear immediately. */
-  return postCard(p).replace('class="card tap stagger"','class="card tap"');
+  return postCard(p,{feedStable:true,noVideoAdornment:true}).replace('class="card tap stagger"','class="card tap"');
 }
 
 
@@ -6259,6 +6260,7 @@ function pushProfile(uid){
       box.innerHTML = mine.length ? mine.map(p=>miniPost(p)).join('')
         : `<div class="empty"><h3>公開中の投稿はありません</h3><p>公開されると、ここに並びます</p></div>`;
       box.onclick=onPostClick;
+      wireFeedMediaStability(box);
     }
   };
   paint();
@@ -8362,7 +8364,7 @@ function wireFeedMediaStability(root){
     if('IntersectionObserver' in window){
       const io=new IntersectionObserver(entries=>{
         if(entries.some(x=>x.isIntersecting)){io.disconnect();startThumb()}
-      },{root:$('#feedScroll'),rootMargin:'500px 0px'});
+      },{root:root.closest('.scroll')||$('#feedScroll')||null,rootMargin:'500px 0px'});
       io.observe(box);
     }else startThumb();
   });
@@ -8610,9 +8612,11 @@ function mediaHTML(m, opts={}){
   const feedVideoAttrs=feedBox
     ? ` data-feed-autoplay loop${FEED_VIDEO_MUTED?' muted':''}`
     : '';
-  const videoAdornment=feedBox
-    ? `<button class="feed-video-sound" data-feed-video-sound type="button" aria-label="${FEED_VIDEO_MUTED?'動画のミュートを解除':'動画をミュート'}" aria-pressed="${FEED_VIDEO_MUTED?'true':'false'}">${feedVideoSoundIcon()}</button>`
-    : `<span class="video-open-indicator" aria-hidden="true">${I.play}</span>`;
+  const videoAdornment=opts.noVideoAdornment
+    ? ''
+    : feedBox
+      ? `<button class="feed-video-sound" data-feed-video-sound type="button" aria-label="${FEED_VIDEO_MUTED?'動画のミュートを解除':'動画をミュート'}" aria-pressed="${FEED_VIDEO_MUTED?'true':'false'}">${feedVideoSoundIcon()}</button>`
+      : `<span class="video-open-indicator" aria-hidden="true">${I.play}</span>`;
 
   const inner = m.kind==='video'
     ? `<video class="iroha-inline-video" src="${escAttr(m.src)}"${mediaStyle}${posterAttr}${crossAttr}${feedVideoAttrs} playsinline preload="${videoPreload}"></video>${videoAdornment}`
