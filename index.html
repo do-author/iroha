@@ -1435,6 +1435,50 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .bub .media{max-width:230px}
 
 
+
+/* ---------- composer attachments ---------- */
+.attgrid{display:flex; gap:8px; margin-top:14px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px}
+.attgrid::-webkit-scrollbar{display:none}
+.attgrid .attpreview{
+  position:relative; flex:0 0 auto; width:132px; margin-top:0;
+  border-radius:14px; overflow:hidden;
+}
+.attgrid .attpreview .media,.attgrid .attpreview .aplayer{margin-top:0}
+.attgrid .attpreview img,.attgrid .attpreview video{height:132px; object-fit:cover}
+.attgrid .attpreview .x{
+  position:absolute; top:6px; right:6px; z-index:3;
+  width:26px; height:26px; border-radius:50%;
+  background:rgba(10,8,22,.66); color:#fff;
+  display:grid; place-items:center;
+}
+.atthint{margin:8px 2px 0; font-size:12px; font-weight:600; color:var(--ink-3)}
+
+/* ---------- media carousel ---------- */
+.mcar{position:relative; margin-top:11px}
+.mcar-track{
+  display:flex; overflow-x:auto; scroll-snap-type:x mandatory;
+  scrollbar-width:none; -ms-overflow-style:none;
+  border-radius:16px; overscroll-behavior-x:contain;
+}
+.mcar-track::-webkit-scrollbar{display:none}
+.mcar-slide{flex:0 0 100%; scroll-snap-align:center; scroll-snap-stop:always; min-width:0}
+.mcar-slide .media,.mcar-slide .media-off{margin-top:0; border-radius:0}
+.mcar-count{
+  position:absolute; top:10px; right:10px; z-index:2;
+  padding:3px 9px; border-radius:999px;
+  background:rgba(10,8,22,.62); color:#fff;
+  font-size:11.5px; font-weight:800;
+  -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
+  pointer-events:none;
+}
+.mcar-dots{display:flex; justify-content:center; gap:5px; margin-top:8px; pointer-events:none}
+.mcar-dots i{
+  width:5px; height:5px; border-radius:50%;
+  background:var(--ink-3); opacity:.38;
+  transition:opacity 200ms ease, transform 200ms ease, background-color 200ms ease;
+}
+.mcar-dots i.on{opacity:1; transform:scale(1.15); background:var(--ink-2)}
+
 /* ---------- media viewer: native long-press save + iroha viewer ---------- */
 /* Global iOS callouts are disabled elsewhere. Re-enable only revealed media and
    viewer media so long-press can still expose the OS save/share menu. */
@@ -3325,7 +3369,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='6.9';
+const APP_VER='7.0';
 
 
 /* =========================================================
@@ -3395,7 +3439,12 @@ function extFor(blob,name,kind){
 }
 async function cloudUploadMedia(m,{scope='post',chatId=null}={}){
   if(!CLOUD.enabled || !m) return m;
-  if(m.bucket&&m.path) return {kind:m.kind,bucket:m.bucket,path:m.path,name:m.name||'',dur:m.dur||0};
+  if(m.bucket&&m.path){
+    const out={kind:m.kind,bucket:m.bucket,path:m.path,name:m.name||'',dur:m.dur||0};
+    /* carried alongside, never inside the payload the DB checks */
+    if(validMediaWH(m.w,m.h)){ out._w=Number(m.w); out._h=Number(m.h); }
+    return out;
+  }
   if(!m.src || (!m.src.startsWith('blob:')&&!m.src.startsWith('data:'))) return m;
   /* Prefer the original selected File when available. This avoids depending on
      fetch(blob:) in iOS/PWA while an upload is starting after the composer closes. */
@@ -3407,9 +3456,9 @@ async function cloudUploadMedia(m,{scope='post',chatId=null}={}){
   const folder=isDm ? `${chatId}/${CLOUD.userId}` : `${CLOUD.userId}/${scope}`;
   const path=`${folder}/${id}.${ext}`;
   must(await CLOUD.client.storage.from(bucket).upload(path,blob,{contentType:blob.type||undefined,upsert:false}));
-  /* Remember the size locally so the feed can still reserve the right box. */
-  if(validMediaWH(m.w,m.h)) rememberFeedMediaGeometry(`${bucket}:${path}`,Number(m.w),Number(m.h));
-  return {kind:m.kind,bucket,path,name:m.name||'',dur:m.dur||0};
+  const out={kind:m.kind,bucket,path,name:m.name||'',dur:m.dur||0};
+  if(validMediaWH(m.w,m.h)){ out._w=Number(m.w); out._h=Number(m.h); }
+  return out;
 }
 async function cloudHydrateMedia(m){
   if(!m) return null;
@@ -3517,6 +3566,7 @@ async function cloudPaintPriorityHome(sb,me,posts){
       req:isPostRequested(row.id),rep:[],arch:!!row.archived,cloud:true,_priorityShell:true
     });
   }
+  await attachMediaLists('post', quick, p=>p.id);
   const remoteIds=new Set(quick.map(p=>p.id));
   const localOutbox=S.posts.filter(p=>(p.pending||p.failed)&&!remoteIds.has(p.id));
   S.posts=[...localOutbox,...quick].sort((a,b)=>b.ts-a.ts);
@@ -3594,7 +3644,7 @@ async function cloudHydrateDmMessageMedia(c,m){
 function dmLazyMediaHTML(m){
   if(!m?.media) return '';
   if(m.media.src || !m.media.bucket || !m.media.path){
-    return mediaHTML(m.media,{forceShow:!!m.me,dmStable:true});
+    return mediaGroupHTML(mediaListOf(m),{forceShow:!!m.me,dmStable:true});
   }
   const kind=['video','audio'].includes(m.media.kind)?m.media.kind:'image';
   const label=kind==='video'?'動画':kind==='audio'?'音声':'画像';
@@ -3613,7 +3663,7 @@ function syncDmMediaNode(row,m){
   if(!bub) return;
   const ph=bub.querySelector('[data-dm-media-placeholder]');
   if(m.media.src && ph){
-    const node=el(mediaHTML(m.media,{forceShow:!!m.me,dmStable:true}));
+    const node=el(mediaGroupHTML(mediaListOf(m),{forceShow:!!m.me,dmStable:true}));
     if(node){
       ph.replaceWith(node);
       const mediaEl=node.querySelector('img,video');
@@ -4009,12 +4059,16 @@ async function cloudFetchProfileReplies(uid){
     repsByPost.get(row.post_id).push(rr);
   }
 
+  await attachMediaLists('reply', [...repsByPost.values()].flat(), r=>r.id);
+
+  const freshOnes=[];
   for(const row of parents){
     const rep=repsByPost.get(row.id)||[];
     const fresh={id:row.id,u:localKey(row.author_id),t:row.body||'',tag:row.tag||'hitorigoto',
       media:await cloudHydrateMedia(row.media),ts:new Date(row.created_at).getTime(),
       likes:likesByPost.get(row.id)||0,replies:rep.length,liked:myPostLikes.has(row.id),
       req:isPostRequested(row.id),rep,arch:!!row.archived,cloud:true};
+    freshOnes.push(fresh);
     const existing=S.posts.find(p=>p.id===row.id);
     if(existing){
       const profileOnly=!!existing.profileOnly;
@@ -4025,6 +4079,7 @@ async function cloudFetchProfileReplies(uid){
       S.posts.push(fresh);
     }
   }
+  await attachMediaLists('post', freshOnes.map(f=>S.posts.find(p=>p.id===f.id)||f), p=>p.id);
   return profileReplies(uid);
 }
 
@@ -4091,6 +4146,7 @@ async function cloudRefreshPostReplies(p){
     });
   }
 
+  await attachMediaLists('reply', reps, r=>r.id);
   p.rep=reps;
   p.replies=reps.length;
   return reps;
@@ -4248,6 +4304,9 @@ async function cloudReloadAll(initial=false, applyPosts=true, earlyPaint=false){
     /* Home timeline is X-like: background sync may learn that the server changed,
        but the visible post snapshot only changes on initial load or manual refresh. */
     if(initial || applyPosts){
+    await attachMediaLists('post', remotePosts, p=>p.id);
+    await attachMediaLists('reply', remotePosts.flatMap(p=>p.rep||[]), r=>r.id);
+
       const remoteIds=new Set(remotePosts.map(p=>p.id));
       const localOutbox=S.posts.filter(p=>(p.pending||p.failed) && !remoteIds.has(p.id));
       S.posts=[...localOutbox,...remotePosts].sort((a,b)=>b.ts-a.ts);
@@ -4320,6 +4379,7 @@ async function cloudReloadAll(initial=false, applyPosts=true, earlyPaint=false){
         _dmLoadingOlder:false
       };
     });
+    await attachMediaLists('message', cloudChats.flatMap(c=>c.msgs||[]), m=>m.id);
     S.chats=cloudChats;
     scheduleDmWarmCacheSave();
 
@@ -4409,14 +4469,129 @@ function cloudStartRealtime(){
 
   CLOUD.channel=ch.subscribe();
 }
+
+/* =========================================================
+   MULTI MEDIA
+   Up to four attachments per post, reply or DM, stored one row
+   each in post_media / reply_media / message_media and ordered
+   by `position`. The parent's legacy `media` JSONB still holds
+   the first item, so an older build elsewhere keeps working.
+   ========================================================= */
+const MEDIA_MAX=4;
+
+/* Sizes travel next to the payload as _w/_h. posts_media_safe permits
+   exactly five keys, so they are stripped before anything is inserted. */
+function mediaPayload(m){
+  if(!m) return null;
+  const {_w,_h,...rest}=m;
+  return rest;
+}
+
+/* Everything downstream reads mediaListOf(). Keeping .media as the first
+   item means existing single-attachment code paths need no changes. */
+function mediaListOf(x){
+  if(!x) return [];
+  if(Array.isArray(x.mediaList)) return x.mediaList.filter(Boolean);
+  return x.media ? [x.media] : [];
+}
+function setMediaList(x,list){
+  const arr=(list||[]).filter(Boolean).slice(0,MEDIA_MAX);
+  x.mediaList=arr;
+  x.media=arr[0]||null;
+  return arr;
+}
+
+const MEDIA_CHILD={
+  post:   {table:'post_media',    fk:'post_id',    scope:'post'},
+  reply:  {table:'reply_media',   fk:'reply_id',   scope:'reply'},
+  message:{table:'message_media', fk:'message_id', scope:'dm'}
+};
+
+/* One query per parent kind, not one per parent. */
+async function cloudFetchMediaFor(kind, ids){
+  const spec=MEDIA_CHILD[kind];
+  if(!CLOUD.enabled||!spec||!ids?.length) return new Map();
+  const rows=await cloudRows(
+    CLOUD.client.from(spec.table).select('*').in(spec.fk, ids).order('position',{ascending:true})
+  );
+  const out=new Map();
+  for(const r of rows){
+    const m=await cloudHydrateMedia({
+      kind:r.kind, bucket:r.bucket, path:r.path,
+      name:r.name||'', dur:Number(r.duration)||0
+    });
+    if(!m) continue;
+    if(r.width&&r.height){ m.w=r.width; m.h=r.height; }
+    const key=r[spec.fk];
+    if(!out.has(key)) out.set(key,[]);
+    out.get(key).push(m);
+  }
+  return out;
+}
+
+/* Attach what was fetched, falling back to the legacy column for rows that
+   predate the migration. */
+function applyMediaList(target, fetched, id){
+  const rows=fetched && fetched.get(id);
+  if(rows && rows.length) setMediaList(target, rows);
+  else setMediaList(target, target.media?[target.media]:[]);
+  return target;
+}
+
+/* Fill in attachments for a batch of freshly hydrated parents. */
+async function attachMediaLists(kind, items, idOf){
+  const list=(items||[]).filter(Boolean);
+  if(!list.length) return list;
+  const ids=[...new Set(list.map(idOf).filter(Boolean))];
+  let fetched=new Map();
+  try{ fetched=await cloudFetchMediaFor(kind, ids); }
+  catch(e){ console.warn('[iroha media]',kind,e); }
+  for(const it of list) applyMediaList(it, fetched, idOf(it));
+  return list;
+}
+
+/* Write one child row per attachment. The parent must already exist: the
+   table's trigger checks the storage path against its author. */
+async function cloudSaveMediaList(kind, parentId, stored){
+  const spec=MEDIA_CHILD[kind];
+  if(!CLOUD.enabled||!spec) return [];
+  const items=(stored||[]).filter(Boolean).slice(0,MEDIA_MAX);
+  if(!items.length) return [];
+  const rows=items.map((m,i)=>({
+    [spec.fk]:parentId,
+    position:i,
+    kind:m.kind,
+    bucket:m.bucket,
+    path:m.path,
+    name:m.name||null,
+    width:Number.isFinite(Number(m._w))?Math.round(Number(m._w)):null,
+    height:Number.isFinite(Number(m._h))?Math.round(Number(m._h)):null,
+    duration:Number(m.dur)||null
+  }));
+  const q=await CLOUD.client.from(spec.table).insert(rows);
+  if(q.error) throw q.error;
+  return items;
+}
+
+/* Upload every attachment for one parent, in order. */
+async function cloudUploadAll(list, opts){
+  const out=[];
+  for(const it of (list||[]).filter(Boolean).slice(0,MEDIA_MAX)){
+    out.push(await cloudUploadMedia(it, opts));
+  }
+  return out;
+}
+
 async function cloudCreatePost(p){
   if(!CLOUD.enabled) return p;
-  const media=await cloudUploadMedia(p.media,{scope:'post'});
-  const r=await CLOUD.client.from('posts').insert({id:p.id,author_id:CLOUD.userId,body:p.t||'',tag:p.tag,media:media||null,archived:false}).select().single();
+  const stored=await cloudUploadAll(mediaListOf(p),{scope:'post'});
+  const r=await CLOUD.client.from('posts').insert({id:p.id,author_id:CLOUD.userId,body:p.t||'',tag:p.tag,media:mediaPayload(stored[0])||null,archived:false}).select().single();
   if(r.error) throw r.error;
   p.id=r.data.id;
   p.ts=r.data.created_at?new Date(r.data.created_at).getTime():p.ts;
-  p.media=await cloudHydrateMedia(media); p.cloud=true; return p;
+  await cloudSaveMediaList('post',p.id,stored);
+  setMediaList(p, await Promise.all(stored.map(m=>cloudHydrateMedia(mediaPayload(m)))));
+  p.cloud=true; return p;
 }
 async function cloudUpdatePost(p){
   if(!CLOUD.enabled||!p.cloud) return;
@@ -4430,12 +4605,14 @@ async function cloudSetPostLike(p){
 }
 async function cloudCreateReply(p,r){
   if(!CLOUD.enabled||!p.cloud) return r;
-  const media=await cloudUploadMedia(r.media,{scope:'reply'});
-  const q=await CLOUD.client.from('replies').insert({id:r.id,post_id:p.id,author_id:CLOUD.userId,body:r.t||'',reply_to:cloudKey(r.to)||null,media:media||null}).select().single();
+  const stored=await cloudUploadAll(mediaListOf(r),{scope:'reply'});
+  const q=await CLOUD.client.from('replies').insert({id:r.id,post_id:p.id,author_id:CLOUD.userId,body:r.t||'',reply_to:cloudKey(r.to)||null,media:mediaPayload(stored[0])||null}).select().single();
   if(q.error) throw q.error;
   r.id=q.data.id;
   r.ts=q.data.created_at?new Date(q.data.created_at).getTime():r.ts;
-  r.media=await cloudHydrateMedia(media); r.cloud=true; return r;
+  await cloudSaveMediaList('reply',r.id,stored);
+  setMediaList(r, await Promise.all(stored.map(m=>cloudHydrateMedia(mediaPayload(m)))));
+  r.cloud=true; return r;
 }
 async function cloudDeleteReply(r){
   if(!CLOUD.enabled||!r.cloud||!r.id) return;
@@ -4579,12 +4756,14 @@ async function cloudGetOrCreateChat(uid){
 }
 async function cloudSendMessage(c,m){
   if(!CLOUD.enabled||!c.cloud) return m;
-  const media=await cloudUploadMedia(m.media,{scope:'dm',chatId:c.id});
-  const q=await CLOUD.client.from('messages').insert({id:m.id,chat_id:c.id,sender_id:CLOUD.userId,body:m.sys?'':(m.t||''),system_text:m.sys?(m.t||''):null,media:media||null}).select().single();
+  const stored=await cloudUploadAll(mediaListOf(m),{scope:'dm',chatId:c.id});
+  const q=await CLOUD.client.from('messages').insert({id:m.id,chat_id:c.id,sender_id:CLOUD.userId,body:m.sys?'':(m.t||''),system_text:m.sys?(m.t||''):null,media:mediaPayload(stored[0])||null}).select().single();
   if(q.error) throw q.error;
   m.id=q.data.id;
   m.ts=q.data.created_at?new Date(q.data.created_at).getTime():m.ts;
-  m.media=await cloudHydrateMedia(media); m.cloud=true; return m;
+  await cloudSaveMediaList('message',m.id,stored);
+  setMediaList(m, await Promise.all(stored.map(x=>cloudHydrateMedia(mediaPayload(x)))));
+  m.cloud=true; return m;
 }
 async function cloudUnsendMessage(m){
   if(!CLOUD.enabled||!m.id) return;
@@ -5575,7 +5754,7 @@ function postCard(p, opts={}){
           <button class="p-more" data-more="${p.id}" aria-label="その他">${I.dots}</button>
         </div>
       <p class="p-body">${esc(p.t)}</p>
-      ${mediaHTML(p.media,{owner:p.u,loadPriority:opts.mediaPriority||'auto',feedStable:!!opts.feedStable,noVideoAdornment:!!opts.noVideoAdornment})}
+      ${mediaGroupHTML(mediaListOf(p),{owner:p.u,loadPriority:opts.mediaPriority||'auto',feedStable:!!opts.feedStable,noVideoAdornment:!!opts.noVideoAdornment})}
       ${tag?`<span class="tag ${tag.cls}">${tag.label}</span>`:''}
       ${p.arch?`<span class="tag tag-arch">アーカイブ</span>`:''}
       ${p.pending
@@ -6009,7 +6188,7 @@ function replyCard(entry,uid='me'){
     </div>
     <p class="reply-src">${I.reply}<span>${esc(honor(pu.name))}の投稿への返信</span></p>
     ${r.t?`<p class="p-body">${r.to&&S.users[r.to]?`<span class="mention">@${esc(S.users[r.to].handle)}</span> `:''}${esc(r.t)}</p>`:''}
-    ${mediaHTML(r.media,{owner:r.u})}
+    ${mediaGroupHTML(mediaListOf(r),{owner:r.u})}
     <div class="p-foot">
       <button class="act${r.liked?' liked':''}" data-replike-card="${post.id}:${entry.i}">
         <span class="hb">${I.heart}<span class="burst">${burstDots()}</span></span><span class="num">${r.likes}</span>
@@ -6870,7 +7049,7 @@ function pushPostDetail(pid){
           ${p.u==='me'?'':`<button class="talkbtn${p.req?' done':''}" data-talk="${p.id}">${I.reply}${p.req?'済み':'話す'}</button>`}
         </div>
         <p class="pd-body">${esc(p.t)}</p>
-        ${mediaHTML(p.media,{owner:p.u})}
+        ${mediaGroupHTML(mediaListOf(p),{owner:p.u})}
         ${TAGS[p.tag]?`<span class="tag ${TAGS[p.tag].cls}">${TAGS[p.tag].label}</span>`:''}
         ${p.arch?`<span class="tag tag-arch">アーカイブ</span>`:''}
         <div class="pd-stats">
@@ -6967,7 +7146,7 @@ function pushPostDetail(pid){
             <span data-ts="${r.ts}">${ago(r.ts)}</span>
             <button class="p-more" data-repmore="${p.id}:${i}" aria-label="その他">${I.dots}</button></div>
           ${r.t?`<p class="rep-body">${r.to&&S.users[r.to]?`<span class="mention">@${esc(S.users[r.to].handle)}</span> `:''}${esc(r.t)}</p>`:''}
-          ${mediaHTML(r.media,{owner:r.u})}
+          ${mediaGroupHTML(mediaListOf(r),{owner:r.u})}
           <div class="rep-foot">
             <button class="act" data-repreply="${i}">${I.reply}<span class="num">返信</span></button>
             <button class="act${r.liked?' liked':''}" data-replike="${i}">
@@ -7536,7 +7715,7 @@ function pushSettings(){
         if(p && pm){
           const old=pm.nextElementSibling;
           if(old && (old.classList.contains('media')||old.classList.contains('media-off')||old.classList.contains('aplayer'))) old.remove();
-          if(p.media) pm.insertAdjacentHTML('afterend', mediaHTML(p.media,{owner:p.u}));
+          if(mediaListOf(p).length) pm.insertAdjacentHTML('afterend', mediaGroupHTML(mediaListOf(p),{owner:p.u}));
         }
       }
     });
@@ -8222,28 +8401,37 @@ function openCropper(src, {aspect=1, round=false, out=512, title='切り抜き'}
 const MEDIA_LABEL={image:'画像', video:'動画', audio:'音声'};
 
 /* pick a file and hand back {kind, src, name} */
-function pickMedia(accept, cb){
-  const inp=el(`<input type="file" accept="${accept}" style="position:absolute;left:-9999px">`);
+/* One chosen file, described without waiting on anything slow. */
+function describePickedFile(f){
+  const kind = /^video\//.test(f.type) ? 'video' : /^audio\//.test(f.type) ? 'audio' : 'image';
+  /* Never block attachment selection on metadata decoding. Some iPhone photos
+     can leave an Image load pending for a long time; posting must still work. */
+  const media={kind,src:URL.createObjectURL(f),name:f.name};
+  /* Keep the source File as non-enumerable upload state. It never enters the
+     post JSON/DB payload, but cloudUploadMedia can use it directly. */
+  try{Object.defineProperty(media,'_file',{value:f,configurable:true});}catch(_){}
+  if(kind==='image'||kind==='video'){
+    pickedVisualGeometry(kind,media.src).then(g=>{
+      /* The caller keeps this same object reference, so dimensions can arrive
+         in the background without delaying the user's file selection. */
+      if(g){media.w=g.w;media.h=g.h;}
+    }).catch(()=>{});
+  }
+  return media;
+}
+
+/* multiple:true hands back an array; otherwise one item, as before. */
+function pickMedia(accept, cb, {multiple=false, max=MEDIA_MAX}={}){
+  const inp=el(`<input type="file" accept="${accept}"${multiple?' multiple':''} style="position:absolute;left:-9999px">`);
   document.body.appendChild(inp);
   inp.addEventListener('change',()=>{
-    const f=inp.files && inp.files[0];
+    const files=[...(inp.files||[])];
     inp.remove();
-    if(!f) return;
-    const kind = /^video\//.test(f.type) ? 'video' : /^audio\//.test(f.type) ? 'audio' : 'image';
-    /* Never block attachment selection on metadata decoding. Some iPhone photos
-       can leave an Image load pending for a long time; posting must still work. */
-    const media={kind,src:URL.createObjectURL(f),name:f.name};
-    /* Keep the source File as non-enumerable upload state. It never enters the
-       post JSON/DB payload, but cloudUploadMedia can use it directly. */
-    try{Object.defineProperty(media,'_file',{value:f,configurable:true});}catch(_){}
-    cb(media);
-    if(kind==='image'||kind==='video'){
-      pickedVisualGeometry(kind,media.src).then(g=>{
-        /* setAtt/post keep this same object reference, so dimensions can arrive
-           in the background without delaying the user's file selection. */
-        if(g){media.w=g.w;media.h=g.h;}
-      }).catch(()=>{});
-    }
+    if(!files.length) return;
+    if(!multiple){ cb(describePickedFile(files[0])); return; }
+    const picked=files.slice(0,max).map(describePickedFile);
+    if(files.length>max) toast(`${MEDIA_MAX}枚までです`);
+    cb(picked);
   });
   inp.click();
 }
@@ -8576,6 +8764,67 @@ function rememberDmMediaGeometryFromElement(m,mediaEl){
 
   if(ready()) measure();
   else mediaEl.addEventListener(mediaEl.tagName==='VIDEO'?'loadedmetadata':'load',measure,{once:true});
+}
+
+
+/* One attachment renders exactly as before. Several become a swipeable strip
+   with a dot per item, the way Instagram does it. */
+function mediaGroupHTML(list, opts={}){
+  const items=(list||[]).filter(Boolean);
+  if(!items.length) return '';
+  if(items.length===1) return mediaHTML(items[0],opts);
+
+  const slides=items.map((m,i)=>
+    `<div class="mcar-slide">${mediaHTML(m,{...opts,loadPriority:i===0?opts.loadPriority:'low'})}</div>`
+  ).join('');
+  const dots=items.map((_,i)=>`<i class="${i===0?'on':''}"></i>`).join('');
+
+  return `<div class="mcar" data-count="${items.length}">
+    <div class="mcar-track">${slides}</div>
+    <div class="mcar-count"><span class="mcar-now">1</span>/${items.length}</div>
+    <div class="mcar-dots">${dots}</div>
+  </div>`;
+}
+
+/* The track is a scroll-snap strip, so the browser handles the physics.
+   We only keep the dots and the counter honest. */
+function wireCarousels(root){
+  (root||document).querySelectorAll('.mcar:not([data-wired])').forEach(car=>{
+    car.dataset.wired='1';
+    const track=car.querySelector('.mcar-track');
+    const dots=[...car.querySelectorAll('.mcar-dots i')];
+    const now=car.querySelector('.mcar-now');
+    if(!track) return;
+    let pending=0;
+    track.addEventListener('scroll',()=>{
+      if(pending) return;
+      pending=requestAnimationFrame(()=>{
+        pending=0;
+        const i=Math.round(track.scrollLeft/Math.max(1,track.clientWidth));
+        dots.forEach((d,n)=>d.classList.toggle('on',n===i));
+        if(now) now.textContent=String(i+1);
+      });
+    },{passive:true});
+  });
+}
+
+/* Carousels turn up in the feed, post detail, profile and DM. Rather than
+   chase every render path, watch for them arriving. */
+let CAROUSEL_WATCH=null;
+function watchCarousels(){
+  if(CAROUSEL_WATCH) return;
+  CAROUSEL_WATCH=new MutationObserver(muts=>{
+    for(const mu of muts){
+      for(const node of mu.addedNodes){
+        if(node.nodeType!==1) continue;
+        if(node.classList?.contains('mcar')||node.querySelector?.('.mcar')){
+          wireCarousels(document);
+          return;
+        }
+      }
+    }
+  });
+  CAROUSEL_WATCH.observe(document.body,{childList:true,subtree:true});
 }
 
 function mediaHTML(m, opts={}){
@@ -9989,27 +10238,50 @@ function openCompose(){
   void m.offsetHeight;
   m.classList.add('on');
 
-  let tag='hitorigoto', att=null, sending=false;
+  let tag='hitorigoto', atts=[], sending=false;
   const ta=$('#cmText',m), go=$('#cmGo',m), attBox=$('#cmAtt',m);
-  const sync=()=>{ go.disabled = sending || (ta.value.trim().length===0 && !att); };
+  const sync=()=>{ go.disabled = sending || (ta.value.trim().length===0 && !atts.length); };
   ta.addEventListener('input',()=>{
     const n=[...ta.value].length;
     $('#cmCnt',m).textContent=n+'/140';
     sync();
   });
-  function setAtt(v){
-    att=v;
-    attBox.innerHTML = v ? `<div class="attpreview">
-        <button class="x" id="attX" aria-label="取り消す">${I.close}</button>${mediaHTML(v,{forceShow:true})}</div>` : '';
-    if(v) $('#attX',attBox).onclick=()=>{ haptic(6); stopAudio(); setAtt(null); };
-    $$('.attbtn',m).forEach(b=>b.disabled=!!v);
+
+  /* A voice note stands alone: mixing it with photos has no sensible layout. */
+  const hasAudio=()=>atts.some(a=>a.kind==='audio');
+
+  function paintAtts(){
+    attBox.innerHTML = atts.length
+      ? `<div class="attgrid">${atts.map((a,i)=>
+          `<div class="attpreview">
+             <button class="x" data-att-x="${i}" aria-label="取り消す">${I.close}</button>
+             ${mediaHTML(a,{forceShow:true})}
+           </div>`).join('')}</div>
+         ${atts.length>1?`<p class="atthint">${atts.length}枚 · 横にスワイプして見られます</p>`:''}`
+      : '';
+    attBox.querySelectorAll('[data-att-x]').forEach(b=>b.onclick=()=>{
+      haptic(6); stopAudio();
+      atts.splice(Number(b.dataset.attX),1);
+      paintAtts();
+    });
+    const full = atts.length>=MEDIA_MAX || hasAudio();
+    $$('.attbtn',m).forEach(b=>{
+      b.disabled = full || (b.dataset.att==='audio' && atts.length>0);
+    });
     sync(); fitBars(m);
+  }
+  function addAtts(v){
+    for(const it of (Array.isArray(v)?v:[v])){
+      if(!it || atts.length>=MEDIA_MAX) break;
+      atts.push(it);
+    }
+    paintAtts();
   }
   $$('.attbtn',m).forEach(b=>b.addEventListener('click',()=>{
     haptic(7);
     const k=b.dataset.att;
-    if(k==='audio') openRecorder(setAtt);
-    else pickMedia('image/*,video/*', setAtt);
+    if(k==='audio') openRecorder(addAtts);
+    else pickMedia('image/*,video/*', addAtts, {multiple:true, max:MEDIA_MAX-atts.length});
   }));
   $$('.tagopt',m).forEach(b=>b.addEventListener('click',()=>{
     haptic(6); tag=b.dataset.t;
@@ -10018,7 +10290,7 @@ function openCompose(){
   $('#cmNo',m).onclick=close;
   $('#cmGo',m).onclick=()=>{
     if(sending) return;
-    const t=ta.value.trim(); if(!t && !att) return;
+    const t=ta.value.trim(); if(!t && !atts.length) return;
 
     const left=categoryCooldownLeft(tag);
     if(left>0){
@@ -10031,8 +10303,9 @@ function openCompose(){
     sending=true; sync(); haptic(14);
     const cooldownStamp=startCategoryCooldown(tag);
 
-    const post={id:newRowId(), u:'me', t, tag, media:att, ts:Date.now(),
+    const post={id:newRowId(), u:'me', t, tag, ts:Date.now(),
       likes:0, replies:0, liked:false, req:false, rep:[], arch:false, pending:true};
+    setMediaList(post, atts);
     S.posts.unshift(post);
     const newId=post.id;
 
@@ -10487,6 +10760,7 @@ function openFirstSetup(prefill={}){
    ========================================================= */
 async function boot(){
   loadPrefs();
+  watchCarousels();
   S.posts.forEach(p=>{ p.req=isPostRequested(p.id); });
   if(S.users.me) S.users.me.dmPolicy=S.who;
   setTheme(S.theme,false);
