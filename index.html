@@ -3325,7 +3325,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='6.8';
+const APP_VER='6.9.8';
 
 
 /* =========================================================
@@ -3395,8 +3395,7 @@ function extFor(blob,name,kind){
 }
 async function cloudUploadMedia(m,{scope='post',chatId=null}={}){
   if(!CLOUD.enabled || !m) return m;
-  const postGeom=scope==='post'&&validMediaWH(m.w,m.h)?{w:Number(m.w),h:Number(m.h)}:{};
-  if(m.bucket&&m.path) return {kind:m.kind,bucket:m.bucket,path:m.path,name:m.name||'',dur:m.dur||0,...postGeom};
+  if(m.bucket&&m.path) return {kind:m.kind,bucket:m.bucket,path:m.path,name:m.name||'',dur:m.dur||0};
   if(!m.src || (!m.src.startsWith('blob:')&&!m.src.startsWith('data:'))) return m;
   /* Prefer the original selected File when available. This avoids depending on
      fetch(blob:) in iOS/PWA while an upload is starting after the composer closes. */
@@ -3408,7 +3407,9 @@ async function cloudUploadMedia(m,{scope='post',chatId=null}={}){
   const folder=isDm ? `${chatId}/${CLOUD.userId}` : `${CLOUD.userId}/${scope}`;
   const path=`${folder}/${id}.${ext}`;
   must(await CLOUD.client.storage.from(bucket).upload(path,blob,{contentType:blob.type||undefined,upsert:false}));
-  return {kind:m.kind,bucket,path,name:m.name||'',dur:m.dur||0,...postGeom};
+  /* Remember the size locally so the feed can still reserve the right box. */
+  if(validMediaWH(m.w,m.h)) rememberFeedMediaGeometry(`${bucket}:${path}`,Number(m.w),Number(m.h));
+  return {kind:m.kind,bucket,path,name:m.name||'',dur:m.dur||0};
 }
 async function cloudHydrateMedia(m){
   if(!m) return null;
