@@ -1460,31 +1460,63 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 .atthint{margin:8px 2px 0; font-size:12px; font-weight:600; color:var(--ink-3)}
 
-/* ---------- media carousel ---------- */
-.mcar{position:relative; margin-top:11px}
+/* ---------- Threads-like media strip ---------- */
+/*
+   One attachment keeps its real aspect ratio. Several attachments share one
+   visual height and sit in a horizontally scrollable strip with a fixed gap.
+   The browser owns the drag momentum, which feels much closer to Threads than
+   the old full-width, one-page-at-a-time carousel.
+*/
+.mcar{
+  position:relative; margin-top:11px; width:100%; max-width:100%; min-width:0;
+}
 .mcar-track{
-  display:flex; overflow-x:auto; scroll-snap-type:x mandatory;
+  --mcar-h:clamp(176px,48vw,210px);
+  display:flex; align-items:stretch; gap:8px;
+  width:100%; max-width:100%; min-width:0;
+  overflow-x:auto; overflow-y:hidden;
+  scroll-snap-type:x proximity; scroll-padding-inline:0 12px;
   scrollbar-width:none; -ms-overflow-style:none;
-  border-radius:16px; overscroll-behavior-x:contain;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-x:contain;
+  touch-action:pan-x pan-y;
+  padding:0 12px 2px 0;
 }
 .mcar-track::-webkit-scrollbar{display:none}
-.mcar-slide{flex:0 0 100%; scroll-snap-align:center; scroll-snap-stop:always; min-width:0}
-.mcar-slide .media,.mcar-slide .media-off{margin-top:0; border-radius:0}
-.mcar-count{
-  position:absolute; top:10px; right:10px; z-index:2;
-  padding:3px 9px; border-radius:999px;
-  background:rgba(10,8,22,.62); color:#fff;
-  font-size:11.5px; font-weight:800;
-  -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
-  pointer-events:none;
+.mcar-slide{
+  position:relative;
+  flex:0 0 auto;
+  height:var(--mcar-h);
+  width:auto;
+  aspect-ratio:var(--mcar-ratio,1);
+  min-width:118px;
+  max-width:min(82%,286px);
+  scroll-snap-align:start;
+  border-radius:16px;
+  overflow:hidden;
+  background:var(--card-2);
 }
-.mcar-dots{display:flex; justify-content:center; gap:5px; margin-top:8px; pointer-events:none}
-.mcar-dots i{
-  width:5px; height:5px; border-radius:50%;
-  background:var(--ink-3); opacity:.38;
-  transition:opacity 200ms ease, transform 200ms ease, background-color 200ms ease;
+.mcar-slide .media,.mcar-slide .media-off{
+  width:100% !important; max-width:none !important;
+  height:100% !important; max-height:none !important;
+  aspect-ratio:auto !important;
+  margin-top:0; border-radius:16px;
 }
-.mcar-dots i.on{opacity:1; transform:scale(1.15); background:var(--ink-2)}
+.mcar-slide .media img,.mcar-slide .media video{
+  width:100% !important; height:100% !important; max-height:none !important;
+  object-fit:cover !important;
+}
+/* Threads does not put pagination dots under the media. Keep the DOM for
+   compatibility, but make the strip itself the navigation affordance. */
+.mcar-count,.mcar-dots{display:none !important}
+
+/* DM uses the same arrangement, scaled to the bubble instead of the feed. */
+.bub .mcar{width:min(72vw,300px); max-width:100%; margin-top:0}
+.bub .mcar-track{--mcar-h:clamp(128px,34vw,162px); gap:7px; padding-right:10px}
+.bub .mcar-slide{min-width:96px; max-width:min(84%,218px); border-radius:14px}
+.bub .mcar-slide .media,.bub .mcar-slide .media-off{border-radius:14px}
+/* A single DM attachment may grow a little wider, but never beyond its bubble. */
+.bub > .media{max-width:min(72vw,280px)}
 
 /* ---------- media viewer: native long-press save + iroha viewer ---------- */
 /* Global iOS callouts are disabled elsewhere. Re-enable only revealed media and
@@ -3393,7 +3425,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='7.4';
+const APP_VER='7.5';
 
 
 /* =========================================================
@@ -8827,44 +8859,74 @@ function rememberDmMediaGeometryFromElement(m,mediaEl){
 }
 
 
-/* One attachment renders exactly as before. Several become a swipeable strip
-   with a dot per item, the way Instagram does it. */
+/* Threads-like attachment layout.
+   - one item: intrinsic aspect ratio, never wider than the post/bubble
+   - several: equal visual height, fixed gap, natural horizontal momentum
+*/
+function mediaStripRatio(m){
+  const g=feedMediaGeometry(m);
+  const raw=g&&validMediaWH(g.w,g.h)
+    ? Number(g.w)/Number(g.h)
+    : (m?.kind==='video'?16/9:4/3);
+  /* Very tall/wide files stay usable in a strip instead of becoming a hairline
+     or one enormous panorama. object-fit:cover handles only those extremes. */
+  return Math.max(.62,Math.min(1.85,Number.isFinite(raw)&&raw>0?raw:1));
+}
 function mediaGroupHTML(list, opts={}){
   const items=(list||[]).filter(Boolean);
   if(!items.length) return '';
-  if(items.length===1) return mediaHTML(items[0],opts);
 
-  const slides=items.map((m,i)=>
-    `<div class="mcar-slide">${mediaHTML(m,{...opts,loadPriority:i===0?opts.loadPriority:'low'})}</div>`
-  ).join('');
+  /* Outside DM, single media uses the same intrinsic sizing logic as Home.
+     It preserves the entire file and the inline max-width guarantees no overhang. */
+  if(items.length===1){
+    const oneOpts=opts.dmStable ? opts : {...opts,threadsLayout:true};
+    return mediaHTML(items[0],oneOpts);
+  }
+
+  const slides=items.map((m,i)=>{
+    const ratio=mediaStripRatio(m).toFixed(4);
+    /* Gallery dimensions come from the slide, so DM's old per-file box sizing
+       must not fight the shared-height layout. */
+    const itemOpts={...opts,dmStable:false,threadsLayout:!opts.feedStable,
+      loadPriority:i===0?opts.loadPriority:'low'};
+    return `<div class="mcar-slide" style="--mcar-ratio:${ratio}">${mediaHTML(m,itemOpts)}</div>`;
+  }).join('');
   const dots=items.map((_,i)=>`<i class="${i===0?'on':''}"></i>`).join('');
 
-  return `<div class="mcar" data-count="${items.length}">
+  return `<div class="mcar${opts.dmStable?' mcar-dm':''}" data-count="${items.length}">
     <div class="mcar-track">${slides}</div>
     <div class="mcar-count"><span class="mcar-now">1</span>/${items.length}</div>
     <div class="mcar-dots">${dots}</div>
   </div>`;
 }
 
-/* The track is a scroll-snap strip, so the browser handles the physics.
-   We only keep the dots and the counter honest. */
+/* The counter is hidden in the Threads presentation, but keep its state correct
+   for accessibility/future UI. Variable-width slides require measuring the
+   nearest slide instead of dividing by the viewport width. */
 function wireCarousels(root){
   (root||document).querySelectorAll('.mcar:not([data-wired])').forEach(car=>{
     car.dataset.wired='1';
     const track=car.querySelector('.mcar-track');
+    const slides=[...car.querySelectorAll('.mcar-slide')];
     const dots=[...car.querySelectorAll('.mcar-dots i')];
     const now=car.querySelector('.mcar-now');
-    if(!track) return;
+    if(!track||!slides.length) return;
     let pending=0;
+    const sync=()=>{
+      let best=0,dist=Infinity;
+      const x=track.scrollLeft;
+      slides.forEach((sl,i)=>{
+        const d=Math.abs(sl.offsetLeft-track.offsetLeft-x);
+        if(d<dist){dist=d;best=i;}
+      });
+      dots.forEach((d,n)=>d.classList.toggle('on',n===best));
+      if(now) now.textContent=String(best+1);
+    };
     track.addEventListener('scroll',()=>{
       if(pending) return;
-      pending=requestAnimationFrame(()=>{
-        pending=0;
-        const i=Math.round(track.scrollLeft/Math.max(1,track.clientWidth));
-        dots.forEach((d,n)=>d.classList.toggle('on',n===i));
-        if(now) now.textContent=String(i+1);
-      });
+      pending=requestAnimationFrame(()=>{pending=0;sync();});
     },{passive:true});
+    sync();
   });
 }
 
@@ -8919,10 +8981,13 @@ function mediaHTML(m, opts={}){
       ? ' loading="lazy" fetchpriority="low"'
       : '';
   const videoPreload=loadPriority==='low'?'none':'metadata';
-  const feedBox=opts.feedStable ? feedMediaBoxStyle(m) : null;
-  const feedBoxStyle=feedBox ? ` style="${feedBox.style}"` : '';
-  const feedClass=feedBox ? ' feed-media-stable' : '';
-  const feedData=feedBox ? ` data-feed-media-key="${encodeURIComponent(feedBox.key)}"` : '';
+  /* Layout-stable sizing is also used by Threads-style single attachments.
+     Only real feedStable enables feed autoplay/sound behavior. */
+  const layoutBox=(opts.feedStable||opts.threadsLayout) ? feedMediaBoxStyle(m) : null;
+  const feedBox=opts.feedStable ? layoutBox : null;
+  const feedBoxStyle=layoutBox ? ` style="${layoutBox.style}"` : '';
+  const feedClass=layoutBox ? ' feed-media-stable' : '';
+  const feedData=layoutBox ? ` data-feed-media-key="${encodeURIComponent(layoutBox.key)}"` : '';
   const feedPoster=feedBox&&m.kind==='video' ? feedVideoPoster(feedBox.key) : '';
 
   /* DM media display box is local-only and never changes messages.media or upload payloads. */
@@ -8933,7 +8998,7 @@ function mediaHTML(m, opts={}){
   const dmMediaStyle=dmGeom
     ? ' style="width:100%;height:100%;max-height:none;object-fit:cover"'
     : '';
-  const feedMediaStyle=feedBox&&!dmGeom ? ' style="width:100%;height:100%;max-height:none;object-fit:contain"' : '';
+  const feedMediaStyle=layoutBox&&!dmGeom ? ' style="width:100%;height:100%;max-height:none;object-fit:contain"' : '';
   const mediaStyle=dmMediaStyle||feedMediaStyle;
   const posterAttr=feedPoster?` poster="${escAttr(feedPoster)}"`:'';
   const crossAttr=feedBox?' crossorigin="anonymous"':'';
