@@ -1505,7 +1505,22 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   backdrop-filter:blur(22px) saturate(1.08);
 }
 .screen.media-viewer-screen.in{transform:none;opacity:1}
-.screen.media-viewer-screen.out{transform:none;opacity:0;pointer-events:none}
+.screen.media-viewer-screen.is-closing,
+.screen.media-viewer-screen.is-closing *{
+  pointer-events:none !important;
+  touch-action:auto !important;
+}
+.screen.media-viewer-screen.out{
+  transform:none; opacity:0;
+  /* nothing inside a leaving viewer may take a touch */
+  pointer-events:none !important;
+  touch-action:auto !important;
+  visibility:hidden;
+}
+.screen.media-viewer-screen.out *{
+  pointer-events:none !important;
+  touch-action:auto !important;
+}
 .media-viewer-screen .media-viewer-nav{
   background:linear-gradient(to bottom,
     color-mix(in srgb,var(--bg) 94%,transparent),
@@ -3371,7 +3386,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='7.1';
+const APP_VER='7.2';
 
 
 /* =========================================================
@@ -8355,7 +8370,7 @@ function openCropper(src, {aspect=1, round=false, out=512, title='切り抜き'}
   const pts=new Map();
   let startX=0, startY=0, startZ=1, pinch0=0;
   stage.addEventListener('pointerdown',e=>{
-    stage.setPointerCapture(e.pointerId);
+    captureViewerPointer(stage,e.pointerId);
     pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(pts.size===1){ startX=e.clientX-x; startY=e.clientY-y; }
     if(pts.size===2){ pinch0=dist(); startZ=z; }
@@ -8369,7 +8384,7 @@ function openCropper(src, {aspect=1, round=false, out=512, title='切り抜き'}
       zoom.value=Math.round(z*100); apply();
     }
   });
-  const drop=e=>{ pts.delete(e.pointerId); if(pts.size<2) pinch0=0;
+  const drop=e=>{ pts.delete(e.pointerId); uncaptureViewerPointer(stage,e.pointerId); if(pts.size<2) pinch0=0;
     if(pts.size===1){ const p=[...pts.values()][0]; startX=p.x-x; startY=p.y-y; } };
   stage.addEventListener('pointerup',drop);
   stage.addEventListener('pointercancel',drop);
@@ -9267,7 +9282,7 @@ function initIrohaImageViewerGestures(s,stage,card,wrap,onDismiss){
       s.classList.add('image-zooming');
       chrome(false);
     }
-    try{wrap.setPointerCapture(e.pointerId);}catch(_){}
+    captureViewerPointer(wrap,e.pointerId);
   };
 
   const move=e=>{
@@ -9308,7 +9323,7 @@ function initIrohaImageViewerGestures(s,stage,card,wrap,onDismiss){
 
   const up=e=>{
     if(!pts.has(e.pointerId)) return;
-    pts.delete(e.pointerId);
+    pts.delete(e.pointerId); uncaptureViewerPointer(wrap,e.pointerId);
 
     if(mode==='pinch'){
       if(pts.size===1){
@@ -9369,7 +9384,7 @@ function initIrohaImageViewerGestures(s,stage,card,wrap,onDismiss){
   wrap.addEventListener('pointermove',move,{passive:false});
   wrap.addEventListener('pointerup',up);
   wrap.addEventListener('pointercancel',e=>{
-    pts.delete(e.pointerId);
+    pts.delete(e.pointerId); uncaptureViewerPointer(wrap,e.pointerId);
     if(!pts.size) reset(true);
   });
 
@@ -9379,8 +9394,33 @@ function initIrohaImageViewerGestures(s,stage,card,wrap,onDismiss){
     active:()=>mode==='pinch'||mode==='pan'||mode==='dismiss'
   };
 }
+
+/* Pointer capture survives an element going invisible, so release it by hand
+   before a viewer starts leaving. */
+function releaseViewerPointers(scope){
+  if(!scope) return;
+  scope.querySelectorAll('[data-captured]').forEach(node=>{
+    String(node.dataset.captured||'').split(',').filter(Boolean).forEach(id=>{
+      try{ node.releasePointerCapture(Number(id)); }catch(_){}
+    });
+    delete node.dataset.captured;
+  });
+}
+
+/* Capture, remembering the id so it can always be given back. */
+function captureViewerPointer(node,id){
+  try{ node.setPointerCapture(id); }catch(_){ return; }
+  const have=String(node.dataset.captured||'').split(',').filter(Boolean);
+  if(!have.includes(String(id))) have.push(String(id));
+  node.dataset.captured=have.join(',');
+}
+function uncaptureViewerPointer(node,id){
+  const have=String(node.dataset.captured||'').split(',').filter(x=>x&&x!==String(id));
+  if(have.length) node.dataset.captured=have.join(','); else delete node.dataset.captured;
+}
+
 function openMediaViewer(src,kind,originEl=null){
-  if(document.querySelector('.media-viewer-screen')) return;
+  if(document.querySelector('.media-viewer-screen:not(.is-closing)')) return;
   const safeSrc=safeAssetUrl(src,{allowLocal:true});
   kind=kind==='video'?'video':'image';
   if(!safeSrc) return;
@@ -9426,7 +9466,13 @@ function openMediaViewer(src,kind,originEl=null){
   let closing=false, dragY=0, dragAxis='', dragStartX=0, dragStartY=0;
 
   const fit=()=>layoutMediaViewerCard(stage,card,media,fallbackRatio);
-  const finishClose=()=>{ if(s.isConnected) pop(); };
+  const finishClose=()=>{
+    if(!s.isConnected) return;
+    pop();
+    /* Belt and braces: if the leave transition never reports back, the inert
+       layer still goes away rather than lingering over the page. */
+    setTimeout(()=>{ if(s.isConnected) s.remove(); }, 700);
+  };
   const close=({drag=false,imageGesture=false}={})=>{
     if(closing) return;
     closing=true;
@@ -9435,6 +9481,11 @@ function openMediaViewer(src,kind,originEl=null){
     if(imageGesture){ haptic(5); finishClose(); return; }
     if(imageGestures) imageGestures.reset(true);
     haptic(5);
+    /* Let go of anything the gesture layer still holds. A captured pointer
+       keeps delivering to the old element even after it stops being visible,
+       which is what left the page unable to scroll for a moment. */
+    releaseViewerPointers(s);
+    s.classList.add('is-closing');
     s.style.pointerEvents='none';
     const nav=s.querySelector('.media-viewer-nav');
     if(nav) nav.style.opacity='0';
