@@ -1199,6 +1199,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 .dm-media-btn svg,.dm-mic-btn svg{width:22px;height:22px}
 .dm-media-btn:active,.dm-mic-btn:active{transform:scale(.88);background:var(--line-soft)}
+.dm-media-btn[disabled],.dm-mic-btn[disabled]{opacity:.35; pointer-events:none}
 
 /* DM: selected attachment sits above the text bar as a compact preview. */
 .dm-composer-bar{
@@ -1206,6 +1207,12 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 .dm-att-slot:empty{display:none}
 .dm-att-slot{padding:0 4px}
+.dm-att-row{
+  display:flex; gap:10px; align-items:flex-start;
+  overflow-x:auto; scrollbar-width:none; padding:7px 3px 3px;
+}
+.dm-att-row::-webkit-scrollbar{display:none}
+.dm-att-row .dm-att-preview{flex:0 0 auto}
 .dm-att-preview{
   position:relative; width:max-content; max-width:100%;
   margin:0;
@@ -3386,7 +3393,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='7.3';
+const APP_VER='7.4';
 
 
 /* =========================================================
@@ -6621,37 +6628,57 @@ function pushThread(cid){
   paintThread(th,c,{reuse:true});
 
   const inp=$('#msgIn',s), send=$('#sendBtn',s), dmAttBox=$('#dmAtt',s);
-  let dmAtt=null;
+  let dmAtts=[];
   const autoGrow=()=>{ inp.style.height='auto'; inp.style.height=Math.min(inp.scrollHeight,120)+'px';
-    send.classList.toggle('live', inp.value.trim().length>0 || !!dmAtt); };
-  function setDmAtt(v){
-    dmAtt=v;
-    if(!v){
-      dmAttBox.innerHTML='';
-    }else{
-      const preview = v.kind==='audio'
-        ? mediaHTML(v,{forceShow:true})
-        : `<div class="dm-att-thumb">${v.kind==='video'
-            ? `<video src="${v.src}" muted playsinline preload="metadata"></video>`
-            : `<img src="${v.src}" alt="選択中の画像">`}</div>`;
-      dmAttBox.innerHTML=`<div class="dm-att-preview">
-        <button class="dm-att-x" id="dmAttX" aria-label="取り消す">${I.close}</button>${preview}
-      </div>`;
-      $('#dmAttX',dmAttBox).onclick=()=>{ haptic(6); stopAudio(); setDmAtt(null); };
-    }
+    send.classList.toggle('live', inp.value.trim().length>0 || dmAtts.length>0); };
+
+  /* A voice note stands alone, exactly as in the post composer. */
+  const dmHasAudio=()=>dmAtts.some(a=>a.kind==='audio');
+
+  function paintDmAtts(){
+    dmAttBox.innerHTML = dmAtts.length
+      ? `<div class="dm-att-row">${dmAtts.map((v,i)=>{
+          const preview = v.kind==='audio'
+            ? mediaHTML(v,{forceShow:true})
+            : `<div class="dm-att-thumb">${v.kind==='video'
+                ? `<video src="${v.src}" muted playsinline preload="metadata"></video>`
+                : `<img src="${v.src}" alt="選択中の画像">`}</div>`;
+          return `<div class="dm-att-preview">
+            <button class="dm-att-x" data-dm-att-x="${i}" aria-label="取り消す">${I.close}</button>${preview}
+          </div>`;
+        }).join('')}</div>`
+      : '';
+    dmAttBox.querySelectorAll('[data-dm-att-x]').forEach(b=>b.onclick=()=>{
+      haptic(6); stopAudio();
+      dmAtts.splice(Number(b.dataset.dmAttX),1);
+      paintDmAtts();
+    });
+    const full = dmAtts.length>=MEDIA_MAX || dmHasAudio();
+    const media=$('#dmMedia',s), audio=$('#dmAudio',s);
+    if(media) media.disabled=full;
+    if(audio) audio.disabled=full || dmAtts.length>0;
     autoGrow(); fitBars(s);
   }
+  function addDmAtts(v){
+    for(const it of (Array.isArray(v)?v:[v])){
+      if(!it || dmAtts.length>=MEDIA_MAX) break;
+      dmAtts.push(it);
+    }
+    paintDmAtts();
+  }
+  const setDmAtt=v=>{ dmAtts = v ? (Array.isArray(v)?v.slice(0,MEDIA_MAX):[v]) : []; paintDmAtts(); };
+
   $('#dmMedia',s).onclick=()=>{
     haptic(7);
     if(!favoredBy(c.u)){
       toast('お気に入りされてないので送信できません');
       return;
     }
-    pickMedia('image/*,video/*', setDmAtt);
+    pickMedia('image/*,video/*', addDmAtts, {multiple:true, max:MEDIA_MAX-dmAtts.length});
   };
   $('#dmAudio',s).onclick=()=>{
     haptic(7);
-    openRecorder(setDmAtt);
+    openRecorder(addDmAtts);
   };
   inp.addEventListener('input',autoGrow);
   inp.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();fire();} });
@@ -6659,17 +6686,18 @@ function pushThread(cid){
   { const mini=$('#repSendMini',s); if(mini) mini.onclick=fire; }
 
   function fire(){
-    const t=inp.value.trim(), picked=dmAtt;
-    if(!t && !picked) return;
+    const t=inp.value.trim(), picked=dmAtts.slice();
+    if(!t && !picked.length) return;
     if(!canSendDmNow(c)){ notifyDmWait(); return; }
-    if(picked && (picked.kind==='image'||picked.kind==='video') && !favoredBy(c.u)){
+    if(picked.some(p=>p.kind==='image'||p.kind==='video') && !favoredBy(c.u)){
       toast('お気に入りされてないので送信できません');
       return;
     }
 
     /* Commit locally first. The same text/media is impossible to submit twice
        because the composer is cleared before any await/network work starts. */
-    const m={id:newRowId(),me:true,t,media:picked,ts:Date.now(),pending:true};
+    const m={id:newRowId(),me:true,t,ts:Date.now(),pending:true};
+    setMediaList(m, picked);
     haptic(9);
     c.msgs.push(m); c.ts=m.ts;
     inp.value=''; setDmAtt(null); autoGrow();
