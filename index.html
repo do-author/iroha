@@ -1390,14 +1390,14 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
   position:relative; margin-top:11px; border-radius:16px; overflow:hidden;
   background:var(--card-2); border:1px solid var(--line-soft);
 }
-.media img,.media video{display:block; width:100%; max-height:340px; object-fit:cover; background:#000}
+.media img,.media video{display:block; width:100%; max-height:340px; object-fit:cover; background:var(--card-2)}
 /* Home feed media reserves its final box before the asset finishes loading.
    This prevents image/video metadata from repeatedly changing card height. */
 .media.feed-media-stable{
-  overflow:hidden; background:#000;
+  overflow:hidden; background:var(--card-2);
 }
 .media.feed-media-stable img,.media.feed-media-stable video{
-  width:100%; height:100%; max-height:none; object-fit:contain; background:#000;
+  width:100%; height:100%; max-height:none; object-fit:contain; background:transparent;
 }
 .media.blurred img,.media.blurred video{filter:blur(26px) saturate(.7); transform:scale(1.08)}
 /* iOS Safari can let a native <video> consume the tap before the post-card
@@ -1677,10 +1677,12 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 /* v5.0: unloaded DM media keeps a lightweight box until it nears the viewport. */
 .dm-media-lazy{
   width:230px; max-width:100%; height:156px;
+  border-radius:16px;
   display:grid; place-items:center;
   background:var(--card-2); border:1px solid var(--line-soft);
   color:var(--muted); font-size:12px;
 }
+.dm-media-lazy[style*="aspect-ratio"]{height:auto}
 .dm-media-lazy-video{height:132px}
 .dm-media-lazy-audio{height:52px; border-radius:14px}
 
@@ -3369,7 +3371,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='7.0';
+const APP_VER='7.1';
 
 
 /* =========================================================
@@ -8550,9 +8552,20 @@ function wireFeedMediaStability(root){
       const w=node.tagName==='VIDEO'?node.videoWidth:node.naturalWidth;
       const h=node.tagName==='VIDEO'?node.videoHeight:node.naturalHeight;
       rememberFeedMediaGeometry(key,w,h);
+      /* Remembering alone only helps the next render. The box on screen right
+         now was reserved from a guess, so correct it here or the card visibly
+         jumps the moment the picture paints. */
+      if(!validMediaWH(w,h)) return;
+      if(box.dataset.feedMediaSized==='1') return;
+      box.dataset.feedMediaSized='1';
+      box.style.maxWidth=`${Math.max(80,Math.min(2400,340*(w/h))).toFixed(2)}px`;
+      box.style.aspectRatio=`${w} / ${h}`;
     };
     if(node.tagName==='IMG'){
-      if(node.complete&&node.naturalWidth) storeSize(); else node.addEventListener('load',storeSize,{once:true});
+      if(node.complete&&node.naturalWidth) storeSize();
+      else{
+        node.addEventListener('load',storeSize,{once:true});
+      }
       return;
     }
     if(node.readyState>=1&&node.videoWidth) storeSize(); else node.addEventListener('loadedmetadata',storeSize,{once:true});
@@ -8710,6 +8723,10 @@ function dmMediaGeometryKey(m){
   return `${m.bucket}:${m.path}`;
 }
 function dmMediaGeometry(m){
+  /* The size stored with the message wins: it is there for everyone, not just
+     the device that uploaded it. The local cache is only a fallback. */
+  const mw=Number(m&&m.w)||0, mh=Number(m&&m.h)||0;
+  if(validMediaWH(mw,mh)) return {w:mw,h:mh};
   const key=dmMediaGeometryKey(m);
   if(!key) return null;
   const v=DM_MEDIA_GEOMETRY[key];
