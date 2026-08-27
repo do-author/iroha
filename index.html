@@ -3386,7 +3386,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='7.2';
+const APP_VER='7.3';
 
 
 /* =========================================================
@@ -9487,6 +9487,10 @@ function openMediaViewer(src,kind,originEl=null){
     releaseViewerPointers(s);
     s.classList.add('is-closing');
     s.style.pointerEvents='none';
+    /* The fade is nice, but it must never cost the page its scroll. Once the
+       animation has had its moment, take the layer out of hit-testing for
+       good rather than waiting on removal. */
+    setTimeout(()=>{ if(s.isConnected) s.style.display='none'; },240);
     const nav=s.querySelector('.media-viewer-nav');
     if(nav) nav.style.opacity='0';
 
@@ -10948,7 +10952,24 @@ document.addEventListener('keydown',e=>{
 
 /* prevent iOS rubber-band on the shell */
 document.addEventListener('touchmove',e=>{
-  if(!e.target.closest('.scroll,.thread,.chiprow,textarea')) e.preventDefault();
+  const t=e.target;
+  if(t.closest('.scroll,.thread,.chiprow,textarea')) return;
+
+  /* A viewer that is on its way out is inert, but the finger may well have
+     landed on it. Judging by that element would refuse the gesture outright
+     and leave the page feeling stuck until the layer is finally removed;
+     defer to whatever is actually underneath instead. */
+  const leaving=t.closest('.is-closing,.media-viewer-screen.out,.screen.out');
+  if(leaving){
+    const touch=e.touches&&e.touches[0];
+    const under=touch
+      ? document.elementsFromPoint(touch.clientX,touch.clientY)
+          .find(n=>!n.closest('.is-closing,.media-viewer-screen.out,.screen.out'))
+      : null;
+    if(under && under.closest('.scroll,.thread,.chiprow,textarea')) return;
+  }
+
+  e.preventDefault();
 },{passive:false});
 
 boot();
