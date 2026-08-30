@@ -1625,9 +1625,9 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .media-viewer-image-zoom.settling{
   transition:transform 320ms cubic-bezier(.22,1,.36,1);
 }
-.media-viewer-card.is-image{overflow:visible}
+.media-viewer-card.is-image{overflow:visible;background:transparent;box-shadow:none}
 .media-viewer-card.is-image.image-gesture-dismissing{background:transparent;box-shadow:none}
-.media-viewer-card.is-image .media-viewer-image{border-radius:inherit}
+.media-viewer-card.is-image .media-viewer-image{border-radius:inherit;background:transparent}
 .media-viewer-card.is-dragging{box-shadow:0 12px 34px rgba(0,0,0,.20)}
 /* A temporary neighbour is laid beside the active card while a gallery swipe
    is in flight. It is real media, not a screenshot, so the transition stays
@@ -3513,7 +3513,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='8.1';
+const APP_VER='8.2';
 
 
 /* =========================================================
@@ -9706,6 +9706,7 @@ function initMediaViewerImageGallery(s,stage,card,media,gallery,onChange){
   let index=gallery.index;
   let neighbour=null, neighbourMedia=null, neighbourIndex=-1;
   let lastDx=0, animating=false, settleTimer=0;
+  let lastRawDx=0, lastMoveAt=0, swipeVelocity=0;
   const nav=s.querySelector('.media-viewer-nav');
   const title=s.querySelector('.media-viewer-nav .ttl');
 
@@ -9755,6 +9756,13 @@ function initMediaViewerImageGallery(s,stage,card,media,gallery,onChange){
 
   const move=rawDx=>{
     if(animating) return;
+    const now=performance.now();
+    if(lastMoveAt){
+      const dt=Math.max(4,now-lastMoveAt);
+      const instant=(rawDx-lastRawDx)/dt;
+      swipeVelocity=swipeVelocity*.64+instant*.36;
+    }
+    lastRawDx=rawDx; lastMoveAt=now;
     let dx=rawDx;
     const target=targetForDx(dx);
     const valid=target>=0&&target<gallery.items.length;
@@ -9773,20 +9781,22 @@ function initMediaViewerImageGallery(s,stage,card,media,gallery,onChange){
 
   const settleBack=()=>{
     animating=true;
-    card.style.transition='transform 280ms cubic-bezier(.22,1,.36,1)';
+    const dur=380;
+    const ease='cubic-bezier(.18,.72,.16,1)';
+    card.style.transition=`transform ${dur}ms ${ease}`;
     card.style.transform='translate3d(0,0,0)';
     if(neighbour){
       const start=neighbourIndex>index?travel():-travel();
-      neighbour.style.transition='transform 280ms cubic-bezier(.22,1,.36,1)';
+      neighbour.style.transition=`transform ${dur}ms ${ease}`;
       neighbour.style.transform=`translate3d(${start}px,0,0)`;
     }
     clearTimeout(settleTimer);
     settleTimer=setTimeout(()=>{
-      animating=false; lastDx=0; removeNeighbour();
+      animating=false; lastDx=0; lastRawDx=0; lastMoveAt=0; swipeVelocity=0; removeNeighbour();
       card.classList.remove('media-viewer-gallery-sliding');
       card.style.transition=''; card.style.transform='';
       if(nav){ nav.style.transition='opacity 180ms ease'; nav.style.opacity='1'; nav.style.pointerEvents=''; }
-    },295);
+    },dur+18);
   };
 
   const commit=target=>{
@@ -9795,9 +9805,13 @@ function initMediaViewerImageGallery(s,stage,card,media,gallery,onChange){
     animating=true;
     const dir=target>index?1:-1;
     const dist=travel();
-    card.style.transition='transform 285ms cubic-bezier(.22,1,.36,1)';
+    const remaining=Math.max(0,dist-Math.min(dist,Math.abs(lastDx)));
+    const speed=Math.abs(swipeVelocity);
+    const dur=Math.round(Math.max(330,Math.min(500,440-speed*70+(remaining/dist)*55)));
+    const ease='cubic-bezier(.18,.72,.16,1)';
+    card.style.transition=`transform ${dur}ms ${ease}`;
     card.style.transform=`translate3d(${-dir*dist}px,0,0)`;
-    n.style.transition='transform 285ms cubic-bezier(.22,1,.36,1)';
+    n.style.transition=`transform ${dur}ms ${ease}`;
     n.style.transform='translate3d(0,0,0)';
 
     clearTimeout(settleTimer);
@@ -9819,7 +9833,7 @@ function initMediaViewerImageGallery(s,stage,card,media,gallery,onChange){
         requestAnimationFrame(()=>{
           card.style.opacity='1';
           removeNeighbour();
-          animating=false; lastDx=0;
+          animating=false; lastDx=0; lastRawDx=0; lastMoveAt=0; swipeVelocity=0;
           card.classList.remove('media-viewer-gallery-sliding');
           card.style.transition=''; card.style.transform='';
           if(nav){ nav.style.transition='opacity 180ms ease'; nav.style.opacity='1'; nav.style.pointerEvents=''; }
@@ -9830,7 +9844,7 @@ function initMediaViewerImageGallery(s,stage,card,media,gallery,onChange){
         media.addEventListener('load',reveal,{once:true});
         setTimeout(reveal,420);
       }
-    },292);
+    },dur+8);
     return true;
   };
 
@@ -9849,7 +9863,7 @@ function initMediaViewerImageGallery(s,stage,card,media,gallery,onChange){
     if(Math.abs(lastDx)<.5&&!neighbour) return;
     if(animate) settleBack();
     else{
-      clearTimeout(settleTimer); removeNeighbour(); lastDx=0;
+      clearTimeout(settleTimer); removeNeighbour(); lastDx=0; lastRawDx=0; lastMoveAt=0; swipeVelocity=0;
       card.classList.remove('media-viewer-gallery-sliding');
       card.style.transition=''; card.style.transform='';
     }
