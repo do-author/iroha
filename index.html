@@ -3417,10 +3417,89 @@ html[data-theme="night"] body,
   contain:layout paint;
 }
 
+
+
+/* ============================================================
+   v8.1 — minimal branded loading screen
+   ============================================================ */
+.app-loader{
+  position:absolute; inset:0; z-index:260;
+  display:flex; align-items:center; justify-content:center;
+  padding:28px;
+  background:var(--bg);
+  opacity:0; visibility:hidden; pointer-events:none;
+  transition:opacity 220ms var(--ease-out), visibility 0s linear 220ms,
+             background-color var(--dur-3) var(--ease-out);
+  overflow:hidden;
+}
+.app-loader::before{
+  content:""; position:absolute; left:50%; top:50%;
+  width:220px; height:220px; border-radius:50%;
+  transform:translate(-50%,-52%);
+  background:radial-gradient(circle, color-mix(in srgb,var(--accent) 10%,transparent) 0%, transparent 68%);
+  opacity:.72; pointer-events:none;
+}
+.app-loader.on{
+  opacity:1; visibility:visible; pointer-events:auto;
+  transition:opacity 220ms var(--ease-out), visibility 0s;
+}
+.app-loader-card{
+  position:relative; z-index:1;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  width:min(74vw,230px);
+  color:var(--ink);
+}
+.app-loader-mark{
+  font-family:"Snell Roundhand","Segoe Script","Brush Script MT",cursive;
+  font-size:38px; font-weight:600; letter-spacing:.01em; line-height:1;
+  margin:0 0 24px;
+  transform:translateY(0);
+  animation:appLoaderLogo 2.1s var(--ease-out) infinite alternate;
+}
+.app-loader-line{
+  position:relative; width:104px; height:2px;
+  border-radius:999px; overflow:hidden;
+  background:var(--line-soft);
+}
+.app-loader-line::after{
+  content:""; position:absolute; top:0; bottom:0; width:46%;
+  border-radius:inherit;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  transform:translateX(-130%);
+  animation:appLoaderFlow 1.25s cubic-bezier(.4,0,.2,1) infinite;
+}
+.app-loader-text{
+  margin-top:15px; min-height:1.4em;
+  color:var(--ink-3);
+  font-size:11.5px; font-weight:700; letter-spacing:.07em;
+}
+@keyframes appLoaderFlow{
+  0%{transform:translateX(-130%);opacity:.25}
+  22%{opacity:1}
+  78%{opacity:1}
+  100%{transform:translateX(250%);opacity:.2}
+}
+@keyframes appLoaderLogo{
+  from{opacity:.82; transform:translateY(1px)}
+  to{opacity:1; transform:translateY(-1px)}
+}
+@media (prefers-reduced-motion:reduce){
+  .app-loader-mark{animation:none}
+  .app-loader-line::after{animation-duration:2.4s}
+  .app-loader{transition:none}
+}
+
 </style>
 </head>
 <body>
 <div id="app">
+  <div class="app-loader on" id="appLoader" role="status" aria-live="polite" aria-label="読み込んでいます">
+    <div class="app-loader-card">
+      <div class="app-loader-mark">iroha</div>
+      <div class="app-loader-line" aria-hidden="true"></div>
+      <div class="app-loader-text" id="appLoaderText">読み込んでいます</div>
+    </div>
+  </div>
   <div class="tabs-root" id="tabsRoot"></div>
   <div class="stack" id="stack"></div>
   <div class="navwrap" id="navwrap"></div>
@@ -3434,7 +3513,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='7.9';
+const APP_VER='8.1';
 
 
 /* =========================================================
@@ -3493,6 +3572,36 @@ function cloudErr(where,err){
 function must(data){
   if(data && data.error) throw data.error;
   return data && data.data!==undefined ? data.data : data;
+}
+
+/* Foreground-only loader. Background realtime/polling deliberately never calls this. */
+let APP_LOADER_TIMER=null;
+let APP_LOADER_SHOWN_AT=0;
+function showAppLoader(text='読み込んでいます', delay=0){
+  const layer=$('#appLoader'), label=$('#appLoaderText');
+  if(!layer) return;
+  clearTimeout(APP_LOADER_TIMER);
+  if(label) label.textContent=text;
+  const reveal=()=>{
+    if(!layer.isConnected) return;
+    layer.classList.add('on');
+    APP_LOADER_SHOWN_AT=Date.now();
+  };
+  if(delay>0 && !layer.classList.contains('on')) APP_LOADER_TIMER=setTimeout(reveal,delay);
+  else reveal();
+}
+function hideAppLoader(minVisible=140){
+  const layer=$('#appLoader'); if(!layer) return;
+  clearTimeout(APP_LOADER_TIMER);
+  APP_LOADER_TIMER=null;
+  const wait=layer.classList.contains('on')
+    ? Math.max(0,minVisible-(Date.now()-APP_LOADER_SHOWN_AT)) : 0;
+  setTimeout(()=>{ if(layer.isConnected) layer.classList.remove('on'); },wait);
+}
+async function withAppLoader(work,text='通信しています',delay=140){
+  showAppLoader(text,delay);
+  try{ return await work(); }
+  finally{ hideAppLoader(); }
 }
 function extFor(blob,name,kind){
   const m=(name||'').match(/\.([a-z0-9]{1,8})$/i); if(m) return m[1].toLowerCase();
@@ -6493,7 +6602,7 @@ function pushProfile(uid){
     const loadReplies=async()=>{
       if(!CLOUD.enabled || profTab!=='replies') return;
       try{
-        await cloudFetchProfileReplies(uid);
+        await withAppLoader(()=>cloudFetchProfileReplies(uid),'返信を読み込んでいます',120);
         if(!body.isConnected || profTab!=='replies') return;
         const small=$('#pfTabs [data-ut="replies"] small',body);
         if(small && S.users[uid]) small.textContent=S.users[uid].replies||0;
@@ -10880,7 +10989,7 @@ function attachPTR(scroller, root, onRefresh){
 /* what each screen does when it is pulled */
 async function refreshFeed(){
   if(CLOUD.enabled){
-    await cloudReloadAll(false,true);
+    await withAppLoader(()=>cloudReloadAll(false,true),'更新しています',140);
   }else{
     demoStep(true);
     queueDemo(1+Math.floor(Math.random()*3));
@@ -10891,7 +11000,7 @@ async function refreshFeed(){
 }
 async function refreshNotes(){
   if(CLOUD.enabled){
-    await cloudReloadAll(false,false);
+    await withAppLoader(()=>cloudReloadAll(false,false),'更新しています',140);
   }else{
     const who=activeDemos();
     if(who.length && myPosts().length && Math.random()<0.7){
@@ -10902,7 +11011,7 @@ async function refreshNotes(){
 }
 async function refreshChats(){
   if(CLOUD.enabled){
-    await cloudReloadAll(false,false);
+    await withAppLoader(()=>cloudReloadAll(false,false),'更新しています',140);
   }else{
     const who=activeDemos();
     if(who.length && Math.random()<0.6){
@@ -10914,7 +11023,7 @@ async function refreshChats(){
   }
 }
 async function refreshMe(){
-  if(CLOUD.enabled) await cloudReloadAll(false,false);
+  if(CLOUD.enabled) await withAppLoader(()=>cloudReloadAll(false,false),'更新しています',140);
   else quiet(()=>renderMe());
 }
 
@@ -11234,7 +11343,9 @@ async function boot(){
           resetRequestedPostsForRestart();
         }
 
+        hideAppLoader(0);
         firstSetup=await openFirstSetup(existingProfile||{});
+        showAppLoader('接続しています',0);
 
         /* A truly new profile is created only after the user presses a start button. */
         if(!existingProfile){
@@ -11247,6 +11358,7 @@ async function boot(){
     }
   }
 
+  showAppLoader('接続しています',0);
   const cloudOK=await cloudInit();
 
   if(firstSetup && cloudOK){
@@ -11283,6 +11395,7 @@ async function boot(){
     moveNavInd(false);
     syncNavBadges();
     navMorph.init();
+    hideAppLoader(180);
   });
   if(CLOUD.enabled){
     cloudStartRealtime();
