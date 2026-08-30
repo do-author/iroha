@@ -3433,7 +3433,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='7.8';
+const APP_VER='7.9';
 
 
 /* =========================================================
@@ -6216,6 +6216,7 @@ function renderMe(){
     }
     box.onclick=onPostClick;
     wireFeedMediaStability(box);
+    wireProfileMediaStrips(box);
   }
 }
 function moveU(tabs, ind, animate=true){
@@ -6517,6 +6518,7 @@ function pushProfile(uid){
         : `<div class="empty"><h3>公開中の投稿はありません</h3><p>公開されると、ここに並びます</p></div>`;
       box.onclick=onPostClick;
       wireFeedMediaStability(box);
+      wireProfileMediaStrips(box);
     }
   };
   paint();
@@ -8912,6 +8914,75 @@ function mediaGroupHTML(list, opts={}){
 
 /* The strip scrolls natively; there is nothing to keep in step. */
 function wireCarousels(){}
+
+/* Profile screens live inside a horizontally-transformed stack screen.
+   Mobile Safari can occasionally hand that gesture to the parent screen
+   instead of the nested media strip. Keep Home/DM/detail untouched and add
+   only a profile-local fallback: horizontal intent drags the exact same
+   .mstrip-track; vertical intent is never prevented and remains normal page
+   scrolling. This is theme-agnostic on purpose. */
+function wireProfileMediaStrips(root){
+  if(!root) return;
+  $$('.mstrip-track',root).forEach(track=>{
+    if(track.dataset.profileSwipeWired) return;
+    track.dataset.profileSwipeWired='1';
+
+    let sx=0, sy=0, startLeft=0, lastX=0, lastT=0, vx=0;
+    let axis='', active=false, moved=false, suppressUntil=0;
+
+    track.addEventListener('touchstart',e=>{
+      if(e.touches.length!==1) return;
+      const t=e.touches[0];
+      sx=lastX=t.clientX; sy=t.clientY; startLeft=track.scrollLeft;
+      lastT=performance.now(); vx=0; axis=''; active=true; moved=false;
+    },{passive:true});
+
+    track.addEventListener('touchmove',e=>{
+      if(!active||e.touches.length!==1) return;
+      const t=e.touches[0];
+      const dx=t.clientX-sx, dy=t.clientY-sy;
+      const ax=Math.abs(dx), ay=Math.abs(dy);
+
+      if(!axis){
+        if(Math.max(ax,ay)<7) return;
+        if(ax>ay*1.12) axis='x';
+        else if(ay>ax*1.04){ axis='y'; active=false; return; }
+        else return;
+      }
+      if(axis!=='x') return;
+
+      e.preventDefault();
+      moved = moved || ax>9;
+      track.scrollLeft=startLeft-dx;
+
+      const now=performance.now(), dt=Math.max(8,now-lastT);
+      vx=(t.clientX-lastX)/dt;
+      lastX=t.clientX; lastT=now;
+    },{passive:false});
+
+    const finish=()=>{
+      if(!active){ axis=''; return; }
+      active=false;
+      if(axis==='x'){
+        if(moved) suppressUntil=performance.now()+280;
+        const max=Math.max(0,track.scrollWidth-track.clientWidth);
+        const target=Math.max(0,Math.min(max,track.scrollLeft-vx*150));
+        if(Math.abs(target-track.scrollLeft)>3){
+          try{ track.scrollTo({left:target,behavior:'smooth'}); }
+          catch(_){ track.scrollLeft=target; }
+        }
+      }
+      axis='';
+    };
+    track.addEventListener('touchend',finish,{passive:true});
+    track.addEventListener('touchcancel',finish,{passive:true});
+
+    track.addEventListener('click',e=>{
+      if(performance.now()>suppressUntil) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+    },true);
+  });
+}
 
 /* Carousels turn up in the feed, post detail, profile and DM. Rather than
    chase every render path, watch for them arriving. */
