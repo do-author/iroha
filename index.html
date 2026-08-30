@@ -3513,7 +3513,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='8.2';
+const APP_VER='8.3';
 
 
 /* =========================================================
@@ -6602,7 +6602,7 @@ function pushProfile(uid){
     const loadReplies=async()=>{
       if(!CLOUD.enabled || profTab!=='replies') return;
       try{
-        await withAppLoader(()=>cloudFetchProfileReplies(uid),'返信を読み込んでいます',120);
+        await cloudFetchProfileReplies(uid);
         if(!body.isConnected || profTab!=='replies') return;
         const small=$('#pfTabs [data-ut="replies"] small',body);
         if(small && S.users[uid]) small.textContent=S.users[uid].replies||0;
@@ -11003,7 +11003,7 @@ function attachPTR(scroller, root, onRefresh){
 /* what each screen does when it is pulled */
 async function refreshFeed(){
   if(CLOUD.enabled){
-    await withAppLoader(()=>cloudReloadAll(false,true),'更新しています',140);
+    await cloudReloadAll(false,true);
   }else{
     demoStep(true);
     queueDemo(1+Math.floor(Math.random()*3));
@@ -11014,7 +11014,7 @@ async function refreshFeed(){
 }
 async function refreshNotes(){
   if(CLOUD.enabled){
-    await withAppLoader(()=>cloudReloadAll(false,false),'更新しています',140);
+    await cloudReloadAll(false,false);
   }else{
     const who=activeDemos();
     if(who.length && myPosts().length && Math.random()<0.7){
@@ -11025,7 +11025,7 @@ async function refreshNotes(){
 }
 async function refreshChats(){
   if(CLOUD.enabled){
-    await withAppLoader(()=>cloudReloadAll(false,false),'更新しています',140);
+    await cloudReloadAll(false,false);
   }else{
     const who=activeDemos();
     if(who.length && Math.random()<0.6){
@@ -11037,7 +11037,7 @@ async function refreshChats(){
   }
 }
 async function refreshMe(){
-  if(CLOUD.enabled) await withAppLoader(()=>cloudReloadAll(false,false),'更新しています',140);
+  if(CLOUD.enabled) await cloudReloadAll(false,false);
   else quiet(()=>renderMe());
 }
 
