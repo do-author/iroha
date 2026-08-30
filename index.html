@@ -3513,7 +3513,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='8.3';
+const APP_VER='8.2';
 
 
 /* =========================================================
@@ -9534,9 +9534,6 @@ function initIrohaImageViewerGestures(s,stage,card,wrap,onDismiss,galleryHooks=n
          dismiss. Waiting for the axis prevents a diagonal finger from making
          both gestures twitch at once. */
       if(Math.abs(dx)>Math.abs(dy)*1.08){
-        /* Take over an in-flight gallery motion from its exact current position.
-           A new swipe must never wait for the previous settle to finish. */
-        if(galleryHooks&&typeof galleryHooks.begin==='function') galleryHooks.begin();
         mode='gallery';
         card.classList.remove('image-gesture-dismissing');
         chrome(false);
@@ -9708,19 +9705,11 @@ function initMediaViewerImageGallery(s,stage,card,media,gallery,onChange){
   if(!gallery||gallery.items.length<2) return null;
   let index=gallery.index;
   let neighbour=null, neighbourMedia=null, neighbourIndex=-1;
-
-  /* Continuous gallery motion.
-     Do not hand the finger off to a fresh CSS transition on release. The current
-     position + velocity remain the source of truth, so another swipe can take
-     control midway through a settle without being ignored or restarting. */
-  let x=0, vx=0, dragBaseX=0;
-  let lastInputX=0, lastInputAt=0;
-  let rafId=0, lastFrameAt=0;
-  let settleTarget=0, settleIndex=null;
-  let settling=false;
-
+  let lastDx=0, animating=false, settleTimer=0;
+  let lastRawDx=0, lastMoveAt=0, swipeVelocity=0;
   const nav=s.querySelector('.media-viewer-nav');
   const title=s.querySelector('.media-viewer-nav .ttl');
+
   const updateTitle=()=>{ if(title) title.textContent=`写真 ${index+1}/${gallery.items.length}`; };
   updateTitle();
 
@@ -9730,19 +9719,7 @@ function initMediaViewerImageGallery(s,stage,card,media,gallery,onChange){
     return {pl,pr,pt,pb,w:Math.max(1,stage.clientWidth-pl-pr),h:Math.max(1,stage.clientHeight-pt-pb)};
   };
   const travel=()=>Math.max(280,stage.clientWidth+18);
-  const targetForX=value=>value<0?index+1:index-1;
-
-  const showChrome=()=>{
-    if(!nav) return;
-    nav.style.transition='opacity 180ms ease';
-    nav.style.opacity='1';
-    nav.style.pointerEvents='';
-  };
-
-  const stopMotion=()=>{
-    if(rafId) cancelAnimationFrame(rafId);
-    rafId=0; settling=false; lastFrameAt=0; settleIndex=null;
-  };
+  const targetForDx=dx=>dx<0?index+1:index-1;
 
   const removeNeighbour=()=>{
     if(neighbour){ try{neighbour.remove();}catch(_){} }
@@ -9777,193 +9754,122 @@ function initMediaViewerImageGallery(s,stage,card,media,gallery,onChange){
     return neighbour;
   };
 
-  const paint=value=>{
-    x=value;
-    let drawX=x;
-    if(Math.abs(drawX)<.01){
-      card.classList.add('media-viewer-gallery-sliding');
-      card.style.transition='none';
-      card.style.transform='translate3d(0,0,0)';
-      removeNeighbour();
-      return 0;
+  const move=rawDx=>{
+    if(animating) return;
+    const now=performance.now();
+    if(lastMoveAt){
+      const dt=Math.max(4,now-lastMoveAt);
+      const instant=(rawDx-lastRawDx)/dt;
+      swipeVelocity=swipeVelocity*.64+instant*.36;
     }
-    const target=targetForX(drawX);
+    lastRawDx=rawDx; lastMoveAt=now;
+    let dx=rawDx;
+    const target=targetForDx(dx);
     const valid=target>=0&&target<gallery.items.length;
-    if(!valid) drawX*=.28;
-
+    if(!valid) dx*=.28;
+    lastDx=dx;
     card.classList.add('media-viewer-gallery-sliding');
     card.style.transition='none';
-    card.style.transform=`translate3d(${drawX.toFixed(2)}px,0,0)`;
-
-    if(!valid){ removeNeighbour(); return drawX; }
+    card.style.transform=`translate3d(${dx}px,0,0)`;
+    if(!valid){ removeNeighbour(); return; }
     const n=ensureNeighbour(target);
-    if(!n) return drawX;
+    if(!n) return;
     const start=target>index?travel():-travel();
     n.style.transition='none';
-    n.style.transform=`translate3d(${(start+drawX).toFixed(2)}px,0,0)`;
-    return drawX;
+    n.style.transform=`translate3d(${start+dx}px,0,0)`;
   };
 
-  const finishBack=()=>{
-    stopMotion();
-    x=0; vx=0; dragBaseX=0; lastInputX=0; lastInputAt=0;
-    card.style.transition='none';
+  const settleBack=()=>{
+    animating=true;
+    const dur=380;
+    const ease='cubic-bezier(.18,.72,.16,1)';
+    card.style.transition=`transform ${dur}ms ${ease}`;
     card.style.transform='translate3d(0,0,0)';
-    card.classList.remove('media-viewer-gallery-sliding');
-    removeNeighbour();
-    showChrome();
-  };
-
-  const finishCommit=target=>{
-    const item=gallery.items[target];
-    if(!item){ finishBack(); return; }
-    const ratio=viewerIntrinsicRatio(neighbourMedia,1);
-    const keepNeighbour=neighbour;
-    const keepMedia=neighbourMedia;
-
-    stopMotion();
-    index=target;
-    updateTitle();
-
-    /* The arriving neighbour is already visible at x=0. Put the real card
-       underneath it, update its source, then remove the neighbour once the same
-       pixels are ready. This avoids the tiny flash that makes a glide feel like
-       two separate animations. */
-    card.style.transition='none';
-    card.style.transform='translate3d(0,0,0)';
-    card.style.opacity='1';
-    media.src=item.src;
-    layoutMediaViewerCard(stage,card,media,ratio);
-    if(typeof onChange==='function') onChange(item,index,ratio);
-
-    x=0; vx=0; dragBaseX=0; lastInputX=0; lastInputAt=0;
-    card.classList.remove('media-viewer-gallery-sliding');
-
-    let done=false;
-    const reveal=()=>{
-      if(done) return; done=true;
-      layoutMediaViewerCard(stage,card,media,ratio);
-      requestAnimationFrame(()=>{
-        if(keepNeighbour&&keepNeighbour.isConnected) keepNeighbour.remove();
-        if(neighbour===keepNeighbour){ neighbour=null; neighbourMedia=null; neighbourIndex=-1; }
-        showChrome();
-      });
-    };
-    if(media.complete&&media.naturalWidth>0) reveal();
-    else{
-      media.addEventListener('load',reveal,{once:true});
-      /* The neighbour already contains the same URL, so this is only a guard
-         for browsers that fail to redispatch load from cache. */
-      setTimeout(reveal,260);
+    if(neighbour){
+      const start=neighbourIndex>index?travel():-travel();
+      neighbour.style.transition=`transform ${dur}ms ${ease}`;
+      neighbour.style.transform=`translate3d(${start}px,0,0)`;
     }
+    clearTimeout(settleTimer);
+    settleTimer=setTimeout(()=>{
+      animating=false; lastDx=0; lastRawDx=0; lastMoveAt=0; swipeVelocity=0; removeNeighbour();
+      card.classList.remove('media-viewer-gallery-sliding');
+      card.style.transition=''; card.style.transform='';
+      if(nav){ nav.style.transition='opacity 180ms ease'; nav.style.opacity='1'; nav.style.pointerEvents=''; }
+    },dur+18);
   };
 
-  const startSettle=(targetValue,targetIndex=null)=>{
-    stopMotion();
-    settling=true;
-    settleTarget=targetValue;
-    settleIndex=targetIndex;
-    lastFrameAt=performance.now();
+  const commit=target=>{
+    const n=ensureNeighbour(target);
+    if(!n) return settleBack(),false;
+    animating=true;
+    const dir=target>index?1:-1;
+    const dist=travel();
+    const remaining=Math.max(0,dist-Math.min(dist,Math.abs(lastDx)));
+    const speed=Math.abs(swipeVelocity);
+    const dur=Math.round(Math.max(330,Math.min(500,440-speed*70+(remaining/dist)*55)));
+    const ease='cubic-bezier(.18,.72,.16,1)';
+    card.style.transition=`transform ${dur}ms ${ease}`;
+    card.style.transform=`translate3d(${-dir*dist}px,0,0)`;
+    n.style.transition=`transform ${dur}ms ${ease}`;
+    n.style.transform='translate3d(0,0,0)';
 
-    const tick=now=>{
-      if(!settling) return;
-      const dt=Math.min(32,Math.max(4,now-lastFrameAt));
-      lastFrameAt=now;
-      const remain=settleTarget-x;
+    clearTimeout(settleTimer);
+    settleTimer=setTimeout(()=>{
+      const item=gallery.items[target];
+      const ratio=viewerIntrinsicRatio(neighbourMedia,1);
+      index=target; updateTitle();
+      card.style.transition='none';
+      card.style.transform='translate3d(0,0,0)';
+      card.style.opacity='0';
+      media.src=item.src;
+      layoutMediaViewerCard(stage,card,media,ratio);
+      if(typeof onChange==='function') onChange(item,index,ratio);
 
-      /* A velocity-following servo instead of a cubic-bezier snap.
-         - keep the release velocity when it already points toward the target
-         - limit acceleration so it cannot suddenly shoot forward
-         - progressively lower the desired speed near the destination */
-      const maxSpeed=1.28;                    // px/ms
-      const desired=Math.max(-maxSpeed,Math.min(maxSpeed,remain*.0062));
-      const maxDv=.0038*dt;                  // gentle acceleration/deceleration
-      let dv=desired-vx;
-      if(dv>maxDv) dv=maxDv;
-      else if(dv<-maxDv) dv=-maxDv;
-      vx+=dv;
-
-      /* Never let a high release velocity overshoot the destination. */
-      let next=x+vx*dt;
-      if((settleTarget-x)*(settleTarget-next)<=0) next=settleTarget;
-      paint(next);
-
-      if(Math.abs(settleTarget-x)<.75 && Math.abs(vx)<.055){
-        x=settleTarget;
-        paint(x);
-        const target=settleIndex;
-        if(target==null) finishBack(); else finishCommit(target);
-        return;
+      let revealed=false;
+      const reveal=()=>{
+        if(revealed) return; revealed=true;
+        layoutMediaViewerCard(stage,card,media,ratio);
+        requestAnimationFrame(()=>{
+          card.style.opacity='1';
+          removeNeighbour();
+          animating=false; lastDx=0; lastRawDx=0; lastMoveAt=0; swipeVelocity=0;
+          card.classList.remove('media-viewer-gallery-sliding');
+          card.style.transition=''; card.style.transform='';
+          if(nav){ nav.style.transition='opacity 180ms ease'; nav.style.opacity='1'; nav.style.pointerEvents=''; }
+        });
+      };
+      if(media.complete&&media.naturalWidth>0) reveal();
+      else{
+        media.addEventListener('load',reveal,{once:true});
+        setTimeout(reveal,420);
       }
-      if(x===settleTarget){
-        const target=settleIndex;
-        if(target==null) finishBack(); else finishCommit(target);
-        return;
-      }
-      rafId=requestAnimationFrame(tick);
-    };
-    rafId=requestAnimationFrame(tick);
-  };
-
-  const begin=()=>{
-    /* New input owns the exact in-flight position immediately. No queue and no
-       "animating" gate. Preserve vx until the finger supplies a new velocity. */
-    stopMotion();
-    dragBaseX=x;
-    lastInputX=x;
-    lastInputAt=performance.now();
-    card.style.transition='none';
-    if(neighbour) neighbour.style.transition='none';
+    },dur+8);
     return true;
   };
 
-  const move=rawDx=>{
-    if(!Number.isFinite(rawDx)) return;
-    const now=performance.now();
-    const next=dragBaseX+rawDx;
-    if(lastInputAt){
-      const dt=Math.max(4,now-lastInputAt);
-      const instant=(next-lastInputX)/dt;
-      /* Follow the finger quickly, but retain a little continuity from any
-         motion that was already running when this touch interrupted it. */
-      vx=vx*.28+instant*.72;
-    }
-    lastInputX=next;
-    lastInputAt=now;
-    paint(next);
-  };
-
-  const end=()=>{
-    const dist=travel();
-    const predicted=x+vx*105;
-    const candidate=targetForX(predicted||x);
-    const valid=candidate>=0&&candidate<gallery.items.length;
-    const threshold=Math.min(116,Math.max(66,stage.clientWidth*.17));
-    const shouldCommit=valid && (Math.abs(predicted)>=threshold || Math.abs(vx)>.48);
-
-    if(shouldCommit){
-      const dir=candidate>index?1:-1;
-      startSettle(-dir*dist,candidate);
-    }else{
-      startSettle(0,null);
-    }
+  const end=rawDx=>{
+    if(animating) return true;
+    const dx=Number.isFinite(rawDx)?rawDx:lastDx;
+    const target=targetForDx(dx);
+    const threshold=Math.min(110,Math.max(64,stage.clientWidth*.18));
+    if(target>=0&&target<gallery.items.length&&Math.abs(dx)>=threshold) return commit(target);
+    settleBack();
     return true;
   };
 
   const cancel=(animate=true)=>{
-    if(Math.abs(x)<.5&&!neighbour&&!settling) return;
-    if(animate) startSettle(0,null);
-    else finishBack();
+    if(animating) return;
+    if(Math.abs(lastDx)<.5&&!neighbour) return;
+    if(animate) settleBack();
+    else{
+      clearTimeout(settleTimer); removeNeighbour(); lastDx=0; lastRawDx=0; lastMoveAt=0; swipeVelocity=0;
+      card.classList.remove('media-viewer-gallery-sliding');
+      card.style.transition=''; card.style.transform='';
+    }
   };
 
-  return {
-    enabled:()=>gallery.items.length>1,
-    begin,
-    move,
-    end,
-    cancel,
-    index:()=>index
-  };
+  return {enabled:()=>!animating&&gallery.items.length>1,move,end,cancel,index:()=>index};
 }
 
 function openMediaViewer(src,kind,originEl=null){
