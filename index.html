@@ -1475,7 +1475,10 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
      the page / pull-to-refresh. Direction locking is finished in attachPTR. */
   /* Same gesture contract in night/light/dark and in feed/profile/DM:
      horizontal belongs to this strip, vertical belongs to the page. */
-  touch-action:pan-x pan-y;
+  /* Vertical drags stay native page scrolling. Horizontal drags are handled
+     by the shared strip gesture below so profile/DM/stack screens behave the
+     same as Home on iOS Safari. */
+  touch-action:pan-y;
   overflow-x:auto; scrollbar-width:none; -ms-overflow-style:none;
   /* contain keeps a flick from reaching the page behind; `proximity` lets a
      short drag settle where it likes instead of fighting back to a slot */
@@ -3435,7 +3438,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='7.9';
+const APP_VER='7.10';
 
 
 /* =========================================================
@@ -10069,6 +10072,71 @@ document.addEventListener('click',e=>{
   e.preventDefault();
   e.stopImmediatePropagation();
 },true);
+
+/* Cross-context media-strip drag.
+   Native nested horizontal scrolling is unreliable on some iOS/Safari paths,
+   especially inside profile/post/DM stack screens. Keep vertical motion fully
+   native, but once a clearly horizontal gesture wins, move the actual strip
+   ourselves. Delegation means every re-rendered profile strip gets the exact
+   same behaviour without per-screen wiring. */
+let MEDIA_STRIP_POINTER=null;
+const clampStripLeft=(track,left)=>Math.max(0,Math.min(Math.max(0,track.scrollWidth-track.clientWidth),left));
+document.addEventListener('pointerdown',e=>{
+  if(!e.isPrimary || (e.pointerType==='mouse' && e.button!==0)) return;
+  const target=e.target instanceof Element ? e.target : null;
+  const track=target?.closest('.mstrip-track');
+  if(!track) return;
+  MEDIA_STRIP_POINTER={
+    id:e.pointerId, track,
+    sx:e.clientX, sy:e.clientY,
+    lastX:e.clientX, lastT:performance.now(),
+    startLeft:track.scrollLeft,
+    axis:'', velocity:0, moved:false
+  };
+},{capture:true,passive:true});
+document.addEventListener('pointermove',e=>{
+  const g=MEDIA_STRIP_POINTER;
+  if(!g || e.pointerId!==g.id || !g.track.isConnected) return;
+  const dx=e.clientX-g.sx, dy=e.clientY-g.sy;
+  const ax=Math.abs(dx), ay=Math.abs(dy);
+  if(!g.axis){
+    if(Math.max(ax,ay)<7) return;
+    if(ax>ay*1.12){
+      g.axis='x';
+      try{ g.track.setPointerCapture?.(e.pointerId); }catch(_){}
+    }else if(ay>ax*1.04){
+      /* Do not preventDefault and do not capture: the page owns vertical drag. */
+      g.axis='y';
+      return;
+    }else return;
+  }
+  if(g.axis!=='x') return;
+  e.preventDefault();
+  g.moved = g.moved || ax>9;
+  const now=performance.now();
+  const dt=Math.max(1,now-g.lastT);
+  /* Finger moving right means scroll position moves left. px/ms. */
+  g.velocity=(-1*(e.clientX-g.lastX))/dt;
+  g.lastX=e.clientX; g.lastT=now;
+  g.track.scrollLeft=clampStripLeft(g.track,g.startLeft-dx);
+},{capture:true,passive:false});
+const finishMediaStripPointer=e=>{
+  const g=MEDIA_STRIP_POINTER;
+  if(!g || (e && e.pointerId!==undefined && e.pointerId!==g.id)) return;
+  MEDIA_STRIP_POINTER=null;
+  if(g.axis!=='x') return;
+  try{ g.track.releasePointerCapture?.(g.id); }catch(_){}
+  if(g.moved) MEDIA_STRIP_CLICK_SUPPRESS_UNTIL=Date.now()+420;
+  /* Preserve the finger's last velocity for a short, bounded glide. Native
+     scroll-snap proximity can then settle the row naturally. */
+  const projected=clampStripLeft(g.track,g.track.scrollLeft + g.velocity*170);
+  if(Math.abs(projected-g.track.scrollLeft)>2){
+    try{ g.track.scrollTo({left:projected,behavior:'smooth'}); }
+    catch(_){ g.track.scrollLeft=projected; }
+  }
+};
+document.addEventListener('pointerup',finishMediaStripPointer,{capture:true,passive:true});
+document.addEventListener('pointercancel',finishMediaStripPointer,{capture:true,passive:true});
 
 /* Native long-press menus can emit a synthetic click when they close. Suppress
    only that follow-up click so Save-to-Photos never unexpectedly opens/plays media. */
