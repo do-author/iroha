@@ -1470,18 +1470,31 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 .mstrip-track{
   display:flex; gap:8px;
+  /* Do not reserve the whole touch for the horizontal strip. Safari may keep
+     a true horizontal flick here, while a vertical drag is free to bubble to
+     the page / pull-to-refresh. Direction locking is finished in attachPTR. */
+  /* Same gesture contract in night/light/dark and in feed/profile/DM:
+     horizontal belongs to this strip, vertical belongs to the page. */
+  touch-action:pan-x pan-y;
   overflow-x:auto; scrollbar-width:none; -ms-overflow-style:none;
+  /* contain keeps a flick from reaching the page behind; `proximity` lets a
+     short drag settle where it likes instead of fighting back to a slot */
   overscroll-behavior-x:contain;
   scroll-snap-type:x proximity;
   padding-right:17px;
   -webkit-overflow-scrolling:touch;
+  /* a strip that is still deciding its widths must not swallow the gesture */
+  will-change:scroll-position;
 }
 .mstrip-track::-webkit-scrollbar{display:none}
 .mstrip-item{
   flex:0 0 auto; height:240px;
   scroll-snap-align:start;
   border-radius:14px; overflow:hidden;
+  /* the picture must never take the drag away from the strip */
+  -webkit-user-drag:none; user-select:none;
 }
+.mstrip-item img,.mstrip-item video{-webkit-user-drag:none}
 .mstrip-item .media,
 .mstrip-item .media-off{margin-top:0; height:100%; border-radius:0}
 .mstrip-item .media img,
@@ -1504,17 +1517,26 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 
 /* Instagram-like media detail: the media stays a floating card and expands
-   from the tapped thumbnail instead of appearing as a flat black full screen. */
+   from the tapped thumbnail instead of appearing as a flat black full screen.
+   The backdrop is its own layer so a pull-down can fade the page back in
+   continuously without fading the photo itself too early. */
 .screen.media-viewer-screen{
-  background:var(--bg) !important;
-  background:color-mix(in srgb,var(--bg) 92%,transparent) !important;
+  background:transparent !important;
   color:var(--ink);
   box-shadow:none;
   transform:none;
   opacity:0;
   transition:opacity 220ms ease;
+}
+.media-viewer-backdrop{
+  position:absolute; inset:0; z-index:0; pointer-events:none;
+  background:var(--bg);
+  background:color-mix(in srgb,var(--bg) 92%,transparent);
   -webkit-backdrop-filter:blur(22px) saturate(1.08);
   backdrop-filter:blur(22px) saturate(1.08);
+  opacity:1;
+  transition:opacity 220ms ease;
+  will-change:opacity;
 }
 .screen.media-viewer-screen.in{transform:none;opacity:1}
 .screen.media-viewer-screen.is-closing,
@@ -1524,16 +1546,16 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 }
 .screen.media-viewer-screen.out{
   transform:none; opacity:0;
-  /* nothing inside a leaving viewer may take a touch */
+  /* inert, but still painted: the fade is what the gesture promised */
   pointer-events:none !important;
   touch-action:auto !important;
-  visibility:hidden;
 }
 .screen.media-viewer-screen.out *{
   pointer-events:none !important;
   touch-action:auto !important;
 }
 .media-viewer-screen .media-viewer-nav{
+  z-index:3;
   background:linear-gradient(to bottom,
     color-mix(in srgb,var(--bg) 94%,transparent),
     color-mix(in srgb,var(--bg) 70%,transparent),
@@ -1554,6 +1576,7 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .media-viewer-stage{
   position:absolute;
   inset:0;
+  z-index:1;
   min-width:0;
   min-height:0;
   display:flex;
@@ -1607,6 +1630,20 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .media-viewer-card.is-image.image-gesture-dismissing{background:transparent;box-shadow:none}
 .media-viewer-card.is-image .media-viewer-image{border-radius:inherit}
 .media-viewer-card.is-dragging{box-shadow:0 12px 34px rgba(0,0,0,.20)}
+/* A temporary neighbour is laid beside the active card while a gallery swipe
+   is in flight. It is real media, not a screenshot, so the transition stays
+   crisp at every device scale. */
+.media-viewer-card.media-viewer-gallery-neighbor{
+  position:absolute;
+  margin:0;
+  pointer-events:none;
+  z-index:2;
+  transition:none;
+  will-change:transform;
+}
+.media-viewer-card.media-viewer-gallery-sliding{
+  will-change:transform;
+}
 @media (max-width:520px){
   .media-viewer-card{border-radius:19px}
   .media-viewer-stage{padding-inline:12px}
@@ -3398,7 +3435,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='7.5';
+const APP_VER='7.9';
 
 
 /* =========================================================
@@ -4516,6 +4553,16 @@ function mediaPayload(m){
   return rest;
 }
 
+/* The stored form for local state: the size stays on it, so a freshly posted
+   card is laid out from the real ratio instead of a placeholder. */
+function mediaWithSize(m){
+  if(!m) return m;
+  const out={...m};
+  delete out._w; delete out._h;
+  if(validMediaWH(m._w,m._h)){ out.w=Number(m._w); out.h=Number(m._h); }
+  return out;
+}
+
 /* Everything downstream reads mediaListOf(). Keeping .media as the first
    item means existing single-attachment code paths need no changes. */
 function mediaListOf(x){
@@ -4619,7 +4666,7 @@ async function cloudCreatePost(p){
   p.id=r.data.id;
   p.ts=r.data.created_at?new Date(r.data.created_at).getTime():p.ts;
   await cloudSaveMediaList('post',p.id,stored);
-  setMediaList(p, await Promise.all(stored.map(m=>cloudHydrateMedia(mediaPayload(m)))));
+  setMediaList(p, await Promise.all(stored.map(async m=>mediaWithSize({...await cloudHydrateMedia(mediaPayload(m)), _w:m._w, _h:m._h}))));
   p.cloud=true; return p;
 }
 async function cloudUpdatePost(p){
@@ -4640,7 +4687,7 @@ async function cloudCreateReply(p,r){
   r.id=q.data.id;
   r.ts=q.data.created_at?new Date(q.data.created_at).getTime():r.ts;
   await cloudSaveMediaList('reply',r.id,stored);
-  setMediaList(r, await Promise.all(stored.map(m=>cloudHydrateMedia(mediaPayload(m)))));
+  setMediaList(r, await Promise.all(stored.map(async m=>mediaWithSize({...await cloudHydrateMedia(mediaPayload(m)), _w:m._w, _h:m._h}))));
   r.cloud=true; return r;
 }
 async function cloudDeleteReply(r){
@@ -4791,7 +4838,7 @@ async function cloudSendMessage(c,m){
   m.id=q.data.id;
   m.ts=q.data.created_at?new Date(q.data.created_at).getTime():m.ts;
   await cloudSaveMediaList('message',m.id,stored);
-  setMediaList(m, await Promise.all(stored.map(x=>cloudHydrateMedia(mediaPayload(x)))));
+  setMediaList(m, await Promise.all(stored.map(async x=>mediaWithSize({...await cloudHydrateMedia(mediaPayload(x)), _w:x._w, _h:x._h}))));
   m.cloud=true; return m;
 }
 async function cloudUnsendMessage(m){
@@ -6314,6 +6361,12 @@ function wireEdgeBack(node){
   };
   node.addEventListener('touchstart',e=>{
     if(e.touches.length!==1) return;
+    const target=e.target instanceof Element ? e.target : null;
+    /* Media owns horizontal gestures. On stack screens (profile, post detail,
+       DM, etc.) the edge-back recognizer used to compete with a strip that
+       started near the left edge. The viewer has its own dismiss/gallery
+       gestures, so it must never enter edge-back either. */
+    if(target && target.closest('.mstrip,.media-viewer-stage')) return;
     const t=e.touches[0];
     if(t.clientX>28) return;
     sx=t.clientX; sy=t.clientY; pending=true; dragging=false;
@@ -9242,15 +9295,16 @@ function animateMediaViewerFromOrigin(s,card,originEl){
   ],{duration:420,easing:'cubic-bezier(.2,.78,.2,1)',fill:'both'});
   a.onfinish=()=>{ try{a.cancel();}catch(_){} };
 }
-function initIrohaImageViewerGestures(s,stage,card,wrap,onDismiss){
+function initIrohaImageViewerGestures(s,stage,card,wrap,onDismiss,galleryHooks=null){
   if(!s||!stage||!card||!wrap) return null;
   const MAX=4, MIN=1;
   let scale=1, tx=0, ty=0;
   let sx=0, sy=0, sScale=1, sTx=0, sTy=0;
   const pts=new Map();
   let mode=null;
-  let startDist=0, startMidX=0, startMidY=0, moved=false, lastTap=0;
+  let startDist=0, startMidX=0, startMidY=0, moved=false, lastTap=0, lastDx=0;
   const nav=s.querySelector('.media-viewer-nav');
+  const back=s.querySelector('.media-viewer-backdrop');
 
   const apply=(dur=0)=>{
     wrap.classList.toggle('settling',dur>0);
@@ -9284,9 +9338,17 @@ function initIrohaImageViewerGestures(s,stage,card,wrap,onDismiss){
     nav.style.pointerEvents=show?'':'none';
   };
   const reset=(animate=false)=>{
-    scale=1; tx=0; ty=0; mode=null;
+    scale=1; tx=0; ty=0; mode=null; lastDx=0;
+    wrap.style.opacity='1';
+    wrap.style.transition='';
     card.classList.remove('image-gesture-dismissing');
     s.classList.remove('image-zoomed','image-zooming');
+    if(galleryHooks&&typeof galleryHooks.cancel==='function') galleryHooks.cancel(animate);
+    if(back){
+      back.style.transition=animate?'opacity 260ms ease':'none';
+      back.style.opacity='1';
+      if(animate) setTimeout(()=>{ if(back.isConnected) back.style.transition=''; },280);
+    }
     chrome(true);
     apply(animate?320:0);
   };
@@ -9297,8 +9359,8 @@ function initIrohaImageViewerGestures(s,stage,card,wrap,onDismiss){
     wrap.classList.remove('settling');
 
     if(pts.size===1){
-      sx=e.clientX; sy=e.clientY; sTx=tx; sTy=ty; moved=false;
-      mode=scale>1.01?'pan':'dismiss';
+      sx=e.clientX; sy=e.clientY; sTx=tx; sTy=ty; moved=false; lastDx=0;
+      mode=scale>1.01?'pan':(galleryHooks&&galleryHooks.enabled&&galleryHooks.enabled()?'decide':'dismiss');
     }else if(pts.size===2){
       mode='pinch';
       startDist=dist()||1; sScale=scale;
@@ -9325,7 +9387,26 @@ function initIrohaImageViewerGestures(s,stage,card,wrap,onDismiss){
     }
 
     const dx=e.clientX-sx, dy=e.clientY-sy;
+    lastDx=dx;
     if(!moved&&Math.hypot(dx,dy)>6) moved=true;
+
+    if(mode==='decide'&&moved){
+      /* Horizontal intent belongs to the gallery; downward intent belongs to
+         dismiss. Waiting for the axis prevents a diagonal finger from making
+         both gestures twitch at once. */
+      if(Math.abs(dx)>Math.abs(dy)*1.08){
+        mode='gallery';
+        card.classList.remove('image-gesture-dismissing');
+        chrome(false);
+      }else if(dy>0 || Math.abs(dy)>=Math.abs(dx)){
+        mode='dismiss';
+      }
+    }
+
+    if(mode==='gallery'){
+      if(galleryHooks&&typeof galleryHooks.move==='function') galleryHooks.move(dx);
+      e.preventDefault(); return;
+    }
 
     if(mode==='pan'){
       tx=sTx+dx; ty=sTy+dy;
@@ -9336,10 +9417,17 @@ function initIrohaImageViewerGestures(s,stage,card,wrap,onDismiss){
       if(!moved) return;
       if(dy<=0&&Math.abs(dx)>Math.abs(dy)) return;
       const d=Math.max(0,dy);
+      /* Reference motion: the photo stays solid while the dim layer beneath it
+         gives the feed back gradually. Keep the fade deliberately softer than
+         the movement; the final 160 ms does the fast dissolve seen in the video. */
       const k=Math.min(1,d/320);
       scale=1-k*.22;
       tx=dx*.6;
       ty=d;
+      if(back){
+        back.style.transition='none';
+        back.style.opacity=String(Math.max(.25,1-k*.75));
+      }
       card.classList.add('image-gesture-dismissing');
       chrome(false);
       apply(0); e.preventDefault();
@@ -9369,10 +9457,27 @@ function initIrohaImageViewerGestures(s,stage,card,wrap,onDismiss){
       return;
     }
 
+    if(mode==='gallery'){
+      const handled=galleryHooks&&typeof galleryHooks.end==='function'
+        ? galleryHooks.end(lastDx)
+        : false;
+      mode=null; lastDx=0;
+      if(!handled) chrome(true);
+      return;
+    }
+
     if(mode==='dismiss'){
       if(ty>150){
-        /* Same release motion as 5.8.7. */
+        /* Keep the original v7.6 dismiss motion exactly: continue downward
+           from the released position and shrink slightly. Only the opacity is
+           added here so the image fades away while following the same path. */
+        if(back){
+          back.style.transition='opacity 140ms ease-out';
+          back.style.opacity='0';
+        }
         wrap.classList.add('settling');
+        wrap.style.transition='transform 320ms cubic-bezier(.22,1,.36,1), opacity 140ms ease-out';
+        wrap.style.opacity='0';
         wrap.style.transform=`translate3d(${tx}px,${ty+220}px,0) scale(.86)`;
         setTimeout(()=>{ if(typeof onDismiss==='function') onDismiss(); },140);
         return;
@@ -9416,7 +9521,7 @@ function initIrohaImageViewerGestures(s,stage,card,wrap,onDismiss){
   return {
     reset,
     zoomed:()=>scale>1.01,
-    active:()=>mode==='pinch'||mode==='pan'||mode==='dismiss'
+    active:()=>mode==='pinch'||mode==='pan'||mode==='dismiss'||mode==='gallery'||mode==='decide'
   };
 }
 
@@ -9444,16 +9549,188 @@ function uncaptureViewerPointer(node,id){
   if(have.length) node.dataset.captured=have.join(','); else delete node.dataset.captured;
 }
 
+function mediaViewerImageGallery(originEl){
+  if(!originEl || !originEl.isConnected || originEl.tagName!=='IMG') return null;
+  const strip=originEl.closest('.mstrip');
+  if(!strip) return null;
+  const nodes=[...strip.querySelectorAll('.mstrip-item .media:not(.blurred) img')];
+  const items=nodes.map(node=>({
+    node,
+    src:safeAssetUrl(node.currentSrc||node.src,{allowLocal:true})
+  })).filter(x=>x.src);
+  const index=items.findIndex(x=>x.node===originEl);
+  return items.length>1&&index>=0 ? {items,index} : null;
+}
+
+function initMediaViewerImageGallery(s,stage,card,media,gallery,onChange){
+  if(!gallery||gallery.items.length<2) return null;
+  let index=gallery.index;
+  let neighbour=null, neighbourMedia=null, neighbourIndex=-1;
+  let lastDx=0, animating=false, settleTimer=0;
+  const nav=s.querySelector('.media-viewer-nav');
+  const title=s.querySelector('.media-viewer-nav .ttl');
+
+  const updateTitle=()=>{ if(title) title.textContent=`写真 ${index+1}/${gallery.items.length}`; };
+  updateTitle();
+
+  const stageMetrics=()=>{
+    const cs=getComputedStyle(stage), px=v=>Number.parseFloat(v)||0;
+    const pl=px(cs.paddingLeft), pr=px(cs.paddingRight), pt=px(cs.paddingTop), pb=px(cs.paddingBottom);
+    return {pl,pr,pt,pb,w:Math.max(1,stage.clientWidth-pl-pr),h:Math.max(1,stage.clientHeight-pt-pb)};
+  };
+  const travel=()=>Math.max(280,stage.clientWidth+18);
+  const targetForDx=dx=>dx<0?index+1:index-1;
+
+  const removeNeighbour=()=>{
+    if(neighbour){ try{neighbour.remove();}catch(_){} }
+    neighbour=null; neighbourMedia=null; neighbourIndex=-1;
+  };
+
+  const placeNeighbour=()=>{
+    if(!neighbour||!neighbourMedia) return;
+    const item=gallery.items[neighbourIndex];
+    const r=item?.node?.getBoundingClientRect?.();
+    const fallback=r&&r.height>0?r.width/r.height:1;
+    layoutMediaViewerCard(stage,neighbour,neighbourMedia,fallback);
+    const m=stageMetrics();
+    const w=neighbour.offsetWidth||1, h=neighbour.offsetHeight||1;
+    neighbour.style.left=`${m.pl+(m.w-w)/2}px`;
+    neighbour.style.top=`${m.pt+(m.h-h)/2}px`;
+  };
+
+  const ensureNeighbour=target=>{
+    if(target<0||target>=gallery.items.length) return null;
+    if(neighbour&&neighbourIndex===target) return neighbour;
+    removeNeighbour();
+    neighbourIndex=target;
+    const item=gallery.items[target];
+    neighbour=el(`<div class="media-viewer-card is-image media-viewer-gallery-neighbor">
+      <div class="media-viewer-image-zoom"><img class="media-viewer-image" src="${escAttr(item.src)}" alt="隣の画像" decoding="async"></div>
+    </div>`);
+    neighbourMedia=neighbour.querySelector('img');
+    stage.appendChild(neighbour);
+    placeNeighbour();
+    if(!(neighbourMedia.complete&&neighbourMedia.naturalWidth>0)) neighbourMedia.addEventListener('load',placeNeighbour,{once:true});
+    return neighbour;
+  };
+
+  const move=rawDx=>{
+    if(animating) return;
+    let dx=rawDx;
+    const target=targetForDx(dx);
+    const valid=target>=0&&target<gallery.items.length;
+    if(!valid) dx*=.28;
+    lastDx=dx;
+    card.classList.add('media-viewer-gallery-sliding');
+    card.style.transition='none';
+    card.style.transform=`translate3d(${dx}px,0,0)`;
+    if(!valid){ removeNeighbour(); return; }
+    const n=ensureNeighbour(target);
+    if(!n) return;
+    const start=target>index?travel():-travel();
+    n.style.transition='none';
+    n.style.transform=`translate3d(${start+dx}px,0,0)`;
+  };
+
+  const settleBack=()=>{
+    animating=true;
+    card.style.transition='transform 280ms cubic-bezier(.22,1,.36,1)';
+    card.style.transform='translate3d(0,0,0)';
+    if(neighbour){
+      const start=neighbourIndex>index?travel():-travel();
+      neighbour.style.transition='transform 280ms cubic-bezier(.22,1,.36,1)';
+      neighbour.style.transform=`translate3d(${start}px,0,0)`;
+    }
+    clearTimeout(settleTimer);
+    settleTimer=setTimeout(()=>{
+      animating=false; lastDx=0; removeNeighbour();
+      card.classList.remove('media-viewer-gallery-sliding');
+      card.style.transition=''; card.style.transform='';
+      if(nav){ nav.style.transition='opacity 180ms ease'; nav.style.opacity='1'; nav.style.pointerEvents=''; }
+    },295);
+  };
+
+  const commit=target=>{
+    const n=ensureNeighbour(target);
+    if(!n) return settleBack(),false;
+    animating=true;
+    const dir=target>index?1:-1;
+    const dist=travel();
+    card.style.transition='transform 285ms cubic-bezier(.22,1,.36,1)';
+    card.style.transform=`translate3d(${-dir*dist}px,0,0)`;
+    n.style.transition='transform 285ms cubic-bezier(.22,1,.36,1)';
+    n.style.transform='translate3d(0,0,0)';
+
+    clearTimeout(settleTimer);
+    settleTimer=setTimeout(()=>{
+      const item=gallery.items[target];
+      const ratio=viewerIntrinsicRatio(neighbourMedia,1);
+      index=target; updateTitle();
+      card.style.transition='none';
+      card.style.transform='translate3d(0,0,0)';
+      card.style.opacity='0';
+      media.src=item.src;
+      layoutMediaViewerCard(stage,card,media,ratio);
+      if(typeof onChange==='function') onChange(item,index,ratio);
+
+      let revealed=false;
+      const reveal=()=>{
+        if(revealed) return; revealed=true;
+        layoutMediaViewerCard(stage,card,media,ratio);
+        requestAnimationFrame(()=>{
+          card.style.opacity='1';
+          removeNeighbour();
+          animating=false; lastDx=0;
+          card.classList.remove('media-viewer-gallery-sliding');
+          card.style.transition=''; card.style.transform='';
+          if(nav){ nav.style.transition='opacity 180ms ease'; nav.style.opacity='1'; nav.style.pointerEvents=''; }
+        });
+      };
+      if(media.complete&&media.naturalWidth>0) reveal();
+      else{
+        media.addEventListener('load',reveal,{once:true});
+        setTimeout(reveal,420);
+      }
+    },292);
+    return true;
+  };
+
+  const end=rawDx=>{
+    if(animating) return true;
+    const dx=Number.isFinite(rawDx)?rawDx:lastDx;
+    const target=targetForDx(dx);
+    const threshold=Math.min(110,Math.max(64,stage.clientWidth*.18));
+    if(target>=0&&target<gallery.items.length&&Math.abs(dx)>=threshold) return commit(target);
+    settleBack();
+    return true;
+  };
+
+  const cancel=(animate=true)=>{
+    if(animating) return;
+    if(Math.abs(lastDx)<.5&&!neighbour) return;
+    if(animate) settleBack();
+    else{
+      clearTimeout(settleTimer); removeNeighbour(); lastDx=0;
+      card.classList.remove('media-viewer-gallery-sliding');
+      card.style.transition=''; card.style.transform='';
+    }
+  };
+
+  return {enabled:()=>!animating&&gallery.items.length>1,move,end,cancel,index:()=>index};
+}
+
 function openMediaViewer(src,kind,originEl=null){
   if(document.querySelector('.media-viewer-screen:not(.is-closing)')) return;
   const safeSrc=safeAssetUrl(src,{allowLocal:true});
   kind=kind==='video'?'video':'image';
+  const gallery=kind==='image'?mediaViewerImageGallery(originEl):null;
   if(!safeSrc) return;
   const videoLink=kind==='video'?feedVideoViewerLink(originEl):null;
   if(kind==='video') pauseFeedVideoAutoplay();
 
+  let activeOriginEl=originEl;
   const originRect=originEl&&originEl.isConnected?originEl.getBoundingClientRect():null;
-  const fallbackRatio=originRect&&originRect.height>0?originRect.width/originRect.height:(kind==='video'?9/16:1);
+  let fallbackRatio=originRect&&originRect.height>0?originRect.width/originRect.height:(kind==='video'?9/16:1);
   const body=kind==='video'
     ? `<div class="media-viewer-stage is-video">
          <div class="media-viewer-card is-video">
@@ -9475,6 +9752,7 @@ function openMediaViewer(src,kind,originEl=null){
        </div>`;
 
   const s=el(`<section class="screen media-viewer-screen" data-media-viewer="${kind}">
+    <div class="media-viewer-backdrop" aria-hidden="true"></div>
     ${body}
     <header class="navbar media-viewer-nav">
       <div class="side"><button class="iconbtn media-viewer-close" type="button" aria-label="閉じる">${I.close}</button></div>
@@ -9487,7 +9765,7 @@ function openMediaViewer(src,kind,originEl=null){
   const card=s.querySelector('.media-viewer-card');
   const media=s.querySelector(kind==='video'?'.media-viewer-video':'.media-viewer-image');
   const imageZoom=s.querySelector('.media-viewer-image-zoom');
-  let imageGestures=null;
+  let imageGestures=null, imageGallery=null;
   let closing=false, dragY=0, dragAxis='', dragStartX=0, dragStartY=0;
 
   const fit=()=>layoutMediaViewerCard(stage,card,media,fallbackRatio);
@@ -9503,7 +9781,13 @@ function openMediaViewer(src,kind,originEl=null){
     closing=true;
     const v=s.querySelector('.media-viewer-video');
     if(v){ if(typeof s._syncLinkedFeedVideo==='function') s._syncLinkedFeedVideo(); v.pause(); }
-    if(imageGesture){ haptic(5); finishClose(); return; }
+    if(imageGesture){
+      /* The gesture layer has already performed the downward exit + fade.
+         Do not add another transform here; just remove the viewer. */
+      haptic(5);
+      finishClose();
+      return;
+    }
     if(imageGestures) imageGestures.reset(true);
     haptic(5);
     /* Let go of anything the gesture layer still holds. A captured pointer
@@ -9512,10 +9796,6 @@ function openMediaViewer(src,kind,originEl=null){
     releaseViewerPointers(s);
     s.classList.add('is-closing');
     s.style.pointerEvents='none';
-    /* The fade is nice, but it must never cost the page its scroll. Once the
-       animation has had its moment, take the layer out of hit-testing for
-       good rather than waiting on removal. */
-    setTimeout(()=>{ if(s.isConnected) s.style.display='none'; },240);
     const nav=s.querySelector('.media-viewer-nav');
     if(nav) nav.style.opacity='0';
 
@@ -9526,9 +9806,9 @@ function openMediaViewer(src,kind,originEl=null){
           {transform:from,opacity:1},
           {transform:`translate3d(0,${Math.max(window.innerHeight*.34,dragY+120)}px,0) scale(.90)`,opacity:.15}
         ],{duration:220,easing:'cubic-bezier(.3,.7,.2,1)',fill:'forwards'});
-      }else if(originEl&&originEl.isConnected){
+      }else if(activeOriginEl&&activeOriginEl.isConnected){
         const from=card.getBoundingClientRect();
-        const to=originEl.getBoundingClientRect();
+        const to=activeOriginEl.getBoundingClientRect();
         if(from.width>1&&from.height>1&&to.width>1&&to.height>1){
           const tx=to.left-from.left, ty=to.top-from.top;
           const sx=to.width/from.width, sy=to.height/from.height;
@@ -9548,20 +9828,29 @@ function openMediaViewer(src,kind,originEl=null){
   };
   s.querySelector('.media-viewer-close').onclick=()=>close();
 
-  const prep=prepareViewerMediaFile(safeSrc,kind);
   const save=s.querySelector('.media-viewer-save');
-  prep.then(()=>{
-    if(!save.isConnected) return;
-    save.classList.remove('is-preparing');
-  }).catch(err=>{
-    console.warn('[iroha media prepare]',err);
-    if(!save.isConnected) return;
-    save.classList.remove('is-preparing');
-    save.classList.add('is-error');
-  });
+  let currentViewerSrc=safeSrc;
+  let prep=null;
+  let prepToken=0;
+  const prepareCurrentSave=()=>{
+    const token=++prepToken;
+    save.classList.add('is-preparing');
+    save.classList.remove('is-error');
+    prep=prepareViewerMediaFile(currentViewerSrc,kind);
+    prep.then(()=>{
+      if(token!==prepToken||!save.isConnected) return;
+      save.classList.remove('is-preparing');
+    }).catch(err=>{
+      console.warn('[iroha media prepare]',err);
+      if(token!==prepToken||!save.isConnected) return;
+      save.classList.remove('is-preparing');
+      save.classList.add('is-error');
+    });
+  };
+  prepareCurrentSave();
   save.onclick=e=>{
     e.preventDefault();e.stopPropagation();haptic(7);
-    saveViewerMedia(save,prep,kind);
+    if(prep) saveViewerMedia(save,prep,kind);
   };
 
   /* Pull the floating media card down to dismiss it. Controls keep their own gestures. */
@@ -9605,7 +9894,19 @@ function openMediaViewer(src,kind,originEl=null){
   card.addEventListener('touchcancel',endDrag,{passive:true});
 
   if(kind==='video') initIrohaVideoViewer(s,videoLink);
-  else if(imageZoom) imageGestures=initIrohaImageViewerGestures(s,stage,card,imageZoom,()=>close({imageGesture:true}));
+  else if(imageZoom){
+    if(gallery){
+      imageGallery=initMediaViewerImageGallery(s,stage,card,media,gallery,(item,_index,ratio)=>{
+        activeOriginEl=item.node;
+        currentViewerSrc=item.src;
+        fallbackRatio=ratio>0?ratio:fallbackRatio;
+        prepareCurrentSave();
+      });
+    }
+    imageGestures=initIrohaImageViewerGestures(
+      s,stage,card,imageZoom,()=>close({imageGesture:true}),imageGallery
+    );
+  }
   push(s);
   fit();
   requestAnimationFrame(()=>requestAnimationFrame(()=>animateMediaViewerFromOrigin(s,card,originEl)));
@@ -9730,6 +10031,44 @@ function stopAudio(){
 }
 /* Capture safety taps before post/profile card click handlers can navigate. */
 document.addEventListener('click',e=>{ handleMediaSafetyClick(e); },true);
+
+/* A native horizontal media strip should stay a strip in every render context.
+   Some iOS/Safari paths still emit a click after a real horizontal drag, which
+   can make profile/DM strips look as if they refused to swipe because the
+   viewer opens immediately. Detect only a clearly horizontal drag and suppress
+   that one follow-up click. Vertical movement is deliberately ignored so page
+   scrolling and pull-to-refresh keep working from on top of the image. */
+let MEDIA_STRIP_CLICK_SUPPRESS_UNTIL=0;
+let MEDIA_STRIP_TOUCH=null;
+document.addEventListener('touchstart',e=>{
+  if(e.touches.length!==1) return;
+  const target=e.target instanceof Element ? e.target : null;
+  const track=target?.closest('.mstrip-track');
+  if(!track){ MEDIA_STRIP_TOUCH=null; return; }
+  const t=e.touches[0];
+  MEDIA_STRIP_TOUCH={track,x:t.clientX,y:t.clientY,horizontal:false};
+},{passive:true,capture:true});
+document.addEventListener('touchmove',e=>{
+  const g=MEDIA_STRIP_TOUCH;
+  if(!g||e.touches.length!==1) return;
+  const t=e.touches[0], dx=t.clientX-g.x, dy=t.clientY-g.y;
+  const ax=Math.abs(dx), ay=Math.abs(dy);
+  if(!g.horizontal && Math.max(ax,ay)>=7 && ax>ay*1.12) g.horizontal=true;
+  if(g.horizontal) MEDIA_STRIP_CLICK_SUPPRESS_UNTIL=Date.now()+380;
+},{passive:true,capture:true});
+const finishMediaStripTouch=()=>{
+  if(MEDIA_STRIP_TOUCH?.horizontal) MEDIA_STRIP_CLICK_SUPPRESS_UNTIL=Date.now()+380;
+  MEDIA_STRIP_TOUCH=null;
+};
+document.addEventListener('touchend',finishMediaStripTouch,{passive:true,capture:true});
+document.addEventListener('touchcancel',finishMediaStripTouch,{passive:true,capture:true});
+document.addEventListener('click',e=>{
+  if(Date.now()>=MEDIA_STRIP_CLICK_SUPPRESS_UNTIL) return;
+  const target=e.target instanceof Element ? e.target : null;
+  if(!target?.closest('.mstrip-track')) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+},true);
 
 /* Native long-press menus can emit a synthetic click when they close. Suppress
    only that follow-up click so Save-to-Photos never unexpectedly opens/plays media. */
@@ -10463,7 +10802,7 @@ function attachPTR(scroller, root, onRefresh){
   const ring=ind.querySelector('.ptr-ring');
   const TH=66, MAX=104;
   const postDetailAxisLock=!!root.dataset.post;
-  let sx=0, sy=0, axis='', pulling=false, dist=0, busy=false;
+  let sx=0, sy=0, axis='', pulling=false, dist=0, busy=false, startedOnStrip=false;
 
   scroller.classList.add('pull-host');
 
@@ -10471,6 +10810,7 @@ function attachPTR(scroller, root, onRefresh){
     if(busy || scroller.scrollTop>0 || e.touches.length>1) return;
     const t=e.touches[0];
     sx=t.clientX; sy=t.clientY; axis=''; pulling=true; dist=0;
+    startedOnStrip=!!e.target.closest('.mstrip');
     scroller.style.transition='none';
   },{passive:true});
 
@@ -10479,20 +10819,26 @@ function attachPTR(scroller, root, onRefresh){
     const t=e.touches[0];
     const dx=t.clientX-sx, dy=t.clientY-sy;
 
-    /* 投稿詳細だけは、横/縦が決まるまでPTRを動かさない。
-       横が勝った指では縦スクロールとPTRを止め、既存の横スワイプへ渡す。 */
-    if(postDetailAxisLock){
+    /* Media strips and post detail both wait for a real axis decision.
+       A horizontal strip flick is left completely alone. A vertical drag is
+       handed to normal page scrolling / PTR even when the finger started on
+       the picture itself. */
+    if(postDetailAxisLock || startedOnStrip){
       const ax=Math.abs(dx), ay=Math.abs(dy);
       if(!axis){
-        if(Math.max(ax,ay)<6) return;
-        axis=ax>ay?'x':'y';
+        if(Math.max(ax,ay)<7) return;
+        if(startedOnStrip){
+          if(ax>ay*1.12) axis='x';
+          else if(ay>ax*1.04) axis='y';
+          else return;
+        }else axis=ax>ay?'x':'y';
       }
       if(axis==='x'){
         pulling=false; dist=0;
         scroller.style.transition=''; scroller.style.transform='';
         ring.style.opacity=0; ring.style.transform='scale(.5)';
         ring.classList.remove('ready','busy');
-        e.preventDefault();
+        /* Crucial: no preventDefault here. The horizontal strip owns it. */
         return;
       }
     }
@@ -10508,7 +10854,8 @@ function attachPTR(scroller, root, onRefresh){
   },{passive:false});
 
   const release=()=>{
-    if(!pulling) return; pulling=false;
+    if(!pulling){ startedOnStrip=false; return; }
+    pulling=false; startedOnStrip=false;
     scroller.style.transition='';
     if(dist>=TH) run(); else settle();
   };
