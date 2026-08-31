@@ -1711,7 +1711,8 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .media.blurred .feed-video-play,.media.blurred .feed-video-expand,.media.blurred .feed-video-mute{opacity:0;pointer-events:none}
 .media.feed-media-stable.chrome-hidden .feed-video-play,
 .media.feed-media-stable.chrome-hidden .feed-video-mute,
-.media.feed-media-stable.chrome-hidden .feed-video-expand{opacity:0;pointer-events:none}
+.media.feed-media-stable.chrome-hidden .feed-video-expand,
+.media.feed-media-stable.chrome-hidden .media-filter-restore{opacity:0;pointer-events:none}
 
 /* Video detail controls: simple bottom transport bar like the reference clip. */
 .media-video-center{
@@ -1763,6 +1764,21 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .media-video-range::-moz-range-track{height:4px;border-radius:999px;background:rgba(255,255,255,.34)}
 .media-video-range::-moz-range-progress{height:4px;border-radius:999px;background:#fff}
 .media-video-range::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#fff;border:0}
+/* v8.6: the whole video transport bar mirrors the dark theme in light mode. */
+[data-theme="light"] .media-video-controls{color:#111}
+[data-theme="light"] .media-video-toggle,
+[data-theme="light"] .media-video-sound-toggle{
+  color:#111;
+  filter:drop-shadow(0 1px 3px rgba(255,255,255,.75));
+}
+[data-theme="light"] .media-video-range::-webkit-slider-runnable-track{
+  background:linear-gradient(to right,#111 0 var(--video-progress),rgba(17,17,17,.32) var(--video-progress) 100%);
+  box-shadow:0 1px 3px rgba(255,255,255,.18);
+}
+[data-theme="light"] .media-video-range::-webkit-slider-thumb{background:#111;box-shadow:0 1px 4px rgba(0,0,0,.24)}
+[data-theme="light"] .media-video-range::-moz-range-track{background:rgba(17,17,17,.32)}
+[data-theme="light"] .media-video-range::-moz-range-progress{background:#111}
+[data-theme="light"] .media-video-range::-moz-range-thumb{background:#111}
 @media (max-width:420px){
   .media-video-controls{left:16px;right:16px;grid-template-columns:32px minmax(0,1fr) 32px;gap:9px}
   .media-video-toggle,.media-video-sound-toggle{width:32px;height:32px}
@@ -3545,7 +3561,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='8.4';
+const APP_VER='8.8';
 
 
 /* =========================================================
@@ -6061,6 +6077,8 @@ function onPostClick(e){
   if(muteBtn){
     e.preventDefault(); e.stopPropagation(); haptic(5);
     toggleFeedVideoMute();
+    const box=muteBtn.closest('.media'); const v=box&&box.querySelector('video[data-feed-video]');
+    if(v&&!v.paused&&!v.ended) scheduleFeedVideoChromeHide(v);
     return;
   }
 
@@ -6098,8 +6116,18 @@ function onPostClick(e){
   const feedVideo=feedVideoBox&&feedVideoBox.querySelector('video[data-feed-video]');
   if(feedVideo){
     e.stopPropagation();
-    if(!feedVideo.paused&&!feedVideo.ended) feedVideoBox.classList.toggle('chrome-hidden');
-    else feedVideoBox.classList.remove('chrome-hidden');
+    if(!feedVideo.paused&&!feedVideo.ended){
+      if(feedVideoBox.classList.contains('chrome-hidden')){
+        feedVideoBox.classList.remove('chrome-hidden');
+        scheduleFeedVideoChromeHide(feedVideo);
+      }else{
+        clearFeedVideoChromeTimer(feedVideoBox);
+        feedVideoBox.classList.add('chrome-hidden');
+      }
+    }else{
+      clearFeedVideoChromeTimer(feedVideoBox);
+      feedVideoBox.classList.remove('chrome-hidden');
+    }
     return;
   }
 
@@ -8867,6 +8895,24 @@ let FEED_VIDEO_MUTED=true;
 let FEED_VIDEO_ACTIVE=null;
 let FEED_VIDEO_AUTOPLAY_CLEANUP=null;
 let FEED_VIDEO_AUTOPLAY_RAF=0;
+const FEED_VIDEO_CHROME_TIMERS=new WeakMap();
+const FEED_VIDEO_CHROME_HIDE_MS=2300;
+function clearFeedVideoChromeTimer(box){
+  if(!box) return;
+  const t=FEED_VIDEO_CHROME_TIMERS.get(box);
+  if(t){ clearTimeout(t); FEED_VIDEO_CHROME_TIMERS.delete(box); }
+}
+function scheduleFeedVideoChromeHide(v,delay=FEED_VIDEO_CHROME_HIDE_MS){
+  const box=v&&v.closest('.feed-media-stable'); if(!box) return;
+  clearFeedVideoChromeTimer(box);
+  if(v.paused||v.ended){ box.classList.remove('chrome-hidden'); return; }
+  box.classList.remove('chrome-hidden');
+  const timer=setTimeout(()=>{
+    FEED_VIDEO_CHROME_TIMERS.delete(box);
+    if(v.isConnected&&!v.paused&&!v.ended) box.classList.add('chrome-hidden');
+  },delay);
+  FEED_VIDEO_CHROME_TIMERS.set(box,timer);
+}
 function feedVideoSoundIcon(){ return FEED_VIDEO_MUTED?I.volumeOff:I.volume; }
 function paintFeedVideoMuteState(root=document){
   root.querySelectorAll('[data-feed-video-mute]').forEach(btn=>{
@@ -8933,9 +8979,12 @@ function paintFeedVideoBox(v){
   const playing=!v.paused&&!v.ended;
   btn.innerHTML=playing?I.pause:I.play;
   btn.setAttribute('aria-label',playing?'一時停止':'再生');
-  /* Chrome only hides while playing — a paused video always shows its play
-     button, or there would be no way to start it again. */
-  if(!playing){
+  /* While playing, show the controls briefly and then fade them away like a
+     normal video player. Pausing always brings them back immediately. */
+  if(playing){
+    scheduleFeedVideoChromeHide(v);
+  }else{
+    clearFeedVideoChromeTimer(box);
     box.classList.remove('chrome-hidden');
     if(FEED_VIDEO_ACTIVE===v) FEED_VIDEO_ACTIVE=null;
   }
@@ -10285,6 +10334,12 @@ document.addEventListener('click',e=>{
   if(!target) return;
   const media=target.closest('.media:not(.blurred) img, .media:not(.blurred) video');
   if(!media) return;
+
+  /* v8.7: feed videos already own taps outside their buttons: while playing,
+     that tap shows/hides the play/mute/detail chrome. Do not let the global
+     media-viewer capture handler steal that tap and open the detail screen.
+     The dedicated expand button still opens the detail viewer normally. */
+  if(media.matches('video[data-feed-video]')) return;
 
   /* The click that ends a strip flick lands on whichever picture stopped under
      the finger. Opening the viewer there would make the row feel like it
