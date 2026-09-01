@@ -3561,7 +3561,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='8.8';
+const APP_VER='8.9';
 
 
 /* =========================================================
@@ -9244,7 +9244,7 @@ function mediaHTML(m, opts={}){
   const dmMediaStyle=dmGeom
     ? ' style="width:100%;height:100%;max-height:none;object-fit:cover"'
     : '';
-  const feedMediaStyle=feedBox&&!dmGeom ? ' style="width:100%;height:100%;max-height:none;object-fit:contain"' : '';
+  const feedMediaStyle=feedBox&&!dmGeom ? ` style="width:100%;height:100%;max-height:none;object-fit:${opts.stripped?'cover':'contain'}"` : '';
   const mediaStyle=dmMediaStyle||feedMediaStyle;
   const posterAttr=feedPoster?` poster="${escAttr(feedPoster)}"`:'';
   const crossAttr=feedBox?' crossorigin="anonymous"':'';
