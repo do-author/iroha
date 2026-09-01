@@ -2271,6 +2271,56 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .menu .mcard.solo{margin-top:9px}
 .menu .mcard.solo button{font-weight:800}
 
+
+/* ---------- post upload status (Threads-style, above bottom nav) ---------- */
+.post-upload-status{
+  position:absolute;
+  left:16px; right:16px;
+  bottom:calc(var(--safe-b) + 94px);
+  z-index:115;
+  min-height:62px;
+  display:flex; align-items:center; gap:12px;
+  padding:10px 13px 10px 14px;
+  border-radius:20px;
+  color:var(--ink);
+  background:var(--nav);
+  border:1px solid var(--glass-line);
+  -webkit-backdrop-filter:var(--glass); backdrop-filter:var(--glass);
+  box-shadow:0 12px 34px rgba(0,0,0,.18), inset 0 1px 0 var(--glass-edge);
+  opacity:0; transform:translate3d(0,18px,0) scale(.985);
+  pointer-events:none;
+  transition:opacity 220ms var(--ease-out), transform 420ms var(--spring-soft);
+}
+.post-upload-status.on{opacity:1; transform:none; pointer-events:auto}
+.post-upload-status.bye{opacity:0; transform:translate3d(0,10px,0) scale(.99); pointer-events:none}
+.post-upload-status .pus-mark{
+  flex:0 0 38px; width:38px; height:38px; border-radius:50%;
+  display:grid; place-items:center;
+  background:var(--field); border:1px solid var(--line-soft); color:var(--ink-2);
+}
+.post-upload-status .pus-ring{
+  width:20px; height:20px; border-radius:50%;
+  border:2.5px solid currentColor; border-right-color:transparent;
+  animation:pusSpin .8s linear infinite;
+}
+.post-upload-status.done .pus-ring{animation:none; border:0; width:22px; height:22px}
+.post-upload-status.done .pus-ring::before{content:'✓'; display:block; font-size:19px; line-height:22px; font-weight:900; text-align:center}
+.post-upload-status.failed .pus-ring{animation:none; border:0; width:22px; height:22px}
+.post-upload-status.failed .pus-ring::before{content:'!'; display:block; font-size:19px; line-height:22px; font-weight:900; text-align:center}
+.post-upload-status .pus-copy{min-width:0; flex:1; display:flex; flex-direction:column; gap:2px}
+.post-upload-status .pus-copy b{font-size:15px; font-weight:800; letter-spacing:.01em}
+.post-upload-status .pus-copy span{font-size:11.5px; font-weight:650; color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.post-upload-status .pus-view{
+  flex:0 0 auto; min-width:58px; height:40px; padding:0 10px;
+  display:grid; place-items:center;
+  font-size:14px; font-weight:850; color:var(--ink);
+  border-radius:14px;
+  transition:transform var(--dur-2) var(--spring), background-color var(--dur-2) var(--ease-out);
+}
+.post-upload-status .pus-view:active{transform:scale(.92); background:var(--field)}
+@keyframes pusSpin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.post-upload-status .pus-ring{animation-duration:1.5s}}
+
 /* toast */
 .toastwrap{position:absolute; left:0;right:0; bottom:calc(var(--safe-b) + 96px); z-index:120;
   display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none}
@@ -3561,7 +3611,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='9.0';
+const APP_VER='9.1';
 
 
 /* =========================================================
@@ -5456,6 +5506,43 @@ function setTheme(t, animate=true){
   const meta=document.querySelector('meta[name=theme-color]');
   if(meta) meta.content=themeOpt(t).color;
   savePrefs();
+}
+
+
+/* ---------- post upload status ---------- */
+let postUploadStatusEl=null, postUploadStatusHideTimer=0;
+function showPostUploadStatus(post){
+  clearTimeout(postUploadStatusHideTimer);
+  if(postUploadStatusEl) postUploadStatusEl.remove();
+  const mediaCount=mediaListOf(post).length;
+  const sub=mediaCount ? `${mediaCount}件のメディアを送信しています` : '投稿を送信しています';
+  const bar=el(`<div class="post-upload-status" role="status" aria-live="polite">
+    <div class="pus-mark" aria-hidden="true"><span class="pus-ring"></span></div>
+    <div class="pus-copy"><b>投稿中…</b><span>${esc(sub)}</span></div>
+    <button class="pus-view" type="button">見る</button>
+  </div>`);
+  postUploadStatusEl=bar;
+  $('#app').appendChild(bar);
+  bar.querySelector('.pus-view').onclick=()=>{
+    haptic(5);
+    if(S.posts.some(x=>x.id===post.id)) pushPostDetail(post.id);
+  };
+  requestAnimationFrame(()=>requestAnimationFrame(()=>bar.classList.add('on')));
+}
+function finishPostUploadStatus(ok=true){
+  const bar=postUploadStatusEl; if(!bar) return;
+  clearTimeout(postUploadStatusHideTimer);
+  bar.classList.toggle('done',ok);
+  bar.classList.toggle('failed',!ok);
+  const title=bar.querySelector('.pus-copy b');
+  const sub=bar.querySelector('.pus-copy span');
+  if(title) title.textContent=ok?'投稿しました':'投稿できませんでした';
+  if(sub) sub.textContent=ok?'送信が完了しました':'通信を確認してもう一度お試しください';
+  postUploadStatusHideTimer=setTimeout(()=>{
+    if(postUploadStatusEl!==bar) return;
+    bar.classList.add('bye');
+    setTimeout(()=>{ if(postUploadStatusEl===bar) postUploadStatusEl=null; bar.remove(); },360);
+  }, ok?900:3200);
 }
 
 /* ---------- toast ---------- */
@@ -11017,6 +11104,7 @@ function openCompose(){
     setMediaList(post, atts);
     S.posts.unshift(post);
     const newId=post.id;
+    showPostUploadStatus(post);
 
     /* Instagram-style UX: the composer is done immediately.
        Upload/insert continues in the background while the app stays open. */
@@ -11036,8 +11124,8 @@ function openCompose(){
         if(live && live!==post) Object.assign(live,post);
         else if(!live) S.posts.unshift(post);
         quiet(()=>refreshInPlace('posts'));
+        finishPostUploadStatus(true);
         const hidden = S.tab==='home' && !visiblePosts().some(x=>x.id===newId);
-        toast(hidden ? '投稿しました。「おすすめ」で見られます' : '投稿しました');
       }catch(e){
         post.pending=false; post.failed=true;
         rollbackCategoryCooldown(tag,cooldownStamp);
@@ -11045,8 +11133,8 @@ function openCompose(){
         if(live && live!==post) Object.assign(live,post);
         else if(!live) S.posts.unshift(post);
         quiet(()=>refreshInPlace('posts'));
+        finishPostUploadStatus(false);
         cloudErr('post',e);
-        toast('投稿を送信できませんでした');
       }
     })();
   };
