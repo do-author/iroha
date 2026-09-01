@@ -3561,7 +3561,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='8.9';
+const APP_VER='9.0';
 
 
 /* =========================================================
@@ -7614,27 +7614,49 @@ function openReplyCompose(p, toReply, done){
   void m.offsetHeight;
   m.classList.add('on');
 
-  let att=null, sending=false;
+  let atts=[], sending=false;
   const ta=$('#rcText',m), go=$('#rcGo',m), attBox=$('#rcAtt',m);
-  const sync=()=>{ go.disabled = sending || (ta.value.trim().length===0 && !att); };
+  const sync=()=>{ go.disabled = sending || (ta.value.trim().length===0 && !atts.length); };
   ta.addEventListener('input',()=>{
     $('#rcCnt',m).textContent=[...ta.value].length+'/140';
     sync();
   });
   ta.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); fire(); } });
 
-  function setAtt(v){
-    att=v;
-    attBox.innerHTML = v ? `<div class="attpreview">
-        <button class="x" id="rcAttX" aria-label="取り消す">${I.close}</button>${mediaHTML(v,{forceShow:true})}</div>` : '';
-    if(v) $('#rcAttX',attBox).onclick=()=>{ haptic(6); stopAudio(); setAtt(null); };
-    $$('.attbtn',m).forEach(b=>b.disabled=!!v);
+  /* Match posts/DMs: up to four visual attachments; a voice note stands alone. */
+  const hasAudio=()=>atts.some(a=>a.kind==='audio');
+
+  function paintAtts(){
+    attBox.innerHTML = atts.length
+      ? `<div class="attgrid">${atts.map((a,i)=>
+          `<div class="attpreview">
+             <button class="x" data-rc-att-x="${i}" aria-label="取り消す">${I.close}</button>
+             ${mediaHTML(a,{forceShow:true})}
+           </div>`).join('')}</div>
+         ${atts.length>1?`<p class="atthint">${atts.length}件 · 横にスワイプして見られます</p>`:''}`
+      : '';
+    attBox.querySelectorAll('[data-rc-att-x]').forEach(b=>b.onclick=()=>{
+      haptic(6); stopAudio();
+      atts.splice(Number(b.dataset.rcAttX),1);
+      paintAtts();
+    });
+    const full=atts.length>=MEDIA_MAX || hasAudio();
+    $$('.attbtn',m).forEach(b=>{
+      b.disabled = full || (b.dataset.att==='audio' && atts.length>0);
+    });
     sync(); fitBars(m);
+  }
+  function addAtts(v){
+    for(const it of (Array.isArray(v)?v:[v])){
+      if(!it || atts.length>=MEDIA_MAX) break;
+      atts.push(it);
+    }
+    paintAtts();
   }
   $$('.attbtn',m).forEach(b=>b.addEventListener('click',()=>{
     haptic(7);
-    if(b.dataset.att==='audio') openRecorder(setAtt);
-    else pickMedia('image/*,video/*', setAtt);
+    if(b.dataset.att==='audio') openRecorder(addAtts);
+    else pickMedia('image/*,video/*', addAtts, {multiple:true, max:MEDIA_MAX-atts.length});
   }));
 
   $('#rcNo',m).onclick=close;
@@ -7645,9 +7667,10 @@ function openReplyCompose(p, toReply, done){
   async function fire(){
     if(sending) return;
     const t=ta.value.trim();
-    if(!t && !att) return;
+    if(!t && !atts.length) return;
     sending=true; sync();
-    const r={id:newRowId(),u:'me', t, to:toUid||null, media:att, ts:Date.now(), likes:0, liked:false};
+    const r={id:newRowId(),u:'me', t, to:toUid||null, ts:Date.now(), likes:0, liked:false};
+    setMediaList(r,atts);
     try{ await cloudCreateReply(p,r); }
     catch(e){ sending=false; sync(); cloudErr('reply',e); toast('返信を送れませんでした'); return; }
     haptic(13);
