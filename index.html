@@ -3611,7 +3611,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='9.1';
+const APP_VER='9.2';
 
 
 /* =========================================================
@@ -8554,8 +8554,8 @@ function pushEdit(){
       </div>
       <p class="hint">「秘密」を選ぶと、どこにも表示されません</p>
       <div class="field"><label>表示名</label>
-        <div class="fin"><input id="edName" maxlength="20" value="${esc(draft.name)}"></div>
-        <span class="cnt" id="cName">${[...draft.name].length}/20</span></div>
+        <div class="fin"><input id="edName" maxlength="10" value="${esc(draft.name)}"></div>
+        <span class="cnt" id="cName">${[...draft.name].length}/10</span></div>
       <div class="field"><label>ユーザーID</label>
         <div class="fin"><span class="at">@</span><input id="edHandle" maxlength="20" value="${esc(draft.handle)}"></div>
         <span class="sub">半角英数字とアンダーバー・3文字以上</span></div>
@@ -8606,7 +8606,7 @@ function pushEdit(){
     refreshAv(); refreshBanner();
   }));
   const nm=$('#edName',s), hd=$('#edHandle',s), bio=$('#edBio',s);
-  nm.addEventListener('input',()=>$('#cName',s).textContent=[...nm.value].length+'/20');
+  nm.addEventListener('input',()=>$('#cName',s).textContent=[...nm.value].length+'/10');
   bio.addEventListener('input',()=>{
     $('#cBio',s).textContent=[...bio.value].length+'/100';
     bio.style.height='auto'; bio.style.height=Math.max(74,bio.scrollHeight)+'px';
@@ -8617,6 +8617,7 @@ function pushEdit(){
     const h=hd.value.trim();
     const name=nm.value.trim();
     if(!name){ toast('表示名を入力してください'); return; }
+    if([...name].length>10){ toast('表示名は10文字以内にしてください'); return; }
     if(h.length<3){ toast('ユーザーIDは3文字以上にしてください'); return; }
 
     const saveBtn=$('#edSave',s);
@@ -11525,6 +11526,7 @@ function openFirstSetup(prefill={}){
 
       const name=nm.value.trim();
       if(!name){ toast('名前を入力してください'); return; }
+      if([...name].length>10){ toast('名前は10文字以内にしてください'); return; }
 
       layer.classList.add('busy');
       start.textContent='はじめています';
