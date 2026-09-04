@@ -3640,7 +3640,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='9.8';
+const APP_VER='10.0';
 
 
 /* =========================================================
@@ -8986,13 +8986,40 @@ function feedMediaBoxStyle(m){
   return {style:`width:100%;max-width:${maxW.toFixed(2)}px;aspect-ratio:${g.w} / ${g.h}`,known:g.known,key:feedMediaCacheKey(m)};
 }
 function feedVideoPoster(key){ return key&&typeof FEED_VIDEO_POSTERS[key]==='string'?FEED_VIDEO_POSTERS[key]:''; }
+/* The poster store holds up to FEED_VIDEO_POSTER_MAX base64 JPEGs, which is
+   close to a megabyte of string. Writing that through JSON.stringify +
+   localStorage.setItem is synchronous and blocks the main thread, and the old
+   code did it once per captured thumbnail — in the middle of scrolling,
+   sending and uploading. Keep memory authoritative and updated instantly, and
+   let the disk copy catch up when the browser is idle. */
+let FEED_POSTER_FLUSH=0;
+function flushFeedVideoPosters(){
+  if(FEED_POSTER_FLUSH){
+    if(typeof cancelIdleCallback==='function') try{cancelIdleCallback(FEED_POSTER_FLUSH)}catch(_){}
+    clearTimeout(FEED_POSTER_FLUSH);
+    FEED_POSTER_FLUSH=0;
+  }
+  try{localStorage.setItem(FEED_VIDEO_POSTER_KEY,JSON.stringify(FEED_VIDEO_POSTERS))}catch(_){}
+}
+function scheduleFeedVideoPosterFlush(){
+  if(FEED_POSTER_FLUSH) return;
+  FEED_POSTER_FLUSH = typeof requestIdleCallback==='function'
+    ? requestIdleCallback(()=>{FEED_POSTER_FLUSH=0;flushFeedVideoPosters();},{timeout:4000})
+    : setTimeout(()=>{FEED_POSTER_FLUSH=0;flushFeedVideoPosters();},1200);
+}
+/* Leaving or backgrounding the app must not lose what memory already has. */
+addEventListener('pagehide',()=>{ if(FEED_POSTER_FLUSH) flushFeedVideoPosters(); });
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden' && FEED_POSTER_FLUSH) flushFeedVideoPosters();
+});
+
 function rememberFeedVideoPoster(key,dataUrl){
   if(!key||!/^data:image\/jpeg;base64,/i.test(String(dataUrl||''))) return;
   const next={...FEED_VIDEO_POSTERS}; delete next[key]; next[key]=dataUrl;
   const keys=Object.keys(next);
   if(keys.length>FEED_VIDEO_POSTER_MAX) for(const k of keys.slice(0,keys.length-FEED_VIDEO_POSTER_MAX)) delete next[k];
   FEED_VIDEO_POSTERS=next;
-  try{localStorage.setItem(FEED_VIDEO_POSTER_KEY,JSON.stringify(next))}catch(_){}
+  scheduleFeedVideoPosterFlush();
 }
 function captureFeedVideoPoster(src,key,targetVideo){
   if(!src||!key||FEED_POSTER_JOBS.has(key)) return;
@@ -9077,7 +9104,14 @@ function wireFeedMediaStability(root){
       /* Never disturb a video the user has already started. */
       if(!node.paused||node.currentTime>0.01) return;
       nudged=true;
-      try{ node.currentTime=0.001; }catch(_){}
+      /* Same offset the old capture picked, and for the same reason: a lot of
+         clips open on a black or blank frame, so landing exactly on 0 gives a
+         thumbnail that looks broken. Matching it also means the frame shown
+         live and the JPEG cached below are the same picture, so the card does
+         not change appearance on the next load. */
+      const dur=Number.isFinite(node.duration)?node.duration:0;
+      const at=dur>0?Math.min(.18,Math.max(.03,dur*.03)):.05;
+      try{ node.currentTime=at; }catch(_){}
     };
     const cacheFromLiveFrame=()=>{
       if(!node.isConnected||feedVideoPoster(key)) return;
@@ -9109,6 +9143,19 @@ function wireFeedMediaStability(root){
       if(node.preload==='none') node.preload='metadata';
       if(node.readyState>=1) paintFirstFrame();
       else node.addEventListener('loadedmetadata',paintFirstFrame,{once:true});
+
+      /* Nudging the live element is the fast path, not a guarantee: with
+         preload="metadata", a cross-origin response without CORS headers, or
+         a browser that refuses to decode before interaction, the seek simply
+         never lands and the box would stay empty — worse than before this
+         was optimised. So keep the old standalone capture as a safety net and
+         let it run if nothing has painted shortly after. It exits immediately
+         if the live frame already filled the cache. */
+      setTimeout(()=>{
+        if(!node.isConnected||feedVideoPoster(key)) return;
+        if(node.readyState>=2) return;      /* frame is decoded and on screen */
+        captureFeedVideoPoster(node.currentSrc||node.src,key,node);
+      },1500);
     };
     if('IntersectionObserver' in window){
       const io=new IntersectionObserver(entries=>{
