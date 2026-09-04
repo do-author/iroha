@@ -3640,7 +3640,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='10.0';
+const APP_VER='10.1';
 
 
 /* =========================================================
@@ -3969,6 +3969,7 @@ function syncDmMediaNode(row,m){
       ph.replaceWith(node);
       const mediaEl=node.querySelector('img,video');
       if(mediaEl) rememberDmMediaGeometryFromElement(m.media,mediaEl);
+      wireDmVideoPosters(node);
     }
   }else if(pending && !ph && !bub.querySelector('.media,.media-off,.aplayer')){
     const node=el(dmLazyMediaHTML(m));
@@ -7257,6 +7258,7 @@ function updateMessageNode(node,m,c){
   node.classList.toggle('is-sending',!!m.pending);
   node.classList.toggle('is-failed',!!m.failed);
   syncDmMediaNode(node,m);
+  wireDmVideoPosters(node);
 
   let tm=node.querySelector('.mtime');
   if(!tm){
@@ -7457,6 +7459,7 @@ function appendMsg(th,c,m,animate,i=0){
   syncDmMediaNode(row,m);
   const dmMediaEl=row.querySelector('.media img, .media video');
   if(m.media && dmMediaEl) rememberDmMediaGeometryFromElement(m.media,dmMediaEl);
+  wireDmVideoPosters(row);
   rememberDmRow(c.id,m,i,row);
   wireDmThreadLazyMedia(th,c);
 
@@ -9059,6 +9062,69 @@ function captureFeedVideoPoster(src,key,targetVideo){
   FEED_POSTER_JOBS.set(key,job);
   job.finally(()=>FEED_POSTER_JOBS.delete(key));
 }
+
+/* DM videos use the same cached JPEG thumbnail as feed videos.  The message
+   itself stays untouched: this is presentation-only and never changes
+   messages.media, Storage paths or the upload payload.  Capture is deferred
+   until the message is near the visible thread so an old conversation does
+   not start decoding every video at once. */
+function wireDmVideoPosters(root){
+  if(!root) return;
+  const nodes=[];
+  if(root.matches?.('video[data-dm-video-poster-key]')) nodes.push(root);
+  root.querySelectorAll?.('video[data-dm-video-poster-key]').forEach(v=>nodes.push(v));
+
+  nodes.forEach(node=>{
+    if(node.dataset.dmPosterWired==='1') return;
+    node.dataset.dmPosterWired='1';
+    const key=decodeURIComponent(node.dataset.dmVideoPosterKey||'');
+    if(!key) return;
+
+    const cached=feedVideoPoster(key);
+    if(cached){ node.poster=cached; return; }
+
+    let started=false;
+    const start=()=>{
+      if(started||!node.isConnected) return;
+      started=true;
+      if(node.preload==='none') node.preload='metadata';
+
+      /* First try the video element that is already on screen.  Seeking a few
+         frames in makes iOS paint a real thumbnail instead of its blank
+         metadata-only surface, without starting playback. */
+      const paintLiveFrame=()=>{
+        if(!node.isConnected || !node.paused || node.currentTime>0.01) return;
+        const dur=Number.isFinite(node.duration)?node.duration:0;
+        const at=dur>0?Math.min(.18,Math.max(.03,dur*.03)):.05;
+        try{ node.currentTime=at; }catch(_){ }
+      };
+      if(node.readyState>=1) paintLiveFrame();
+      else node.addEventListener('loadedmetadata',paintLiveFrame,{once:true});
+
+      /* Build the reusable JPEG as well.  captureFeedVideoPoster is shared
+         with Home, so after the first successful capture this exact DM video
+         opens with a poster immediately on later renders/app launches. */
+      setTimeout(()=>{
+        if(!node.isConnected) return;
+        const again=feedVideoPoster(key);
+        if(again){ node.poster=again; return; }
+        captureFeedVideoPoster(node.currentSrc||node.src,key,node);
+      },500);
+    };
+
+    if('IntersectionObserver' in window){
+      const thread=node.closest('.thread');
+      const io=new IntersectionObserver(entries=>{
+        if(entries.some(e=>e.isIntersecting)){
+          io.disconnect();
+          start();
+        }
+      },{root:thread||null,rootMargin:'420px 0px',threshold:0.01});
+      io.observe(node);
+    }else start();
+  });
+}
+
 function wireFeedMediaStability(root){
   if(!root) return;
   root.querySelectorAll('.feed-media-stable').forEach(box=>{
@@ -9628,7 +9694,9 @@ function mediaHTML(m, opts={}){
   const feedBoxStyle=feedBox ? ` style="${feedBox.style}"` : '';
   const feedClass=feedBox ? ' feed-media-stable' : '';
   const feedData=feedBox ? ` data-feed-media-key="${encodeURIComponent(feedBox.key)}"` : '';
-  const feedPoster=feedBox&&m.kind==='video' ? feedVideoPoster(feedBox.key) : '';
+  const dmPosterKey=opts.dmStable&&m.kind==='video' ? feedMediaCacheKey(m) : '';
+  const videoPosterKey=feedBox&&m.kind==='video' ? feedBox.key : dmPosterKey;
+  const feedPoster=videoPosterKey ? feedVideoPoster(videoPosterKey) : '';
 
   /* DM media display box is local-only and never changes messages.media or upload payloads. */
   const dmGeom=(opts.dmStable && (m.kind==='image'||m.kind==='video')) ? dmMediaGeometry(m) : null;
@@ -9641,7 +9709,8 @@ function mediaHTML(m, opts={}){
   const feedMediaStyle=feedBox&&!dmGeom ? ` style="width:100%;height:100%;max-height:none;object-fit:${opts.stripped?'cover':'contain'}"` : '';
   const mediaStyle=dmMediaStyle||feedMediaStyle;
   const posterAttr=feedPoster?` poster="${escAttr(feedPoster)}"`:'';
-  const crossAttr=feedBox?' crossorigin="anonymous"':'';
+  const dmPosterData=dmPosterKey?` data-dm-video-poster-key="${encodeURIComponent(dmPosterKey)}"`:'';
+  const crossAttr=(feedBox||dmPosterKey)?' crossorigin="anonymous"':'';
   /* Feed video never autoplays. data-feed-video only marks a video as eligible
      for the tap-to-play overlay below (built in onPostClick) and for the
      feed<->viewer playback-position link; every other context keeps the
@@ -9654,7 +9723,7 @@ function mediaHTML(m, opts={}){
     : `<span class="video-open-indicator" aria-hidden="true">${I.play}</span>`;
 
   const inner = m.kind==='video'
-    ? `<video class="iroha-inline-video" src="${escAttr(m.src)}"${mediaStyle}${posterAttr}${crossAttr}${feedVideoAttrs} playsinline preload="${videoPreload}"></video>${videoAdornment}`
+    ? `<video class="iroha-inline-video" src="${escAttr(m.src)}"${mediaStyle}${posterAttr}${crossAttr}${dmPosterData}${feedVideoAttrs} playsinline preload="${videoPreload}"></video>${videoAdornment}`
     : `<img src="${escAttr(m.src)}"${mediaStyle} alt="" decoding="async"${imgLoad}>`;
 
   const boxStyle=dmBoxStyle||feedBoxStyle;
