@@ -9349,19 +9349,48 @@ function syncXFeedStripGeometry(strip){
   }
 }
 
+/* Which page bar is lit.
+
+   This used to pick the item whose leading edge sat nearest the scroll
+   position. That works while there is far more content than viewport, but it
+   breaks down at the tail: with only two attachments the strip often cannot
+   scroll further than half of the first item, so the second item's leading
+   edge never becomes the nearest one and its bar could never light up, no
+   matter how far right you pushed.
+
+   Instead, pick the item filling most of the viewport, and pin the two ends:
+   fully left is always the first item, fully right is always the last. For a
+   long strip this lands within a few pixels of the old leading-edge rule, so
+   the feel of a 3-4 image post is unchanged. */
 function paintXFeedStripPage(track){
   const strip=track.closest('.mstrip-xfeed');
   if(!strip) return;
   const items=[...track.querySelectorAll('.mstrip-item')];
   const dots=[...strip.querySelectorAll('.mstrip-page')];
   if(!items.length || !dots.length) return;
-  const left=parseFloat(getComputedStyle(strip).getPropertyValue('--xstrip-left'))||0;
-  const target=track.scrollLeft+left;
-  let best=0,dist=Infinity;
-  items.forEach((item,i)=>{
-    const d=Math.abs(item.offsetLeft-target);
-    if(d<dist){dist=d;best=i;}
-  });
+
+  const max=track.scrollWidth-track.clientWidth;
+  const x=track.scrollLeft;
+  let best=0;
+
+  if(max<=1){
+    best=0;
+  }else if(x>=max-1){
+    best=items.length-1;
+  }else if(x<=1){
+    best=0;
+  }else{
+    const viewL=x, viewR=x+track.clientWidth;
+    let seen=-1;
+    items.forEach((item,i)=>{
+      const l=item.offsetLeft, r=l+item.offsetWidth;
+      const vis=Math.min(r,viewR)-Math.max(l,viewL);
+      /* >= keeps a tie moving forward, so a half-and-half view reads as the
+         item you are scrolling towards rather than the one you are leaving. */
+      if(vis>=seen){seen=vis;best=i;}
+    });
+  }
+
   dots.forEach((d,i)=>d.classList.toggle('on',i===best));
 }
 
@@ -9391,7 +9420,11 @@ let XFEED_STRIP_RESIZE_TIMER=0;
 window.addEventListener('resize',()=>{
   clearTimeout(XFEED_STRIP_RESIZE_TIMER);
   XFEED_STRIP_RESIZE_TIMER=setTimeout(()=>{
-    document.querySelectorAll('.mstrip-xfeed').forEach(syncXFeedStripGeometry);
+    document.querySelectorAll('.mstrip-xfeed').forEach(strip=>{
+      syncXFeedStripGeometry(strip);
+      const track=strip.querySelector('.mstrip-track');
+      if(track) paintXFeedStripPage(track);
+    });
   },80);
 },{passive:true});
 
