@@ -3640,7 +3640,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='9.4';
+const APP_VER='9.5';
 
 
 /* =========================================================
@@ -9319,6 +9319,12 @@ function mediaGroupHTML(list, opts={}){
   </div>`;
 }
 
+/* Vertical breathing room kept between the avatar and the media strip.
+   The strip is full-bleed once it scrolls, so on a short post the media would
+   otherwise ride right up against the avatar. Raise this to push the media
+   further down, lower it to tuck the media closer. */
+const XSTRIP_AVATAR_GAP=14;
+
 function syncXFeedStripGeometry(strip){
   if(!strip?.classList?.contains('mstrip-xfeed')) return;
   const col=strip.closest('.p-col');
@@ -9344,7 +9350,7 @@ function syncXFeedStripGeometry(strip){
   if(av && track){
     const ar=av.getBoundingClientRect();
     const tr=track.getBoundingClientRect();
-    const need=Math.max(0,(ar.bottom+7)-tr.top);
+    const need=Math.max(0,(ar.bottom+XSTRIP_AVATAR_GAP)-tr.top);
     if(need>0) strip.style.setProperty('--xstrip-track-clearance',`${need.toFixed(2)}px`);
   }
 }
