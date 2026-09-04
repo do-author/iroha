@@ -3640,7 +3640,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='9.6';
+const APP_VER='9.7';
 
 
 /* =========================================================
@@ -5541,39 +5541,80 @@ function setTheme(t, animate=true){
 
 
 /* ---------- post upload status ---------- */
-let postUploadStatusEl=null, postUploadStatusHideTimer=0;
-function showPostUploadStatus(post){
-  clearTimeout(postUploadStatusHideTimer);
-  if(postUploadStatusEl) postUploadStatusEl.remove();
-  const mediaCount=mediaListOf(post).length;
-  const sub=mediaCount ? `${mediaCount}件のメディアを送信しています` : '投稿を送信しています';
+let uploadStatusEl=null, uploadStatusHideTimer=0;
+/* One shared floating status bar for work that keeps running after its
+   composer has closed. Posts have always used it; DMs with attachments now do
+   too, because a video can take a while and the per-bubble "送信中" label is
+   only useful while you are still looking at that thread.
+
+   Only one bar is on screen at a time — the newest send replaces the previous
+   one. Each caller keeps the handle it was given and passes it back, so a
+   finishing post can never relabel a DM's bar (or the other way round). */
+function showUploadStatus({title,sub,onView}){
+  clearTimeout(uploadStatusHideTimer);
+  if(uploadStatusEl) uploadStatusEl.remove();
   const bar=el(`<div class="post-upload-status" role="status" aria-live="polite">
     <div class="pus-mark" aria-hidden="true"><span class="pus-ring"></span></div>
-    <div class="pus-copy"><b>投稿中…</b><span>${esc(sub)}</span></div>
-    <button class="pus-view" type="button">見る</button>
+    <div class="pus-copy"><b>${esc(title)}</b><span>${esc(sub)}</span></div>
+    ${onView?`<button class="pus-view" type="button">見る</button>`:''}
   </div>`);
-  postUploadStatusEl=bar;
+  uploadStatusEl=bar;
   $('#app').appendChild(bar);
-  bar.querySelector('.pus-view').onclick=()=>{
-    haptic(5);
-    if(S.posts.some(x=>x.id===post.id)) pushPostDetail(post.id);
-  };
+  const view=bar.querySelector('.pus-view');
+  if(view) view.onclick=()=>{ haptic(5); onView(); };
   requestAnimationFrame(()=>requestAnimationFrame(()=>bar.classList.add('on')));
+  return bar;
 }
-function finishPostUploadStatus(ok=true){
-  const bar=postUploadStatusEl; if(!bar) return;
-  clearTimeout(postUploadStatusHideTimer);
+function finishUploadStatus(bar,ok,{okTitle,okSub,failTitle,failSub}){
+  /* A newer send already took the bar over — leave its message alone. */
+  if(!bar || uploadStatusEl!==bar) return;
+  clearTimeout(uploadStatusHideTimer);
   bar.classList.toggle('done',ok);
   bar.classList.toggle('failed',!ok);
   const title=bar.querySelector('.pus-copy b');
   const sub=bar.querySelector('.pus-copy span');
-  if(title) title.textContent=ok?'投稿しました':'投稿できませんでした';
-  if(sub) sub.textContent=ok?'送信が完了しました':'通信を確認してもう一度お試しください';
-  postUploadStatusHideTimer=setTimeout(()=>{
-    if(postUploadStatusEl!==bar) return;
+  if(title) title.textContent=ok?okTitle:failTitle;
+  if(sub) sub.textContent=ok?okSub:failSub;
+  uploadStatusHideTimer=setTimeout(()=>{
+    if(uploadStatusEl!==bar) return;
     bar.classList.add('bye');
-    setTimeout(()=>{ if(postUploadStatusEl===bar) postUploadStatusEl=null; bar.remove(); },360);
+    setTimeout(()=>{ if(uploadStatusEl===bar) uploadStatusEl=null; bar.remove(); },360);
   }, ok?900:3200);
+}
+
+function showPostUploadStatus(post){
+  const mediaCount=mediaListOf(post).length;
+  return showUploadStatus({
+    title:'投稿中…',
+    sub: mediaCount ? `${mediaCount}件のメディアを送信しています` : '投稿を送信しています',
+    onView: ()=>{ if(S.posts.some(x=>x.id===post.id)) pushPostDetail(post.id); }
+  });
+}
+function finishPostUploadStatus(bar,ok=true){
+  finishUploadStatus(bar,ok,{
+    okTitle:'投稿しました',   okSub:'送信が完了しました',
+    failTitle:'投稿できませんでした', failSub:'通信を確認してもう一度お試しください'
+  });
+}
+
+/* Text-only DMs land instantly and already show their state under the bubble,
+   so the bar is reserved for sends that actually have something to upload. */
+function showDmUploadStatus(c,m){
+  const n=mediaListOf(m).length;
+  if(!n) return null;
+  const who=S.users[c.u]?.name||'';
+  return showUploadStatus({
+    title:'送信中…',
+    sub: who ? `${who}に${n}件のメディアを送信しています` : `${n}件のメディアを送信しています`,
+    onView: ()=>pushThread(c.id)
+  });
+}
+function finishDmUploadStatus(bar,ok=true){
+  if(!bar) return;
+  finishUploadStatus(bar,ok,{
+    okTitle:'送信しました',   okSub:'メディアの送信が完了しました',
+    failTitle:'送信できませんでした', failSub:'通信を確認してもう一度お試しください'
+  });
 }
 
 /* ---------- toast ---------- */
@@ -7084,6 +7125,8 @@ function pushThread(cid){
     scrollThread(th);
     quiet(()=>{ chatSig=null; if(S.tab==='chat') renderChatList(); });
 
+    const dmStatusBar=showDmUploadStatus(c,m);
+
     void (async()=>{
       try{
         await cloudSendMessage(c,m);
@@ -7095,6 +7138,7 @@ function pushThread(cid){
         liveC.ts=Math.max(liveC.ts||0,m.ts||0);
         if(th.isConnected) syncThread(th,liveC);
         quiet(()=>{ chatSig=null; if(S.tab==='chat') renderChatList(); });
+        finishDmUploadStatus(dmStatusBar,true);
       }catch(e){
         m.pending=false; m.failed=true;
         const liveC=S.chats.find(x=>x.id===c.id)||c;
@@ -7102,6 +7146,7 @@ function pushThread(cid){
         if(liveM && liveM!==m) Object.assign(liveM,m);
         else if(!liveM) liveC.msgs.push(m);
         if(th.isConnected) syncThread(th,liveC);
+        finishDmUploadStatus(dmStatusBar,false);
         if(String(e?.message||e).includes('dm_waiting_for_reply')) notifyDmWait();
         else if(String(e?.message||e).includes('dm_favorite_only')) notifyFavOnly();
         else{ cloudErr('message',e); toast('メッセージを送信できませんでした'); }
@@ -11249,7 +11294,7 @@ function openCompose(){
     setMediaList(post, atts);
     S.posts.unshift(post);
     const newId=post.id;
-    showPostUploadStatus(post);
+    const statusBar=showPostUploadStatus(post);
 
     /* Instagram-style UX: the composer is done immediately.
        Upload/insert continues in the background while the app stays open. */
@@ -11269,7 +11314,7 @@ function openCompose(){
         if(live && live!==post) Object.assign(live,post);
         else if(!live) S.posts.unshift(post);
         quiet(()=>refreshInPlace('posts'));
-        finishPostUploadStatus(true);
+        finishPostUploadStatus(statusBar,true);
         const hidden = S.tab==='home' && !visiblePosts().some(x=>x.id===newId);
       }catch(e){
         post.pending=false; post.failed=true;
@@ -11278,7 +11323,7 @@ function openCompose(){
         if(live && live!==post) Object.assign(live,post);
         else if(!live) S.posts.unshift(post);
         quiet(()=>refreshInPlace('posts'));
-        finishPostUploadStatus(false);
+        finishPostUploadStatus(statusBar,false);
         cloudErr('post',e);
       }
     })();
