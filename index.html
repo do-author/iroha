@@ -3640,7 +3640,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='9.7';
+const APP_VER='9.6';
 
 
 /* =========================================================
@@ -4779,6 +4779,32 @@ function cloudStartRealtime(){
    the first item, so an older build elsewhere keeps working.
    ========================================================= */
 const MEDIA_MAX=4;
+
+/* Only one video per post, reply or DM. Video is by far the heaviest thing we
+   upload, the feed strip only ever plays one at a time, and a second one just
+   multiplies the chance of a slow send failing. Stills stay capped at
+   MEDIA_MAX as before, and a video may still sit alongside them. */
+const MEDIA_VIDEO_MAX=1;
+
+/* The one place attachments are accepted, so the composer, the reply sheet and
+   the DM bar cannot drift apart on what they allow. Mutates and returns list. */
+function pushAttachments(list,v){
+  let droppedVideo=false;
+  for(const it of (Array.isArray(v)?v:[v])){
+    if(!it || list.length>=MEDIA_MAX) break;
+    if(it.kind==='video' && list.filter(a=>a&&a.kind==='video').length>=MEDIA_VIDEO_MAX){
+      droppedVideo=true;
+      /* Never stored, so its object URL would otherwise leak until reload. */
+      if(typeof it.src==='string' && it.src.startsWith('blob:')){
+        try{URL.revokeObjectURL(it.src);}catch(_){}
+      }
+      continue;
+    }
+    list.push(it);
+  }
+  if(droppedVideo) toast('動画は1つまでです');
+  return list;
+}
 
 /* Sizes travel next to the payload as _w/_h. posts_media_safe permits
    exactly five keys, so they are stripped before anything is inserted. */
@@ -7080,10 +7106,7 @@ function pushThread(cid){
     autoGrow(); fitBars(s);
   }
   function addDmAtts(v){
-    for(const it of (Array.isArray(v)?v:[v])){
-      if(!it || dmAtts.length>=MEDIA_MAX) break;
-      dmAtts.push(it);
-    }
+    pushAttachments(dmAtts,v);
     paintDmAtts();
   }
   const setDmAtt=v=>{ dmAtts = v ? (Array.isArray(v)?v.slice(0,MEDIA_MAX):[v]) : []; paintDmAtts(); };
@@ -7810,10 +7833,7 @@ function openReplyCompose(p, toReply, done){
     sync(); fitBars(m);
   }
   function addAtts(v){
-    for(const it of (Array.isArray(v)?v:[v])){
-      if(!it || atts.length>=MEDIA_MAX) break;
-      atts.push(it);
-    }
+    pushAttachments(atts,v);
     paintAtts();
   }
   $$('.attbtn',m).forEach(b=>b.addEventListener('click',()=>{
@@ -11257,10 +11277,7 @@ function openCompose(){
     sync(); fitBars(m);
   }
   function addAtts(v){
-    for(const it of (Array.isArray(v)?v:[v])){
-      if(!it || atts.length>=MEDIA_MAX) break;
-      atts.push(it);
-    }
+    pushAttachments(atts,v);
     paintAtts();
   }
   $$('.attbtn',m).forEach(b=>b.addEventListener('click',()=>{
