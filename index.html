@@ -1462,35 +1462,28 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .atthint{margin:8px 2px 0; font-size:12px; font-weight:600; color:var(--ink-3)}
 
 /* ---------- media strip ----------
-   Threads-style: one shared height, each picture keeping its own width, the
-   row running past the right edge of the card. */
+   X-style feed carousel. In a post card, the first attachment begins beside
+   the avatar/text column, but the scroll viewport itself spans the full feed
+   width. Once the user flicks, media can run cleanly out through either edge
+   of the screen instead of being trapped inside the text column. */
 .mstrip{
   margin-top:11px;
-  /* bleed to the card edge so the row reads as continuing off-screen */
   margin-right:-17px;
 }
 .mstrip-track{
   display:flex; gap:8px;
-  /* Do not reserve the whole touch for the horizontal strip. Safari may keep
-     a true horizontal flick here, while a vertical drag is free to bubble to
-     the page / pull-to-refresh. Direction locking is finished in attachPTR. */
   touch-action:pan-x pan-y;
   overflow-x:auto; scrollbar-width:none; -ms-overflow-style:none;
-  /* contain keeps a flick from reaching the page behind; `proximity` lets a
-     short drag settle where it likes instead of fighting back to a slot */
   overscroll-behavior-x:contain;
-  scroll-snap-type:x proximity;
+  scroll-snap-type:none;
   padding-right:17px;
   -webkit-overflow-scrolling:touch;
-  /* a strip that is still deciding its widths must not swallow the gesture */
   will-change:scroll-position;
 }
 .mstrip-track::-webkit-scrollbar{display:none}
 .mstrip-item{
   flex:0 0 auto; height:240px;
-  scroll-snap-align:start;
   border-radius:14px; overflow:hidden;
-  /* the picture must never take the drag away from the strip */
   -webkit-user-drag:none; user-select:none;
 }
 .mstrip-item img,.mstrip-item video{-webkit-user-drag:none}
@@ -1500,8 +1493,44 @@ input,textarea{font:inherit;color:inherit;background:none;border:0;outline:none}
 .mstrip-item .media video{
   width:100%; height:100%; max-height:none; object-fit:cover;
 }
-/* the reserved box must not impose its own ratio inside the strip */
 .mstrip-item .media.feed-media-stable{aspect-ratio:auto !important; max-width:none !important}
+
+/* Feed/post cards only: measured from the supplied X reference. The viewport
+   is full-bleed, while its initial padding keeps the first item clear of the
+   profile icon. That padding scrolls away naturally with the media. */
+.mstrip-xfeed{
+  --xstrip-left:0px;
+  --xstrip-right:0px;
+  margin-left:calc(-1 * var(--xstrip-left));
+  margin-right:calc(-1 * var(--xstrip-right));
+}
+.mstrip-xfeed .mstrip-pages{
+  height:8px;
+  display:flex; align-items:center; gap:4px;
+  padding-left:var(--xstrip-left);
+  margin:0 0 6px;
+  pointer-events:none;
+}
+.mstrip-xfeed .mstrip-page{
+  width:16px; height:3px; border-radius:999px;
+  background:color-mix(in srgb,var(--ink-3) 42%, transparent);
+  opacity:.72;
+  transition:width 150ms var(--ease-out), opacity 150ms linear, background-color 150ms linear;
+}
+.mstrip-xfeed .mstrip-page.on{
+  width:27px; opacity:1; background:var(--ink-2);
+}
+.mstrip-xfeed .mstrip-track{
+  gap:4px;
+  padding-left:var(--xstrip-left);
+  padding-right:max(12px,var(--xstrip-right));
+  margin-top:var(--xstrip-track-clearance,0px);
+  scroll-padding:0;
+}
+.mstrip-xfeed .mstrip-item{
+  height:var(--xstrip-h,218px);
+  border-radius:8px;
+}
 
 /* ---------- media viewer: native long-press save + iroha viewer ---------- */
 /* Global iOS callouts are disabled elsewhere. Re-enable only revealed media and
@@ -3611,7 +3640,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='9.3';
+const APP_VER='9.4';
 
 
 /* =========================================================
@@ -6076,7 +6105,7 @@ function postCard(p, opts={}){
           <button class="p-more" data-more="${p.id}" aria-label="その他">${I.dots}</button>
         </div>
       <p class="p-body">${esc(p.t)}</p>
-      ${mediaGroupHTML(mediaListOf(p),{owner:p.u,loadPriority:opts.mediaPriority||'auto',feedStable:!!opts.feedStable,noVideoAdornment:!!opts.noVideoAdornment})}
+      ${mediaGroupHTML(mediaListOf(p),{owner:p.u,loadPriority:opts.mediaPriority||'auto',feedStable:!!opts.feedStable,noVideoAdornment:!!opts.noVideoAdornment,xFeedStrip:true})}
       ${tag?`<span class="tag ${tag.cls}">${tag.label}</span>`:''}
       ${p.arch?`<span class="tag tag-arch">アーカイブ</span>`:''}
       ${p.pending
@@ -9238,8 +9267,13 @@ function rememberDmMediaGeometryFromElement(m,mediaEl){
 /* Measured off Threads: several attachments share one height and keep their
    own aspect ratio, so the strip reads as a row of pictures rather than a
    slideshow. It runs past the right edge and is dragged sideways. */
-const MEDIA_STRIP_H=240;   /* pt */
+const MEDIA_STRIP_H=240;
 const MEDIA_STRIP_GAP=8;
+function xFeedStripHeight(){
+  /* X reference: media height is roughly 55% of the phone viewport width,
+     capped so larger phones do not turn the feed into a gallery wall. */
+  return Math.round(Math.max(204,Math.min(220,window.innerWidth*0.555)));
+}
 
 
 /* True while a strip is settling from a drag, so a click that lands right
@@ -9261,36 +9295,105 @@ function markStripScrolling(track){
 function mediaGroupHTML(list, opts={}){
   const items=(list||[]).filter(Boolean);
   if(!items.length) return '';
-  /* A lone attachment fills the column and never overflows it. */
   if(items.length===1) return mediaHTML(items[0],opts);
 
+  const isXFeed=!!opts.xFeedStrip;
+  const rowH=isXFeed?xFeedStripHeight():MEDIA_STRIP_H;
+  const maxW=isXFeed?260:258;
   const slides=items.map((m,i)=>{
     const g=feedMediaGeometry(m);
-    /* Width follows the picture; height is shared. Without a known ratio a
-       portrait-ish default keeps the row from lurching when it loads. */
     const ratio = g ? (g.w/g.h) : 0.8;
-    /* Width follows the picture, but never so far that the row stops looking
-       like a row: Threads always leaves the next one peeking in, and that peek
-       is what says "there is more". The cap guarantees it for any shape. */
-    const w=Math.round(Math.min(MEDIA_STRIP_H*Math.max(0.56,Math.min(1.34,ratio)), 258));
+    const w=Math.round(Math.min(rowH*Math.max(0.56,Math.min(1.34,ratio)),maxW));
     return `<div class="mstrip-item" style="width:${w}px">
       ${mediaHTML(m,{...opts,stripped:true,loadPriority:i===0?opts.loadPriority:'low'})}
     </div>`;
   }).join('');
 
-  return `<div class="mstrip" data-count="${items.length}">
-    <div class="mstrip-track">${slides}</div>
+  const pages=isXFeed
+    ? `<div class="mstrip-pages" aria-hidden="true">${items.map((_,i)=>`<i class="mstrip-page${i===0?' on':''}"></i>`).join('')}</div>`
+    : '';
+  const cls=isXFeed?'mstrip mstrip-xfeed':'mstrip';
+  const hStyle=isXFeed?` style="--xstrip-h:${rowH}px"`:'';
+  return `<div class="${cls}" data-count="${items.length}"${hStyle}>
+    ${pages}<div class="mstrip-track">${slides}</div>
   </div>`;
 }
 
-/* The strip scrolls natively, but the page needs to know a drag happened so a
-   flick is not mistaken for a tap on the card underneath. */
+function syncXFeedStripGeometry(strip){
+  if(!strip?.classList?.contains('mstrip-xfeed')) return;
+  const col=strip.closest('.p-col');
+  const scroller=strip.closest('.scroll');
+  if(!col || !scroller) return;
+
+  /* Make the horizontal viewport exactly as wide as the feed viewport. The
+     first item still starts at the text column because the same amount is
+     reintroduced as scrollable left padding. */
+  const cr=col.getBoundingClientRect();
+  const sr=scroller.getBoundingClientRect();
+  const left=Math.max(0,cr.left-sr.left);
+  const right=Math.max(0,sr.right-cr.right);
+  strip.style.setProperty('--xstrip-left',`${left.toFixed(2)}px`);
+  strip.style.setProperty('--xstrip-right',`${right.toFixed(2)}px`);
+
+  /* With a very short/empty post, keep the actual media below the avatar like
+     X does. The small page bars may sit beside the avatar, but the photo must
+     never cover it. */
+  strip.style.setProperty('--xstrip-track-clearance','0px');
+  const av=strip.closest('.p-head')?.querySelector('.av');
+  const track=strip.querySelector('.mstrip-track');
+  if(av && track){
+    const ar=av.getBoundingClientRect();
+    const tr=track.getBoundingClientRect();
+    const need=Math.max(0,(ar.bottom+7)-tr.top);
+    if(need>0) strip.style.setProperty('--xstrip-track-clearance',`${need.toFixed(2)}px`);
+  }
+}
+
+function paintXFeedStripPage(track){
+  const strip=track.closest('.mstrip-xfeed');
+  if(!strip) return;
+  const items=[...track.querySelectorAll('.mstrip-item')];
+  const dots=[...strip.querySelectorAll('.mstrip-page')];
+  if(!items.length || !dots.length) return;
+  const left=parseFloat(getComputedStyle(strip).getPropertyValue('--xstrip-left'))||0;
+  const target=track.scrollLeft+left;
+  let best=0,dist=Infinity;
+  items.forEach((item,i)=>{
+    const d=Math.abs(item.offsetLeft-target);
+    if(d<dist){dist=d;best=i;}
+  });
+  dots.forEach((d,i)=>d.classList.toggle('on',i===best));
+}
+
+/* X-like physics are intentionally native. On iOS this gives the same
+   velocity carry and deceleration family as vertical timeline scrolling. */
 function wireCarousels(root){
   (root||document).querySelectorAll('.mstrip-track:not([data-wired])').forEach(track=>{
     track.dataset.wired='1';
-    track.addEventListener('scroll',()=>markStripScrolling(track),{passive:true});
+    const strip=track.closest('.mstrip');
+    if(strip?.classList.contains('mstrip-xfeed')){
+      requestAnimationFrame(()=>{
+        syncXFeedStripGeometry(strip);
+        paintXFeedStripPage(track);
+      });
+    }
+    let rafId=0;
+    track.addEventListener('scroll',()=>{
+      markStripScrolling(track);
+      if(strip?.classList.contains('mstrip-xfeed') && !rafId){
+        rafId=requestAnimationFrame(()=>{rafId=0;paintXFeedStripPage(track);});
+      }
+    },{passive:true});
   });
 }
+
+let XFEED_STRIP_RESIZE_TIMER=0;
+window.addEventListener('resize',()=>{
+  clearTimeout(XFEED_STRIP_RESIZE_TIMER);
+  XFEED_STRIP_RESIZE_TIMER=setTimeout(()=>{
+    document.querySelectorAll('.mstrip-xfeed').forEach(syncXFeedStripGeometry);
+  },80);
+},{passive:true});
 
 /* Carousels turn up in the feed, post detail, profile and DM. Rather than
    chase every render path, watch for them arriving. */
