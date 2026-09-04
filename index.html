@@ -3640,7 +3640,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='9.6';
+const APP_VER='9.7';
 
 
 /* =========================================================
@@ -5568,14 +5568,15 @@ function setTheme(t, animate=true){
 
 /* ---------- post upload status ---------- */
 let uploadStatusEl=null, uploadStatusHideTimer=0;
-/* One shared floating status bar for work that keeps running after its
-   composer has closed. Posts have always used it; DMs with attachments now do
-   too, because a video can take a while and the per-bubble "送信中" label is
-   only useful while you are still looking at that thread.
+/* Floating status bar for work that keeps running after its composer has
+   closed. Posts use it, because the composer closes and drops you back on the
+   feed with nothing else on screen tracking the upload. DMs deliberately do
+   not: you stay in the thread, and the bubble already carries its own
+   送信中 / 送信失敗 label right where you are looking.
 
    Only one bar is on screen at a time — the newest send replaces the previous
-   one. Each caller keeps the handle it was given and passes it back, so a
-   finishing post can never relabel a DM's bar (or the other way round). */
+   one. The caller keeps the handle it was given and passes it back, so a
+   stale send can never relabel a newer one's bar. */
 function showUploadStatus({title,sub,onView}){
   clearTimeout(uploadStatusHideTimer);
   if(uploadStatusEl) uploadStatusEl.remove();
@@ -5623,25 +5624,6 @@ function finishPostUploadStatus(bar,ok=true){
   });
 }
 
-/* Text-only DMs land instantly and already show their state under the bubble,
-   so the bar is reserved for sends that actually have something to upload. */
-function showDmUploadStatus(c,m){
-  const n=mediaListOf(m).length;
-  if(!n) return null;
-  const who=S.users[c.u]?.name||'';
-  return showUploadStatus({
-    title:'送信中…',
-    sub: who ? `${who}に${n}件のメディアを送信しています` : `${n}件のメディアを送信しています`,
-    onView: ()=>pushThread(c.id)
-  });
-}
-function finishDmUploadStatus(bar,ok=true){
-  if(!bar) return;
-  finishUploadStatus(bar,ok,{
-    okTitle:'送信しました',   okSub:'メディアの送信が完了しました',
-    failTitle:'送信できませんでした', failSub:'通信を確認してもう一度お試しください'
-  });
-}
 
 /* ---------- toast ---------- */
 let toastTimer=null;
@@ -7148,8 +7130,6 @@ function pushThread(cid){
     scrollThread(th);
     quiet(()=>{ chatSig=null; if(S.tab==='chat') renderChatList(); });
 
-    const dmStatusBar=showDmUploadStatus(c,m);
-
     void (async()=>{
       try{
         await cloudSendMessage(c,m);
@@ -7161,7 +7141,6 @@ function pushThread(cid){
         liveC.ts=Math.max(liveC.ts||0,m.ts||0);
         if(th.isConnected) syncThread(th,liveC);
         quiet(()=>{ chatSig=null; if(S.tab==='chat') renderChatList(); });
-        finishDmUploadStatus(dmStatusBar,true);
       }catch(e){
         m.pending=false; m.failed=true;
         const liveC=S.chats.find(x=>x.id===c.id)||c;
@@ -7169,7 +7148,6 @@ function pushThread(cid){
         if(liveM && liveM!==m) Object.assign(liveM,m);
         else if(!liveM) liveC.msgs.push(m);
         if(th.isConnected) syncThread(th,liveC);
-        finishDmUploadStatus(dmStatusBar,false);
         if(String(e?.message||e).includes('dm_waiting_for_reply')) notifyDmWait();
         else if(String(e?.message||e).includes('dm_favorite_only')) notifyFavOnly();
         else{ cloudErr('message',e); toast('メッセージを送信できませんでした'); }
