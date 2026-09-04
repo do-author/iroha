@@ -3640,7 +3640,7 @@ html[data-theme="night"] body,
    iroha v2.0 — app logic
    ========================================================= */
 /* app version — bump the minor by 1 per update (…2.9 → 2.10 → 2.11) */
-const APP_VER='9.7';
+const APP_VER='9.8';
 
 
 /* =========================================================
@@ -9060,7 +9060,56 @@ function wireFeedMediaStability(root){
     if(node.readyState>=1&&node.videoWidth) storeSize(); else node.addEventListener('loadedmetadata',storeSize,{once:true});
     const cached=feedVideoPoster(key);
     if(cached){ node.poster=cached; return; }
-    const startThumb=()=>captureFeedVideoPoster(node.currentSrc||node.src,key,node);
+
+    /* No cached poster yet. The old path waited on captureFeedVideoPoster,
+       which downloads the video a SECOND time into a throwaway element, seeks
+       it, and only then paints a JPEG — so the box sat empty for as long as
+       that whole round trip took.
+
+       The element on screen is already fetching the same file, so just nudge
+       it onto its first frame: the browser decodes and paints frame 0 as soon
+       as it has the bytes, which is the picture we were waiting for anyway.
+       The JPEG cache is then filled from that same frame, purely so the next
+       render of this video starts with a poster already in hand. */
+    let nudged=false;
+    const paintFirstFrame=()=>{
+      if(nudged||!node.isConnected) return;
+      /* Never disturb a video the user has already started. */
+      if(!node.paused||node.currentTime>0.01) return;
+      nudged=true;
+      try{ node.currentTime=0.001; }catch(_){}
+    };
+    const cacheFromLiveFrame=()=>{
+      if(!node.isConnected||feedVideoPoster(key)) return;
+      if(!validMediaWH(node.videoWidth,node.videoHeight)) return;
+      /* This also fires if the user played or scrubbed before we nudged.
+         Only the opening frame is a thumbnail; anything later is just a
+         frame they happened to stop on. */
+      if(node.currentTime>0.5) return;
+      try{
+        const max=480, scale=Math.min(1,max/Math.max(node.videoWidth,node.videoHeight));
+        const cw=Math.max(2,Math.round(node.videoWidth*scale));
+        const ch=Math.max(2,Math.round(node.videoHeight*scale));
+        const cv=document.createElement('canvas'); cv.width=cw; cv.height=ch;
+        const ctx=cv.getContext('2d'); if(!ctx) return;
+        ctx.drawImage(node,0,0,cw,ch);
+        rememberFeedVideoPoster(key,cv.toDataURL('image/jpeg',.76));
+      }catch(e){
+        /* Usually a tainted canvas. The frame is still on screen — only the
+           cache missed — so fall back to the standalone capture for next time. */
+        console.debug('[iroha video thumbnail]',e);
+        captureFeedVideoPoster(node.currentSrc||node.src,key,node);
+      }
+    };
+    node.addEventListener('seeked',cacheFromLiveFrame,{once:true});
+
+    const startThumb=()=>{
+      /* preload="none" never loads metadata on its own, so a seek would go
+         nowhere. Promote it now that the card is close to the viewport. */
+      if(node.preload==='none') node.preload='metadata';
+      if(node.readyState>=1) paintFirstFrame();
+      else node.addEventListener('loadedmetadata',paintFirstFrame,{once:true});
+    };
     if('IntersectionObserver' in window){
       const io=new IntersectionObserver(entries=>{
         if(entries.some(x=>x.isIntersecting)){io.disconnect();startThumb()}
